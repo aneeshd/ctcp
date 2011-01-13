@@ -1,0 +1,7 @@
+#! /bin/bash
+
+rlog atousrv.c > atousrv.log
+rlog atoucli.c > atoucli.log
+manifest="mktar README atoucli.c atousrv.c config* scoreboard.h probeall.pl *log"
+
+tar czf atou.tgz $manifest

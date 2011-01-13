@@ -1,0 +1,14 @@
+# you MUST use -s with atousrv for fack/sack
+newreno 0
+fack 1
+sack 1
+rampdown 1
+vegas 4
+valpha 30
+vbeta 40
+vgamma 200
+vss 1
+rcvrwin 2000
+maxtime 10
+debug 4
+#droplist 200 200

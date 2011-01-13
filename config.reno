@@ -1,0 +1,10 @@
+newreno 1
+fack 0
+sack 0
+rampdown 0
+rcvrwin 60
+#thresh_init 0.5
+increment 1
+#maxpkts 2000
+maxtime 10
+debug 4

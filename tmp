@@ -1,0 +1,33 @@
+timerxmit   0.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2000
+timerxmit   1.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+timerxmit   2.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+timerxmit   3.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+timerxmit   4.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+timerxmit   5.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+timerxmit   6.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+timerxmit   7.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+timerxmit   8.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+timerxmit   9.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+timerxmit  10.50 pkt 1 snd_nxt 3 snd_max 3  snd_cwnd 2  thresh 2
+config: atoucli $Revision: 1.38 $ port 7890 debug 4 Thu Jan 13 12:11:57 2011
+config: initsegs 2 mss 1472 tick 1.000000 timeout 0.500000
+config: maxidle 10 maxtime 10
+config: floyd 0 rcvrwin 2000  increment 1  multiplier 0.500000 kai 0.000000
+config: thresh_init 1.000000 ssincr 1 max_ssthresh 0
+config: rcvrwin 2000  increment 1  multiplier 0.500000 thresh_init 1.000000
+config: newreno 0 sack 1 rampdown 1 fack 1 delack 0 maxpkts 0 burst_limit 0 dup_thresh 3
+config: vegas 4 vss 1 valpha 30.000000 vbeta 40.000000 vgamma 200.000000
+config: sndbuf 65536 rcvbuf 65536
+*** idle abort ***
+leo-MacBookPro => 127.0.0.1 0.003047 Mbs win 2000 rxmts 11
+11.500036 secs 4380 good bytes goodput 0.380868 KBs 0.003047 Mbs 
+pkts in 0  out 24  enobufs 0
+total bytes out 35040 loss 45.833 % 0.024376 Mbs 
+rxmts 11 dup3s 0 packs 0 timeouts 11  dups 0 badacks 0 maxack 0 maxburst 2
+minrtt  999999.000000 maxrtt 0.000000 avrgrtt 0.000000
+rto 0.000000  srtt 0.000000  rttvar 3.000000
+win/rtt = inf Mbs  bwdelay = 0 KB  0 segs
+bwertt 0.000000 bwertt_max 0.000000 max_delta 0.000000
+vsscnt 0 vdecr 0 v0 0 vrtt 0.000000 vdelta 0.000000
+snd_nxt 3 snd_cwnd 2  snd_una 1 ssthresh 2 snd_max 3
+goodacks 0 cumacks 0 ooacks 0
