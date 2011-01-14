@@ -14,23 +14,38 @@
  */
 
 #include <stdio.h>
-#include	<stdlib.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
-#include        <sys/socket.h>
-#include        <netinet/in.h>
-#include        <arpa/inet.h>
-#include        <unistd.h>
-#include        <netdb.h>
-#include        <signal.h>
-#include	<sys/time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <signal.h>
+#include <sys/time.h>
 #include	<errno.h>
+#include <sys/time.h>
+
+//--------- Function prototypes---------//
+typedef int socket_t;
+
+void err_sys(char* s);
+void vntohl(int *p, int cnt);
+void addho(int n);
+void fixho(int n);
+int acktimer(socket_t fd, int t);
+int check_order(int newpkt);
+void vhtonl(int *p, int cnt);
+//--------------------------------------------//
+
 
 char *RCSid = "$Header: /home/thistle/dunigan/src/atou/atousrv.c,v 1.8 2002/06/20 14:28:46 dunigan Exp dunigan $";
 char *version = "$Revision: 1.8 $";
 #define PORT 7890
 #define BUFFSIZE        65536
 double dbuff[BUFFSIZE/8];
-char *buff = (char *)dbuff;
+int *buff = (int *)dbuff;
 int sockfd, rcvspace;
 int inlth,sackcnt,pkts, dups, drops,hi,maxooo;
 int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;
@@ -46,7 +61,6 @@ int start[3], endd[3];
 void bldack();
 /* stats */
 double et,minrtt=999999., maxrtt=0, avrgrtt;
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;
 double due,rcvt,st,et,secs();
 unsigned int millisecs(), rtt_base=0;
 
@@ -61,7 +75,7 @@ struct Pr_Msg {
 
 unsigned int tempno;
 
-void ctrlc(void){
+void  ctrlc(void){
 	int i;
 	et = et-st;  /* elapsed time */
 	if (et==0)et=.1;
@@ -88,9 +102,8 @@ void usage(void) {
 int main(int argc, char** argv){
 	int optlen,rlth,port = PORT, n;
 	struct sockaddr_in	serv_addr;
-	int c, retval=0, tmout, timout;
-	double rtt;
-
+	int c, retval=0;
+	
 	while((c = getopt(argc, argv, "sd:p:b:D:")) != -1) { 
 	  switch (c) {
 	    case 's':
@@ -117,7 +130,7 @@ int main(int argc, char** argv){
 	if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
 		err_sys("server: can't open datagram socket");
 
-	signal(SIGINT,ctrlc);
+	signal(SIGINT, (__sighandler_t) ctrlc);
 	/*
 	 * Bind our local address so that the client can send to us.
 	 */
@@ -131,7 +144,7 @@ int main(int argc, char** argv){
 	if (rcvspace) {
 	   setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
 	}
-	getsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (char *) &rlth, &optlen);
+	getsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (char *) &rlth, (socklen_t*)&optlen);
 	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
 		err_sys("server: can't bind local address");
 	printf("atousrv %s using port %d rcvspace %d sack %d ackdelay %d ms\n",
@@ -140,7 +153,7 @@ int main(int argc, char** argv){
 	memset(buff,0,BUFFSIZE);        /* pretouch */
 	msg = (struct Pr_Msg *)buff;
 	clilen = sizeof(cli_addr);
-	n = recvfrom(sockfd,buff,sizeof(dbuff),0,(struct sockaddr *)&cli_addr,&clilen);
+	n = recvfrom(sockfd,buff,sizeof(dbuff),0,(struct sockaddr *)&cli_addr,(socklen_t*)&clilen);
 	ackheadr = sizeof(double) + 2*(sizeof(unsigned int));
 	sackinfo = sizeof(unsigned int) * 2;
 	while(n > 0) {
@@ -172,14 +185,13 @@ int main(int argc, char** argv){
   	  }
 
 	  inlth=n;
-	  n = recvfrom(sockfd,buff,sizeof(dbuff),0,(struct sockaddr *)&cli_addr,&clilen);
+	  n = recvfrom(sockfd,buff,sizeof(dbuff),0,(struct sockaddr *)&cli_addr,(socklen_t*)&clilen);
 	}
 	if (n < 0 ) err_sys("server recvfrom");
+  return 0;
 }
 
-err_sys(s)
-char *s;
-{
+void err_sys(char *s){
 	perror(s);
 	ctrlc();     /* do stats on error */
 }
@@ -255,7 +267,7 @@ void bldack()
 /* No HOLES  */
   } else ack.msgno =  expect;
   k = ackheadr+ack.blkcnt*sackinfo;
-  vhtonl(&ack,k/4);  /* to net order */
+  vhtonl((int*)&ack,k/4);  /* to net order */
   if (sendto(sockfd,(char *)&ack,k,0,(struct sockaddr *)&cli_addr,clilen)!=k){
   	err_sys("sendto");
   }
@@ -275,10 +287,9 @@ int check_order(int newpkt) {
   return(-1);
 }
 
-addho( n)
-{
+void addho(int n){
 	/* add one or more holes */
-	int i,j;
+	int j;
 
 	if (n-expect > maxooo) maxooo = n -expect;
 	if (hocnt + n - expect > MAXHO) {
@@ -291,8 +302,7 @@ addho( n)
 	}
 }
 
-fixho(n)
-{
+void fixho(int n){
    /* remove missing pkt, shift vector over replaced pkt */
 	int i,j;
 
@@ -319,10 +329,7 @@ secs()
         return(t.tv_sec+ t.tv_usec*1.e-6);
 }
 
-unsigned int
-millisecs()
-{
-#include <sys/time.h>
+unsigned int millisecs(){
         struct timeval tv;
 	unsigned int ts;
 
@@ -339,13 +346,14 @@ void vntohl(int *p, int cnt){
 	for(i=0;i<cnt;i++) p[i] = ntohl(p[i]);
 }
 
+
 void vhtonl(int *p, int cnt){
 	/* convert vector of words to network byte order */
 	int i;
-	for(i=0;i<cnt;i++) p[i] = htonl(p[i]);
+	for(i=0; i<cnt; i++) p[i] = htonl(p[i]);
 }
 
-int acktimer(int fd, int t) {
+int acktimer(socket_t fd, int t) {
   struct timeval tv;
   fd_set rset;
   int n;
