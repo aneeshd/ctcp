@@ -29,50 +29,9 @@
 #include	<errno.h>
 
 #include "util.h"
+#include "atousrv.h"
 
-//--------- Function prototypes---------//
-void err_sys(char *s);
-void addho(int n);
-void fixho(int n);
-int acktimer(socket_t fd, int t);
-int check_order(int newpkt);
-//--------------------------------------------//
-
-
-char *RCSid = "$Header: /home/thistle/dunigan/src/atou/atousrv.c,v 1.8 2002/06/20 14:28:46 dunigan Exp dunigan $";
-char *version = "$Revision: 1.8 $";
-#define PORT 7890
-#define BUFFSIZE        65536
-double dbuff[BUFFSIZE/8];
-int *buff = (int *)dbuff;
-int sockfd, rcvspace;
-int inlth,sackcnt,pkts, dups, drops,hi,maxooo;
-int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;
-/* holes has ascending order of missing pkts, shift left when fixed */
-#define MAXHO 1024
-int  hocnt, holes[MAXHO];
-/*implementing sack & delack */
-int sack=0, clilen; 
-struct sockaddr_in	cli_addr;
-int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;
-int  settime=0;
-int start[3], endd[3];
-void bldack();
-/* stats */
-double et,minrtt=999999., maxrtt=0, avrgrtt;
-double due,rcvt,st,et,secs();
-unsigned int millisecs(), rtt_base=0;
-
-struct Pr_Msg {
-	double tstamp;
-	unsigned int msgno;  /* msgno or ackno */
-	unsigned int blkcnt;
-	struct Sblks {
-		unsigned int sblk,eblk;
-	} sblks[3];
-} *msg, ack;
-
-unsigned int tempno;
+Pr_Msg *msg, *ack;
 
 void  ctrlc(void){
 	int i;
@@ -150,7 +109,7 @@ int main(int argc, char** argv){
 	  version,port,rlth,sack,ackdelay);
 
 	memset(buff,0,BUFFSIZE);        /* pretouch */
-	msg = (struct Pr_Msg *)buff;
+	msg = (Pr_Msg *)buff;
 	clilen = sizeof(cli_addr);
 	n = recvfrom(sockfd,buff,sizeof(dbuff),0,(struct sockaddr *)&cli_addr,(socklen_t*)&clilen);
 	ackheadr = sizeof(double) + 2*(sizeof(unsigned int));
@@ -159,7 +118,7 @@ int main(int argc, char** argv){
 	  pkts++;
 	  et=secs();  /* last read */
 	  if (st == 0)st = et;  /* first pkt time */
-	  vntohl(buff,sizeof(struct Pr_Msg)/4);  /* to host order, 12 bytes? */
+	  vntohl(buff,sizeof( Pr_Msg)/4);  /* to host order, 12 bytes? */
 	  if (msg->msgno > hi) hi = msg->msgno ;  /* high water mark */
 
  if (debug && msg->msgno != expect ) printf("exp %d got %d dups %d sacks %d hocnt %d\n",expect, msg->msgno,dups,sackcnt,hocnt); 
@@ -200,11 +159,11 @@ void bldack()
 	int i, j, k, first=-1, retransmit=0, newpkt=0;
 
 	/* construct the reply packet */
-	ack.tstamp = msg->tstamp;
-	ack.blkcnt=0;   /* assume no sacks */
+	ack->tstamp = msg->tstamp;
+	ack->blkcnt=0;   /* assume no sacks */
 	if (hocnt) {  /* we have a list of lost pkts */
 	  newpkt = msg->msgno;
-  	  ack.msgno = holes[0];  /* oldest missing */
+  	  ack->msgno = holes[0];  /* oldest missing */
 	  if(sack) {
 /*if sack is enabled and there are missing packets--
   find the beginning and ending of up to 3 contiguous blocks of data
@@ -225,7 +184,7 @@ void bldack()
 
           while((k>=0)&&(j<3)) {
 /*record the end of the block*/
-            ack.blkcnt++;
+            ack->blkcnt++;
             endd[j]=i;
             while(holes[k]<i) {
               i--;
@@ -256,16 +215,16 @@ void bldack()
 	  k=0;
         for(i=0; i<3; i++) {
           if(i!=first) { 
-            ack.sblks[k].sblk=start[i];
-            ack.sblks[k].eblk=endd[i];
+            ack->sblks[k].sblk=start[i];
+            ack->sblks[k].eblk=endd[i];
             k++;
           }
         }
       }
 
 /* No HOLES  */
-  } else ack.msgno =  expect;
-  k = ackheadr+ack.blkcnt*sackinfo;
+  } else ack->msgno =  expect;
+  k = ackheadr+ack->blkcnt*sackinfo;
   vhtonl((int*)&ack,k/4);  /* to net order */
   if (sendto(sockfd,(char *)&ack,k,0,(struct sockaddr *)&cli_addr,clilen)!=k){
   	err_sys("sendto");
@@ -278,8 +237,8 @@ int check_order(int newpkt) {
 
   for(i=0; i<3; i++) {
     if(newpkt>=start[i] && newpkt<=endd[i]) {
-      ack.sblks[0].sblk = start[i];
-      ack.sblks[0].eblk = endd[i];
+      ack->sblks[0].sblk = start[i];
+      ack->sblks[0].eblk = endd[i];
       return(i);
     }
   }
