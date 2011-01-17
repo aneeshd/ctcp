@@ -31,7 +31,7 @@
 #include "util.h"
 #include "atousrv.h"
 
-Pr_Msg *msg, *ack;
+Pr_Msg *msg, ack;
 
 void  ctrlc(void){
 	int i;
@@ -159,11 +159,11 @@ void bldack()
 	int i, j, k, first=-1, retransmit=0, newpkt=0;
 
 	/* construct the reply packet */
-	ack->tstamp = msg->tstamp;
-	ack->blkcnt=0;   /* assume no sacks */
+	ack.tstamp = msg->tstamp;
+	ack.blkcnt=0;   /* assume no sacks */
 	if (hocnt) {  /* we have a list of lost pkts */
 	  newpkt = msg->msgno;
-  	  ack->msgno = holes[0];  /* oldest missing */
+  	  ack.msgno = holes[0];  /* oldest missing */
 	  if(sack) {
 /*if sack is enabled and there are missing packets--
   find the beginning and ending of up to 3 contiguous blocks of data
@@ -184,7 +184,7 @@ void bldack()
 
           while((k>=0)&&(j<3)) {
 /*record the end of the block*/
-            ack->blkcnt++;
+            ack.blkcnt++;
             endd[j]=i;
             while(holes[k]<i) {
               i--;
@@ -215,16 +215,16 @@ void bldack()
 	  k=0;
         for(i=0; i<3; i++) {
           if(i!=first) { 
-            ack->sblks[k].sblk=start[i];
-            ack->sblks[k].eblk=endd[i];
+            ack.sblks[k].sblk=start[i];
+            ack.sblks[k].eblk=endd[i];
             k++;
           }
         }
       }
 
 /* No HOLES  */
-  } else ack->msgno =  expect;
-  k = ackheadr+ack->blkcnt*sackinfo;
+  } else ack.msgno =  expect;
+  k = ackheadr+ack.blkcnt*sackinfo;
   vhtonl((int*)&ack,k/4);  /* to net order */
   if (sendto(sockfd,(char *)&ack,k,0,(struct sockaddr *)&cli_addr,clilen)!=k){
   	err_sys("sendto");
@@ -237,8 +237,8 @@ int check_order(int newpkt) {
 
   for(i=0; i<3; i++) {
     if(newpkt>=start[i] && newpkt<=endd[i]) {
-      ack->sblks[0].sblk = start[i];
-      ack->sblks[0].eblk = endd[i];
+      ack.sblks[0].sblk = start[i];
+      ack.sblks[0].eblk = endd[i];
       return(i);
     }
   }
@@ -274,10 +274,7 @@ void fixho(int n){
 	dups ++;  /* didn't find a hole */
 }
 
-double
-secs()
-{
-#include <sys/time.h>
+double secs(){
         struct timeval t;
         gettimeofday(&t, (struct timezone *)0);
 	if(rtt_base==0) {
