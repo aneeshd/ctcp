@@ -13,30 +13,29 @@
  * (too much overhead), or best, select() timeout with delta mod 200 ms
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <sys/time.h>
 #include <arpa/inet.h>
-#include <unistd.h>
+
+#include <netinet/in.h>
 #include <netdb.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 #include <signal.h>
-#include <sys/time.h>
 #include	<errno.h>
-#include <sys/time.h>
+
+#include "util.h"
 
 //--------- Function prototypes---------//
-typedef int socket_t;
-
-void err_sys(char* s);
-void vntohl(int *p, int cnt);
+void err_sys(char *s);
 void addho(int n);
 void fixho(int n);
 int acktimer(socket_t fd, int t);
 int check_order(int newpkt);
-void vhtonl(int *p, int cnt);
 //--------------------------------------------//
 
 
@@ -338,19 +337,6 @@ unsigned int millisecs(){
 	ts = ((tv.tv_sec-rtt_base) * 1000) + (tv.tv_usec / 1000);
 /*fprintf(stderr, "%ld=%u + %u\n", ts, (tv.tv_sec-rtt_base)*1000, tv.tv_usec/1000);*/
         return(ts);
-}
-
-void vntohl(int *p, int cnt){
-	/* convert vector of words to host byte order */
-	int i;
-	for(i=0;i<cnt;i++) p[i] = ntohl(p[i]);
-}
-
-
-void vhtonl(int *p, int cnt){
-	/* convert vector of words to network byte order */
-	int i;
-	for(i=0; i<cnt; i++) p[i] = htonl(p[i]);
 }
 
 int acktimer(socket_t fd, int t) {

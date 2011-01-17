@@ -71,6 +71,14 @@ IETF draft-tcp-over-udp-01.htm,7901
 <span class="h2"><a name="appendix-A">Appendix A</a>.  Change Log</span>appendix-A933,53154
 <span class="h1"><a name="appendix-A.1">A.1</a>.  Changes since <a href="http://tools.ietf.org/html/draft-baset-tsvwg-tcp-over-udp-00">draft-baset-tsvwg-tcp-over-udp-00</a></span>appendix-A.1935,53230
 
+util.c,86
+void vntohl(int *p, int cnt){vntohl6,67
+void vhtonl(int *p, int cnt){vhtonl12,220
+
+util.h,65
+#define UTIL_H_UTIL_H_2,16
+typedef int socket_t;socket_t4,33
+
 scoreboard.h,1708
 #define SBSIZE SBSIZE3,56
 int length_=0, first_=0, HighAck=0, Pipe=0, loss3s=0, NextLoss=0;length_5,77
@@ -102,232 +110,222 @@ struct ScoreBoardNode {ScoreBoardNode21,518
 	} SBN[SBSIZE+1];SBN28,821
 #define SBNI SBNI30,840
 
-atousrv.c,3583
-char *RCSid = "$Header: /home/thistle/dunigan/src/atou/atousrv.c,v 1.8 2002/06/20 14:28:46 dunigan Exp dunigan $";RCSid28,965
-char *version = "$Revision: 1.8 $";version29,1080
-#define PORT PORT30,1116
-#define BUFFSIZE BUFFSIZE31,1134
-double dbuff[BUFFSIZE/8];dbuff32,1164
-char *buff = (char *)dbuff;buff33,1190
-int sockfd, rcvspace;sockfd34,1218
-int sockfd, rcvspace;rcvspace34,1218
-int inlth,sackcnt,pkts, dups, drops,hi,maxooo;inlth35,1240
-int inlth,sackcnt,pkts, dups, drops,hi,maxooo;sackcnt35,1240
-int inlth,sackcnt,pkts, dups, drops,hi,maxooo;pkts35,1240
-int inlth,sackcnt,pkts, dups, drops,hi,maxooo;dups35,1240
-int inlth,sackcnt,pkts, dups, drops,hi,maxooo;drops35,1240
-int inlth,sackcnt,pkts, dups, drops,hi,maxooo;hi35,1240
-int inlth,sackcnt,pkts, dups, drops,hi,maxooo;maxooo35,1240
-int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;debug36,1287
-int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;expect36,1287
-int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;expected36,1287
-int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;acks36,1287
-int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;acktimeouts36,1287
-int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;sendack36,1287
-#define MAXHO MAXHO38,1424
-int  hocnt, holes[MAXHO];hocnt39,1443
-int  hocnt, holes[MAXHO];holes39,1443
-int sack=0, clilen; sack41,1501
-int sack=0, clilen; clilen41,1501
-struct sockaddr_in	cli_addr;cli_addr42,1522
-int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;ackdelay43,1551
-int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;ackheadr43,1551
-int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;sackinfo43,1551
-int  settime=0;settime44,1609
-int start[3], endd[3];start45,1625
-int start[3], endd[3];endd45,1625
-double et,minrtt=999999., maxrtt=0, avrgrtt;et48,1675
-double et,minrtt=999999., maxrtt=0, avrgrtt;minrtt48,1675
-double et,minrtt=999999., maxrtt=0, avrgrtt;maxrtt48,1675
-double et,minrtt=999999., maxrtt=0, avrgrtt;avrgrtt48,1675
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;rto49,1720
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;delta49,1720
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;srtt49,1720
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;rttvar49,1720
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;h49,1720
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;g49,1720
-double due,rcvt,st,et,secs();due50,1777
-double due,rcvt,st,et,secs();rcvt50,1777
-double due,rcvt,st,et,secs();st50,1777
-double due,rcvt,st,et,secs();et50,1777
-unsigned int millisecs(), rtt_base=0;rtt_base51,1807
-struct Pr_Msg {Pr_Msg53,1846
-	double tstamp;tstamp54,1862
-	unsigned int msgno;  /* msgno or ackno */msgno55,1878
-	unsigned int blkcnt;blkcnt56,1921
-	struct Sblks {Sblks57,1943
-		unsigned int sblk,eblk;sblk58,1959
-		unsigned int sblk,eblk;eblk58,1959
-	} sblks[3];sblks59,1985
-} *msg, ack;msg60,1998
-} *msg, ack;ack60,1998
-unsigned int tempno;tempno62,2012
-void ctrlc(void){ctrlc64,2034
-void usage(void) {usage78,2520
-int main(int argc, char** argv){main88,2847
-err_sys(s)err_sys180,5520
-void bldack()bldack187,5595
-int check_order(int newpkt) {check_order265,7581
-addho( n)addho278,7805
-fixho(n)fixho294,8133
-secs()secs310,8389
-millisecs()millisecs323,8651
-void vntohl(int *p, int cnt){vntohl336,9018
-void vhtonl(int *p, int cnt){vhtonl342,9149
-int acktimer(int fd, int t) {acktimer348,9283
+atousrv.c,3126
+char *RCSid = "$Header: /home/thistle/dunigan/src/atou/atousrv.c,v 1.8 2002/06/20 14:28:46 dunigan Exp dunigan $";RCSid42,1168
+char *version = "$Revision: 1.8 $";version43,1283
+#define PORT PORT44,1319
+#define BUFFSIZE BUFFSIZE45,1337
+double dbuff[BUFFSIZE/8];dbuff46,1367
+int *buff = (int *)dbuff;buff47,1393
+int sockfd, rcvspace;sockfd48,1419
+int sockfd, rcvspace;rcvspace48,1419
+int inlth,sackcnt,pkts, dups, drops,hi,maxooo;inlth49,1441
+int inlth,sackcnt,pkts, dups, drops,hi,maxooo;sackcnt49,1441
+int inlth,sackcnt,pkts, dups, drops,hi,maxooo;pkts49,1441
+int inlth,sackcnt,pkts, dups, drops,hi,maxooo;dups49,1441
+int inlth,sackcnt,pkts, dups, drops,hi,maxooo;drops49,1441
+int inlth,sackcnt,pkts, dups, drops,hi,maxooo;hi49,1441
+int inlth,sackcnt,pkts, dups, drops,hi,maxooo;maxooo49,1441
+int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;debug50,1488
+int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;expect50,1488
+int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;expected50,1488
+int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;acks50,1488
+int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;acktimeouts50,1488
+int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;sendack50,1488
+#define MAXHO MAXHO52,1625
+int  hocnt, holes[MAXHO];hocnt53,1644
+int  hocnt, holes[MAXHO];holes53,1644
+int sack=0, clilen; sack55,1702
+int sack=0, clilen; clilen55,1702
+struct sockaddr_in	cli_addr;cli_addr56,1723
+int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;ackdelay57,1752
+int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;ackheadr57,1752
+int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;sackinfo57,1752
+int  settime=0;settime58,1810
+int start[3], endd[3];start59,1826
+int start[3], endd[3];endd59,1826
+double et,minrtt=999999., maxrtt=0, avrgrtt;et62,1876
+double et,minrtt=999999., maxrtt=0, avrgrtt;minrtt62,1876
+double et,minrtt=999999., maxrtt=0, avrgrtt;maxrtt62,1876
+double et,minrtt=999999., maxrtt=0, avrgrtt;avrgrtt62,1876
+double due,rcvt,st,et,secs();due63,1921
+double due,rcvt,st,et,secs();rcvt63,1921
+double due,rcvt,st,et,secs();st63,1921
+double due,rcvt,st,et,secs();et63,1921
+unsigned int millisecs(), rtt_base=0;rtt_base64,1951
+struct Pr_Msg {Pr_Msg66,1990
+	double tstamp;tstamp67,2006
+	unsigned int msgno;  /* msgno or ackno */msgno68,2022
+	unsigned int blkcnt;blkcnt69,2065
+	struct Sblks {Sblks70,2087
+		unsigned int sblk,eblk;sblk71,2103
+		unsigned int sblk,eblk;eblk71,2103
+	} sblks[3];sblks72,2129
+} *msg, ack;msg73,2142
+} *msg, ack;ack73,2142
+unsigned int tempno;tempno75,2156
+void  ctrlc(void){ctrlc77,2178
+void usage(void) {usage91,2665
+int main(int argc, char** argv){main101,2992
+void err_sys(char *s){err_sys193,5704
+void bldack()bldack198,5780
+int check_order(int newpkt) {check_order276,7772
+void addho(int n){addho289,7996
+void fixho(int n){fixho304,8329
+secs()secs319,8593
+unsigned int millisecs(){millisecs331,8842
+int acktimer(socket_t fd, int t) {acktimer342,9199
 
 mktar,0
 
-Makefile,555
+Makefile,478
 CXX := gccCXX1,0
 CFLAGS := -g -WallCFLAGS2,11
-TARGETS := atoucli \TARGETS3,30
-SRCS := $(TARGETS:%=%.c)SRCS6,61
-OBJS := $(TARGETS:%=%.o)OBJS8,87
-TEST_SRCS := \TEST_SRCS10,113
-TEST_OBJS := $(TEST_SRCS:.c=.o) $(filter-out main.o,$(OBJS))TEST_OBJS15,228
-TEST_OBJS := $(TEST_OBJS:.o=.test.o)TEST_OBJS18,386
-GTEST_DIR = gtestGTEST_DIR21,491
-NEWMODE := modeNEWMODE24,590
-	CFLAGS := -DDEBUG -O0 $(CFLAGS)CFLAGS29,759
-	CFLAGS := -O3 -ffast-math -DNDEBUG $(CFLAGS)CFLAGS32,815
-OLDMODE := $(shell cat .buildmode 2> /dev/null)OLDMODE38,1052
+LDFLAGS :=LDFLAGS3,30
+TARGETS := util \TARGETS5,42
+HEADERS := scoreboard.h \HEADERS9,83
+SRCS := $(TARGETS:%=%.c)SRCS11,110
+OBJS := $(TARGETS:%=%.o)OBJS13,136
+PRODUCTS := $(filter-out util, $(TARGETS))PRODUCTS15,162
+NEWMODE := modeNEWMODE18,286
+	CFLAGS := -DDEBUG -O0 $(CFLAGS)CFLAGS23,455
+	CFLAGS := -O3 -ffast-math -DNDEBUG $(CFLAGS)CFLAGS26,511
+OLDMODE := $(shell cat .buildmode 2> /dev/null)OLDMODE32,748
 
-atoucli.c,7891
-char *RCSid = "$Header: /home/wisp/dunigan/src/atou/atoucli.c,v 1.38 2003/01/16 19:07:57 dunigan Exp dunigan $";RCSid45,1497
-char *version = "$Revision: 1.38 $";version46,1610
-FILE *db;     /* debug trace file */db48,1648
-int droplist[11];  /* debuggin */droplist51,1717
-int debug;debug52,1751
-char *host;host53,1762
-#define PORT PORT54,1774
-int port=PORT;			/* udp port */port55,1792
-int sndbuf = 32768;		/* udp send buff, bigger than mss */sndbuf56,1824
-int rcvbuf = 32768;		/* udp recv buff for ACKs*/rcvbuf57,1882
-int mss=1472;			/* user payload, can be > MTU for UDP */mss58,1931
-double tick = 1.0;		/* recvfrom timeout -- select */tick59,1988
-double timeout=0.5;		/* pkt timeout */timeout60,2041
-int idle=0;                     /* successive timeouts */idle61,2080
-int maxidle=10;                 /* max idle before abort */maxidle62,2138
-int maxpkts=0;			/* test duration */maxpkts63,2198
-int maxtime=10;                 /* test duration */maxtime64,2235
-int burst_limit = 0;		/* most to send at once --- weak */burst_limit65,2287
-int rcvrwin = 20;		/* rcvr window in mss-segments */rcvrwin66,2345
-int dup_thresh =3;		/* dup ACKs causing retransmit */dup_thresh67,2398
-int increment = 1;   		/* cc increment */increment68,2452
-double multiplier = 0.5;	/* cc backoff */multiplier69,2494
-double kai = 0.;		/* Kelly scalable TCP cwnd += kai */kai70,2536
-int ssincr =1;			/* slow start increment */ssincr71,2591
-double thresh_init = 1.0;      /* fraction of rvcvwind for initial ssthresh*/thresh_init72,2635
-int max_ssthresh =0;            /* floyd modified slow start, ? consider frac */max_ssthresh73,2713
-int initsegs = 2;		/* slowstart initial */initsegs74,2794
-int newreno = 1;		/* newreno flag */newreno75,2837
-int sack = 0;			/* sack flag */sack76,2874
-int delack = 0;			/* delack flag */delack77,2906
-int rampdown = 0;		/* enable wintrim */rampdown78,2942
-int fack = 0;			/* fack flag */fack79,2982
-int floyd = 0;			/* Sally Floyd's aimd changes */floyd80,3014
-int vegas=0;                    /* vegas flag 0:off 1:last RTT  2:min rtt  */vegas81,3064
-int vss = 0;                    /* vegas slow start  0:exit ss  1: go to floyd*/vss83,3220
-double valpha=1.0, vbeta=3.0, vgamma=1.0;  /* vegas parameters */valpha84,3301
-double valpha=1.0, vbeta=3.0, vgamma=1.0;  /* vegas parameters */vbeta84,3301
-double valpha=1.0, vbeta=3.0, vgamma=1.0;  /* vegas parameters */vgamma84,3301
-int vinss=0;   /* in vegas slow start */vinss87,3398
-int vsscnt=0;  /* number of vegas slow start adjusts */vsscnt88,3439
-int vcnt;  /* number of rtt samples */vcnt89,3495
-int vdecr, v0 ; /* vegas decrements or no adjusts */vdecr90,3534
-int vdecr, v0 ; /* vegas decrements or no adjusts */v090,3534
-double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vdelta91,3587
-double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vrtt91,3587
-double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vrttsum91,3587
-double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vrttmax91,3587
-double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vrttmin91,3587
-int initial_ss =1;   /* initial slow start */initial_ss93,3641
-unsigned int bwe_pkt, bwe_prev, bwe_on=1;bwe_pkt96,3689
-unsigned int bwe_pkt, bwe_prev, bwe_on=1;bwe_prev96,3689
-unsigned int bwe_pkt, bwe_prev, bwe_on=1;bwe_on96,3689
-double bwertt, bwertt_max;bwertt97,3731
-double bwertt, bwertt_max;bwertt_max97,3731
-double max_delta;  /* vegas like tracker */max_delta98,3758
-#define BUFFSIZE BUFFSIZE100,3803
-double dbuff[BUFFSIZE/8];dbuff101,3833
-int *buff = (int *)dbuff;buff102,3859
-struct Pr_Msg {Pr_Msg104,3886
-        double tstamp;tstamp105,3902
-        unsigned int msgno;msgno106,3925
-	unsigned int blkcnt;blkcnt107,3953
-        struct Sblks {Sblks108,3975
-                unsigned int sblk,eblk;sblk109,3998
-                unsigned int sblk,eblk;eblk109,3998
-        } sblks[3];sblks110,4038
-} *msg, *ack;msg111,4058
-} *msg, *ack;ack111,4058
-int dupacks;			/* consecutive dup acks recd */dupacks114,4098
-unsigned int snd_nxt; 		/* send next */snd_nxt115,4145
-unsigned int snd_max; 		/* biggest send */snd_max116,4185
-unsigned int snd_una; 		/* last unacked */snd_una117,4228
-unsigned int snd_fack;		/* Forward (right) most ACK */snd_fack118,4271
-unsigned int snd_recover;	/* One RTT beyond last good data, newreno */snd_recover119,4326
-double snd_cwnd;		/* congestion-controlled window */snd_cwnd120,4397
-unsigned int snd_ssthresh;	/* slow start threshold */snd_ssthresh121,4450
-unsigned int ackno;ackno123,4505
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;ipkts126,4538
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;opkts126,4538
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;dup3s126,4538
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;dups126,4538
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;packs126,4538
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;badacks126,4538
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;maxburst126,4538
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;maxack126,4538
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;rxmts126,4538
-int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;timeouts126,4538
-int enobufs, ooacks;enobufs127,4613
-int enobufs, ooacks;ooacks127,4613
-double et,minrtt=999999., maxrtt=0, avrgrtt;et128,4634
-double et,minrtt=999999., maxrtt=0, avrgrtt;minrtt128,4634
-double et,minrtt=999999., maxrtt=0, avrgrtt;maxrtt128,4634
-double et,minrtt=999999., maxrtt=0, avrgrtt;avrgrtt128,4634
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;rto129,4679
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;delta129,4679
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;srtt129,4679
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;rttvar129,4679
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;h129,4679
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;g129,4679
-double due,rcvt,secs();due130,4736
-double due,rcvt,secs();rcvt130,4736
-struct	sockaddr_in san;	/* socket address */san132,4761
-char *configfile = "config";configfile134,4807
-typedef int socket_t;socket_t137,4892
-void ctrlc(){ctrlc153,5314
-int main (int argc, char** argv){main160,5385
-void done(void){done171,5599
-void usage(void){usage202,7104
-int doit(char* host){doit207,7176
-void send_segs(socket_t fd){send_segs333,10917
-void send_one(socket_t fd, unsigned int n){send_one410,13042
-void handle_ack(socket_t fd){handle_ack442,13846
-tcp_newreno(fd)tcp_newreno573,18422
-double secs(void)secs599,19086
-socket_t timedread(socket_t fd, double t){timedread606,19205
-void err_sys(char* s){err_sys617,19425
-void rdconfig(void){rdconfig623,19485
-void vntohl(int *p, int cnt){vntohl712,23177
-void vhtonl(int *p, int cnt)vhtonl718,23330
-void handle_sack(socket_t fd){handle_sack729,23663
-duplicate(fd, sackno) {duplicate899,28821
-int UpdateScoreBoard(int last_ack) {UpdateScoreBoard968,30908
-int CheckSndNxt() {CheckSndNxt1044,32912
-int GetNextRetran() {GetNextRetran1063,33390
-void MarkRetran (int retran_seqno, int snd_max) { MarkRetran1077,33703
-int RetransOK (int retran_seqno) { RetransOK1083,33881
-void ClearScoreBoard() {ClearScoreBoard1095,34163
-static struct Aimd_Vals {Aimd_Vals1100,34244
-	unsigned int cwnd;cwnd1101,34270
-	unsigned int increment;increment1102,34290
-	unsigned int decrement;decrement1103,34315
-} aimd_vals[] = {aimd_vals1104,34340
-void floyd_aimd(int cevent){floyd_aimd1182,36837
-bwe_calc( double rtt)bwe_calc1199,37457
-advance_cwnd()advance_cwnd1220,38478
+atoucli.c,7862
+#define TRUE TRUE43,1476
+#define FALSE FALSE44,1491
+char *RCSid = "$Header: /home/wisp/dunigan/src/atou/atoucli.c,v 1.38 2003/01/16 19:07:57 dunigan Exp dunigan $";RCSid47,1524
+char *version = "$Revision: 1.38 $";version48,1637
+FILE *db;     /* debug trace file */db50,1675
+int droplist[11];  /* debuggin */droplist53,1744
+int debug;debug54,1778
+char *host;host55,1789
+#define PORT PORT56,1801
+int port=PORT;			/* udp port */port57,1819
+int sndbuf = 32768;		/* udp send buff, bigger than mss */sndbuf58,1851
+int rcvbuf = 32768;		/* udp recv buff for ACKs*/rcvbuf59,1909
+int mss=1472;			/* user payload, can be > MTU for UDP */mss60,1958
+double tick = 1.0;		/* recvfrom timeout -- select */tick61,2015
+double timeout=0.5;		/* pkt timeout */timeout62,2068
+int idle=0;                     /* successive timeouts */idle63,2107
+int maxidle=10;                 /* max idle before abort */maxidle64,2165
+int maxpkts=0;			/* test duration */maxpkts65,2225
+int maxtime=10;                 /* test duration */maxtime66,2262
+int burst_limit = 0;		/* most to send at once --- weak */burst_limit67,2314
+int rcvrwin = 20;		/* rcvr window in mss-segments */rcvrwin68,2372
+int dup_thresh =3;		/* dup ACKs causing retransmit */dup_thresh69,2425
+int increment = 1;   		/* cc increment */increment70,2479
+double multiplier = 0.5;	/* cc backoff */multiplier71,2521
+double kai = 0.;		/* Kelly scalable TCP cwnd += kai */kai72,2563
+int ssincr =1;			/* slow start increment */ssincr73,2618
+double thresh_init = 1.0;      /* fraction of rvcvwind for initial ssthresh*/thresh_init74,2662
+int max_ssthresh =0;            /* floyd modified slow start, ? consider frac */max_ssthresh75,2740
+int initsegs = 2;		/* slowstart initial */initsegs76,2821
+int newreno = 1;		/* newreno flag */newreno77,2864
+int sack = 0;			/* sack flag */sack78,2901
+int delack = 0;			/* delack flag */delack79,2933
+int rampdown = 0;		/* enable wintrim */rampdown80,2969
+int fack = 0;			/* fack flag */fack81,3009
+int floyd = 0;			/* Sally Floyd's aimd changes */floyd82,3041
+int vegas=0;                    /* vegas flag 0:off 1:last RTT  2:min rtt  */vegas83,3091
+int vss = 0;                    /* vegas slow start  0:exit ss  1: go to floyd*/vss85,3247
+double valpha=1.0, vbeta=3.0, vgamma=1.0;  /* vegas parameters */valpha86,3328
+double valpha=1.0, vbeta=3.0, vgamma=1.0;  /* vegas parameters */vbeta86,3328
+double valpha=1.0, vbeta=3.0, vgamma=1.0;  /* vegas parameters */vgamma86,3328
+int vinss=0;   /* in vegas slow start */vinss89,3425
+int vsscnt=0;  /* number of vegas slow start adjusts */vsscnt90,3466
+int vcnt;  /* number of rtt samples */vcnt91,3522
+int vdecr, v0 ; /* vegas decrements or no adjusts */vdecr92,3561
+int vdecr, v0 ; /* vegas decrements or no adjusts */v092,3561
+double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vdelta93,3614
+double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vrtt93,3614
+double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vrttsum93,3614
+double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vrttmax93,3614
+double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;vrttmin93,3614
+int initial_ss =1;   /* initial slow start */initial_ss95,3668
+unsigned int bwe_pkt, bwe_prev, bwe_on=1;bwe_pkt98,3716
+unsigned int bwe_pkt, bwe_prev, bwe_on=1;bwe_prev98,3716
+unsigned int bwe_pkt, bwe_prev, bwe_on=1;bwe_on98,3716
+double bwertt, bwertt_max;bwertt99,3758
+double bwertt, bwertt_max;bwertt_max99,3758
+double max_delta;  /* vegas like tracker */max_delta100,3785
+#define BUFFSIZE BUFFSIZE102,3830
+double dbuff[BUFFSIZE/8];dbuff103,3860
+int *buff = (int *)dbuff;buff104,3886
+struct Pr_Msg {Pr_Msg106,3913
+        double tstamp;tstamp107,3929
+        unsigned int msgno;msgno108,3952
+	unsigned int blkcnt;blkcnt109,3980
+        struct Sblks {Sblks110,4002
+                unsigned int sblk,eblk;sblk111,4025
+                unsigned int sblk,eblk;eblk111,4025
+        } sblks[3];sblks112,4065
+} *msg, *ack;msg113,4085
+} *msg, *ack;ack113,4085
+int dupacks;			/* consecutive dup acks recd */dupacks116,4125
+unsigned int snd_nxt; 		/* send next */snd_nxt117,4172
+unsigned int snd_max; 		/* biggest send */snd_max118,4212
+unsigned int snd_una; 		/* last unacked */snd_una119,4255
+unsigned int snd_fack;		/* Forward (right) most ACK */snd_fack120,4298
+unsigned int snd_recover;	/* One RTT beyond last good data, newreno */snd_recover121,4353
+double snd_cwnd;		/* congestion-controlled window */snd_cwnd122,4424
+unsigned int snd_ssthresh;	/* slow start threshold */snd_ssthresh123,4477
+unsigned int ackno;ackno125,4532
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;ipkts128,4565
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;opkts128,4565
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;dup3s128,4565
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;dups128,4565
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;packs128,4565
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;badacks128,4565
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;maxburst128,4565
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;maxack128,4565
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;rxmts128,4565
+int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;timeouts128,4565
+int enobufs, ooacks;enobufs129,4640
+int enobufs, ooacks;ooacks129,4640
+double et,minrtt=999999., maxrtt=0, avrgrtt;et130,4661
+double et,minrtt=999999., maxrtt=0, avrgrtt;minrtt130,4661
+double et,minrtt=999999., maxrtt=0, avrgrtt;maxrtt130,4661
+double et,minrtt=999999., maxrtt=0, avrgrtt;avrgrtt130,4661
+static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;rto131,4706
+static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;delta131,4706
+static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;srtt131,4706
+static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;rttvar131,4706
+static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;h131,4706
+static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;g131,4706
+double due,rcvt,secs();due132,4763
+double due,rcvt,secs();rcvt132,4763
+struct	sockaddr_in san;	/* socket address */san134,4788
+char *configfile = "config";configfile136,4834
+void ctrlc(){ctrlc157,5412
+int main (int argc, char** argv){main164,5483
+void done(void){done176,5709
+void usage(void){usage207,7214
+int doit(char* host){doit212,7286
+void send_segs(socket_t fd){send_segs339,11075
+void send_one(socket_t fd, unsigned int n){send_one416,13200
+void handle_ack(socket_t fd){handle_ack448,14004
+int tcp_newreno(socket_t fd){tcp_newreno579,18580
+double secs(void)secs604,19263
+socket_t timedread(socket_t fd, double t){timedread611,19382
+void err_sys(char* s){err_sys622,19602
+void rdconfig(void){rdconfig628,19662
+void handle_sack(socket_t fd){handle_sack722,23532
+void duplicate(socket_t fd, int sackno) {duplicate892,28682
+int UpdateScoreBoard(int last_ack) {UpdateScoreBoard961,30773
+int CheckSndNxt() {CheckSndNxt1037,32777
+int GetNextRetran() {GetNextRetran1056,33255
+void MarkRetran (int retran_seqno, int snd_max) { MarkRetran1070,33568
+int RetransOK (int retran_seqno) { RetransOK1076,33746
+void ClearScoreBoard() {ClearScoreBoard1088,34028
+static struct Aimd_Vals {Aimd_Vals1093,34109
+	unsigned int cwnd;cwnd1094,34135
+	unsigned int increment;increment1095,34155
+	unsigned int decrement;decrement1096,34180
+} aimd_vals[] = {aimd_vals1097,34205
+void floyd_aimd(int cevent){floyd_aimd1175,37302
+void bwe_calc(double rtt){bwe_calc1192,37922
+void advance_cwnd(void){advance_cwnd1212,38739
 
 probeall.pl,0

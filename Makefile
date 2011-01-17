@@ -1,24 +1,18 @@
 CXX := gcc
 CFLAGS := -g -Wall
-TARGETS := atoucli \
-	atousrv
+LDFLAGS :=
+
+TARGETS := util \
+	atoucli \
+	atousrv \
+
+HEADERS := scoreboard.h \
 
 SRCS := $(TARGETS:%=%.c)
 
 OBJS := $(TARGETS:%=%.o)
 
-TEST_SRCS := \
-#	util_test.cpp
-# Add test source files here.
-
-# Objects to link into test binary. Can't link main.
-TEST_OBJS := $(TEST_SRCS:.c=.o) $(filter-out main.o,$(OBJS))
-# Rename test objs to .test.o instead of .o so we can build non-cilk object
-# files for testing.
-TEST_OBJS := $(TEST_OBJS:.o=.test.o)
-
-# Point to the root of Google Test, relative to where this file is
-GTEST_DIR = gtest
+PRODUCTS := $(filter-out util, $(TARGETS))
 
 # We start our mode with "mode" so we avoud the leading whitespace from the +=.
 NEWMODE := mode
@@ -40,13 +34,23 @@ ifneq ($(OLDMODE),$(NEWMODE))
   $(shell echo "$(NEWMODE)" > .buildmode)
 endif
 
-all: $(OBJS)
+all: $(PRODUCTS)
 
-# Rule for compiling cpp files.
-$(OBJS) : %.o:  %.c scoreboard.h .buildmode Makefile
-	$(CXX) $(CFLAGS) $< scoreboard.h -o $@
+# Rule for linking the .o binaries
+$(PRODUCTS): $(OBJS) .buildmode
+	$(CXX) -o $@ $< $@.o $(LDFLAGS)
+
+# Rule for compiling c files.
+$(OBJS) : %.o :  %.c $(HEADERS) .buildmode Makefile
+	$(CXX) $(CFLAGS) -c $< -o $@
+
+tags: $(SRCS)
+	ctags -eR
 
 clean:
-	$(RM) $(TARGETS) $(OBJS) .buildmode \
-	$gtest.a *.o *.d
+	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS\
+	*.o *.d
 
+# Uncomment to debug the Makefile
+#OLD_SHELL := $(SHELL)
+#SHELL = $(warning [$@ ($^) ($?)]) $(OLD_SHELL)

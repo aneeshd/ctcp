@@ -34,11 +34,11 @@
 #include <math.h>
 #include <signal.h>
 #include <errno.h>
-#include <sys/time.h>
 #include <time.h>
 
 /*---added---*/
 #include "scoreboard.h"
+#include "util.h"
 
 #define TRUE 1
 #define FALSE 0
@@ -136,22 +136,18 @@ struct	sockaddr_in san;	/* socket address */
 char *configfile = "config";
 
 //------------- Function prototypes-----------------//
-
-typedef int socket_t;
-
 void done(void);
 void usage(void);
 void rdconfig(void);
 int doit(char* host);
-void err_sys(char* s);
 void send_segs(socket_t fd);
-void vntohl(int *p, int cnt);
+void err_sys(char* s);
 socket_t timedread(socket_t fd, double t);
 void handle_ack(socket_t fd);
 void handle_sack(socket_t fd);
 void floyd_aimd(int cevent);
 void send_one(socket_t fd, unsigned int n);
-void vhtonl(int *p, int cnt);
+
 void bwe_calc(double rtt);
 int tcp_newreno(socket_t fd);
 void advance_cwnd(void);
@@ -718,17 +714,6 @@ void rdconfig(void){
 	  rampdown = 0;
 }
 
-void vntohl(int *p, int cnt){
-        /* convert vector of words to host byte order */
-        int i;
-         for(i=0;i<cnt;i++) p[i] = ntohl(p[i]);
-}
-
-void vhtonl(int *p, int cnt){
-        /* convert vector of words to network byte order */
-        int i;
-        for(i=0;i<cnt;i++) p[i] = htonl(p[i]);
-}
 /*----added----*/
 /*handle_sack() implements the use of selective acks by using the information
   provided by the receiver when packets are lost leaving holes in the data.
