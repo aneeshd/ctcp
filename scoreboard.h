@@ -1,6 +1,7 @@
 /* scoreboard.h    thd@ornl.gov  ffowler@cs.utk.edu */
 
-#define SBSIZE 8192
+//#define SBSIZE 8192
+#define SBSIZE 16384
 
 int length_=0, first_=0, HighAck=0, Pipe=0, loss3s=0, NextLoss=0;
 int retran_seqno=0, cumacks=0, goodacks=0, dup_acks=0;

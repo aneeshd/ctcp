@@ -4,7 +4,9 @@
 #define TRUE 1
 #define FALSE 0
 
-#define BUFFSIZE        65536
+#define PORT "7890" // This is the port that the server is listening to
+#define BUFFSIZE    65535
+
 
 FILE *db;     /* debug trace file */
 char *RCSid = "$Header: /home/wisp/dunigan/src/atou/atoucli.c,v 1.38 2003/01/16 19:07:57 dunigan Exp dunigan $";
@@ -13,12 +15,6 @@ char *version = "$Revision: 1.38 $";
   /* configurable variables */
 int droplist[11];  /* debuggin */
 int debug;
-char *host;
-#define PORT 7890
-int port=PORT;			/* udp port */
-int sndbuf = 32768;		/* udp send buff, bigger than mss */
-int rcvbuf = 32768;		/* udp recv buff for ACKs*/
-int mss=1472;			/* user payload, can be > MTU for UDP */
 double tick = 1.0;		/* recvfrom timeout -- select */
 double timeout=0.5;		/* pkt timeout */
 int idle=0;                     /* successive timeouts */
@@ -32,7 +28,7 @@ int increment = 1;   		/* cc increment */
 double multiplier = 0.5;	/* cc backoff */
 double kai = 0.;		/* Kelly scalable TCP cwnd += kai */
 int ssincr =1;			/* slow start increment */
-double thresh_init = 1.0;      /* fraction of rvcvwind for initial ssthresh*/
+double thresh_init = 1.0;      /* fraction of rcvwind for initial ssthresh*/
 int max_ssthresh =0;            /* floyd modified slow start, ? consider frac */
 int initsegs = 2;		/* slowstart initial */
 int newreno = 1;		/* newreno flag */
@@ -61,10 +57,6 @@ double bwertt, bwertt_max;
 double max_delta;  /* vegas like tracker */
 
 
-double dbuff[BUFFSIZE/8];
-int *buff = (int *)dbuff;
-
-
 /* TCP pcb like stuff */
 int dupacks;			/* consecutive dup acks recd */
 unsigned int snd_nxt; 		/* send next */
@@ -82,27 +74,91 @@ int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;
 int enobufs, ooacks;
 double et,minrtt=999999., maxrtt=0, avrgrtt;
 static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;
-double due,rcvt,secs();
-
-struct sockaddr_in san;	/* socket address */
+double due,rcvt;
 
 char *configfile = "config";
 
 //---------------- Function Definitions -----------------------//
+
+
+/*
+ * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
+ */
+void ctrlc();
+
+/*
+ * 
+ */
 void done(void);
+
+/*
+ * print the program's usage and exit
+ */
 void usage(void);
-void rdconfig(void);
+
+/*
+ * 
+ */
+void readConfig(void);
+
+/*
+ *
+ */
 int doit(char* host);
+
+/*
+ *
+ */
 void send_segs(socket_t fd);
+
+/*
+ *
+ */
 void err_sys(char* s);
+
+/*
+ *
+ */
 socket_t timedread(socket_t fd, double t);
+
+/*
+ *
+ */
 void handle_ack(socket_t fd);
+
+/*
+ *
+ */
 void handle_sack(socket_t fd);
+
+/*
+ *
+ */
 void floyd_aimd(int cevent);
+
+/*
+ *
+ */
 void send_one(socket_t fd, unsigned int n);
+
+/*
+ *
+ */
 void bwe_calc(double rtt);
+
+/*
+ *
+ */
 int tcp_newreno(socket_t fd);
+
+/*
+ *
+ */
 void advance_cwnd(void);
+
+/*
+ *
+ */
 void duplicate(socket_t fd, int sackno);
 
 #endif // ATOUCLI_H_

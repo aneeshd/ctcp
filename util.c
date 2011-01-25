@@ -14,4 +14,3 @@ void vhtonl(int *p, int cnt){
         int i;
         for(i=0;i<cnt;i++) p[i] = htonl(p[i]);
 }
-

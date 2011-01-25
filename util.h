@@ -5,6 +5,7 @@
 #define FALSE 0
 
 typedef int socket_t;
+typedef struct timeval timeval_t;
 
 typedef struct {
         double tstamp;
@@ -17,5 +18,5 @@ typedef struct {
 
 void vntohl(int *p, int cnt);
 void vhtonl(int *p, int cnt);
-
+double secs(void);
 #endif // 

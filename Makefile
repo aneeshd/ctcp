@@ -48,7 +48,7 @@ tags: $(SRCS)
 	ctags -eR
 
 clean:
-	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS\
+	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS \
 	*.o *.d
 
 # Uncomment to debug the Makefile

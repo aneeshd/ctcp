@@ -7,8 +7,6 @@
 
 char *RCSid = "$Header: /home/thistle/dunigan/src/atou/atousrv.c,v 1.8 2002/06/20 14:28:46 dunigan Exp dunigan $";
 char *version = "$Revision: 1.8 $";
-#define PORT 7890
-#define BUFFSIZE        65536
 double dbuff[BUFFSIZE/8];
 int *buff = (int *)dbuff;
 int sockfd, rcvspace;
@@ -31,6 +29,7 @@ unsigned int millisecs(), rtt_base=0;
 unsigned int tempno;
 
 /*
+ * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
 void  ctrlc(void);
 
