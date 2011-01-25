@@ -151,23 +151,6 @@ int doit(char* host){
     return 2;
   }
 
-  //-------------- OLD FASHIONED CODE --------------------------//
-  /*
-	if ( (inaddr = inet_addr(host)) != -1) {
-		san.sin_family = AF_INET;
-		memcpy((char *)&san.sin_addr,(char *) &inaddr,sizeof(inaddr));
-	}else {
-		if ((him = gethostbyname(host)) == NULL) {
-      fprintf(stderr, "atoucli: Unknown host %s\n", host);
-      return(-1);
-		}
-    san.sin_family = him->h_addrtype;      
-    memcpy(&san.sin_addr,him->h_addr, him->h_length);
-	}
-	san.sin_port = htons(port);
-  */
-  ///////////////////////////////////////////////////////////////////////////////////////////////
-
 	i=sizeof(sndbuf);
 
   // Not really sure if this is needed
