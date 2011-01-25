@@ -21,12 +21,16 @@ struct sockaddr_in	cli_addr;
 int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;
 int  settime=0;
 int start[3], endd[3];
-void bldack();
+
 /* stats */
 double et,minrtt=999999., maxrtt=0, avrgrtt;
 double due,rcvt,st,et,secs();
-unsigned int millisecs(), rtt_base=0;
+
+unsigned int rtt_base=0; // Used to keep track of the rtt
 unsigned int tempno;
+
+unsigned int millisecs();
+
 
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
@@ -54,6 +58,7 @@ void addho(int n);
 void fixho(int n);
 
 /*
+ * Returns the current time. Sets the rtt_base global parameter to the current time.
  */
 double secs();
   

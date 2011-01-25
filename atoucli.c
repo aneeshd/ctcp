@@ -68,7 +68,7 @@ void usage(void){
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
 void ctrlc(){
-	et = secs()-et;
+	et = getTime()-et;
 	maxpkts=snd_max;
 	done();
 	exit(1);
@@ -166,15 +166,16 @@ int doit(char* host){
 	connect(fd, result->ai_addr, result->ai_addrlen);  /* catch port unreachable */
 #endif
   
+  
 	/* init control variables */
 	memset(buff,0,BUFFSIZE);        /* pretouch */
 	ack=msg = (Pr_Msg *)buff;
 	/* send out initial segments, then go for it */
-	et=secs();
+	et = getTime();
 	snd_fack=snd_una=snd_nxt=1;
 	if (bwe_on) bwe_pkt = snd_nxt;
 	if (maxpkts == 0 && maxtime) maxpkts = 1000000000;
-	due = secs() + timeout;  /* when una is due */
+	due = getTime() + timeout;  /* when una is due */
 
   // This is where the segments are sent
 	send_segs(fd);
@@ -187,7 +188,7 @@ int doit(char* host){
 			r= recvfrom(fd,buff,mss,0,&from,(socklen_t*)&fromlen);
 #endif
 			if (r <= 0) err_sys("read");
-			rcvt = secs();
+			rcvt = getTime();
 			ipkts++;
       vntohl(buff,sizeof(Pr_Msg)/4);/* to host order */
       if(sack)
@@ -197,7 +198,7 @@ int doit(char* host){
 		} else if (r < 0) {  
 			err_sys("select");
 		}
-		t=secs();
+		t=getTime();
 		if (maxtime && (t-et) > maxtime) maxpkts = snd_max; /*time up*/
 		/* see if a packet has timedout */
 		if (t > due) {   /* timeout */
@@ -248,7 +249,7 @@ int doit(char* host){
 			due = t + 2*timeout;  /* fancy exp. backoff? */
 		}
 	}  /* while more pkts */
-	et = secs()-et;
+	et = getTime()-et;
   return 0;
 }
 
@@ -337,7 +338,7 @@ void send_one(socket_t fd, unsigned int n){
   
 	if (snd_nxt >= snd_max) snd_max = snd_nxt+1;
 	msg->msgno = n;
-	msg->tstamp = secs();
+	msg->tstamp = getTime();
 	if (debug > 3)fprintf(db,"%f %d xmt\n",
                         msg->tstamp-et,n);
   /*fmf-check to see if this pkt should be dropped*/
@@ -550,11 +551,6 @@ int tcp_newreno(socket_t fd){
 	return FALSE;
 }
 
-double secs(void){
-	timeval_t t;
-	gettimeofday(&t, (struct timezone *)0);
-	return(t.tv_sec+ t.tv_usec*1.e-6);
-}
 
 socket_t timedread(socket_t fd, double t){
 	struct timeval tv;

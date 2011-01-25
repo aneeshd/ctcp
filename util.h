@@ -18,5 +18,5 @@ typedef struct {
 
 void vntohl(int *p, int cnt);
 void vhtonl(int *p, int cnt);
-double secs(void);
-#endif // 
+double getTime(void);
+#endif // UTIL_H_

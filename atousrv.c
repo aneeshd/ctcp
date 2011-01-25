@@ -279,16 +279,17 @@ void fixho(int n){
 	dups ++;  /* didn't find a hole */
 }
 
+
 double secs(){
-  timeval_t  t;
-  gettimeofday(&t, (struct timezone *)0);
+  timeval_t  time;
+  gettimeofday(&time, NULL); // the second argument for gettimeofday is obsolete
 	if(rtt_base==0) {
-	  rtt_base = t.tv_sec;
+	  rtt_base = time.tv_sec;
 #if DEBUG == 1
     fprintf(stderr, "DEBUG=> rtt_base: %u\n", rtt_base);
 #endif
 	}
-  return(t.tv_sec+ t.tv_usec*1.e-6);
+  return(time.tv_sec+ time.tv_usec*1.e-6);
 }
 
 unsigned int millisecs(){
