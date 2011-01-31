@@ -23,7 +23,7 @@ ifeq ($(DEBUG),1)
 	CFLAGS := -DDEBUG -O0 $(CFLAGS)
 	NEWMODE += debug
 else
-	CFLAGS := -O3 -ffast-math -DNDEBUG $(CFLAGS)
+	CFLAGS := -O2 -ffast-math -DNDEBUG $(CFLAGS)
 	NEWMODE += nodebug
 endif
 
