@@ -59,7 +59,8 @@ char port[50] = PORT;
 /*
  * Print usage message
  */
-void usage(void){
+void
+usage(void){
 	printf("atoucli host [configfile] \n");
 	exit(1);
 }
@@ -67,14 +68,16 @@ void usage(void){
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
-void ctrlc(){
+void
+ctrlc(){
 	et = getTime()-et;
 	maxpkts=snd_max;
 	done();
 	exit(1);
 }
 
-int main (int argc, char** argv){
+int
+main (int argc, char** argv){
 
 	if (argc < 2) usage();
 
@@ -95,7 +98,8 @@ int main (int argc, char** argv){
 /*
  * This is contains the main functionality and flow of the client program
  */
-int doit(char* host){
+int
+doit(char* host){
 
 	struct sockaddr from;
   struct sockaddr_storage;
@@ -145,7 +149,6 @@ int doit(char* host){
     break;
   }
 
-
   if ( result == NULL ) { // If we are here, we failed to initialize the socket
     fprintf(stderr, "atoucli: failed to initialize socket");
     return 2;
@@ -162,31 +165,29 @@ int doit(char* host){
   printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
   //----------------------------------------------------------------------------------//
 
-#ifdef CONNECT
-	connect(fd, result->ai_addr, result->ai_addrlen);  /* catch port unreachable */
-#endif
-  
-  
 	/* init control variables */
 	memset(buff,0,BUFFSIZE);        /* pretouch */
 	ack=msg = (Pr_Msg *)buff;
+
 	/* send out initial segments, then go for it */
 	et = getTime();
 	snd_fack=snd_una=snd_nxt=1;
 	if (bwe_on) bwe_pkt = snd_nxt;
 	if (maxpkts == 0 && maxtime) maxpkts = 1000000000;
+
 	due = getTime() + timeout;  /* when una is due */
 
   // This is where the segments are sent
 	send_segs(fd);
+
 	while(snd_una < maxpkts){
-		r = timedread(fd,tick);
+
+		r = timedread(fd, tick);
+
 		if (r > 0) {  /* ack ready */
-#ifdef CONNECT
-			r=read(fd,buff,mss);
-#else
-			r= recvfrom(fd,buff,mss,0,&from,(socklen_t*)&fromlen);
-#endif
+
+			r= recvfrom(fd, buff, mss, 0, &from, (socklen_t*)&fromlen);
+
 			if (r <= 0) err_sys("read");
 			rcvt = getTime();
 			ipkts++;
@@ -198,6 +199,7 @@ int doit(char* host){
 		} else if (r < 0) {  
 			err_sys("select");
 		}
+
 		t=getTime();
 		if (maxtime && (t-et) > maxtime) maxpkts = snd_max; /*time up*/
 		/* see if a packet has timedout */
@@ -254,7 +256,8 @@ int doit(char* host){
 }
 
 
-void send_segs(socket_t fd){
+void
+send_segs(socket_t fd){
 	int win=0, trimwin=0, retran=0;
   
 	if (snd_cwnd > rcvrwin) { 
@@ -332,15 +335,18 @@ void send_segs(socket_t fd){
 }
 
 
-void send_one(socket_t fd, unsigned int n){
+void
+send_one(socket_t fd, unsigned int n){
 	/* send msg number n */
-	int i,r;
+	int i, numbytes;
   
 	if (snd_nxt >= snd_max) snd_max = snd_nxt+1;
 	msg->msgno = n;
 	msg->tstamp = getTime();
-	if (debug > 3)fprintf(db,"%f %d xmt\n",
-                        msg->tstamp-et,n);
+
+	if (debug > 3) fprintf(db,"%f %d xmt\n",
+                         msg->tstamp-et,n);
+
   /*fmf-check to see if this pkt should be dropped*/
 	/* could add a drop_rate too with rand() */
 	for (i=0; droplist[i]; i++) if (droplist[i] == n) {
@@ -348,22 +354,28 @@ void send_one(socket_t fd, unsigned int n){
       return; 
     }
 	vhtonl(buff,sizeof(Pr_Msg)/4);  /* to net order, 12 bytes? */
+
  again:
-#ifdef CONNECT
-	r = write(fd, buff, mss);
-#else
-	r = sendto(fd,buff,mss,0, result->ai_addr, result->ai_addrlen);
-#endif
-	if (r != mss) {
+	if((numbytes = sendto(fd, buff, mss, 0, 
+                        result->ai_addr, result->ai_addrlen)) == -1){
+       perror("atoucli: sendto");
+       exit(1);
+  }
+
+  // Try te get read of this goto ---> EEEW
+	if (numbytes != mss) {
 		enobufs++;
 		if (errno == ENOBUFS) goto again;
 		err_sys("write");
 	}
+
 	if (debug > 8)printf("send %d snd_nxt %d snd_max %d\n", n,snd_nxt,snd_max);
 	opkts++;
 }
 
-void done(void){
+
+void
+done(void){
 	char myname[128];
   
 
@@ -395,7 +407,8 @@ void done(void){
   printf("goodacks %d cumacks %d ooacks %d\n", goodacks, cumacks, ooacks);
 }
 
-void handle_ack(socket_t fd){
+void
+handle_ack(socket_t fd){
 	double rtt;
 	int ackd;	/* ack advance */
   
@@ -526,7 +539,8 @@ void handle_ack(socket_t fd){
  * be started again.  If the ack advances at least to snd_recover, return 0.
  */
 
-int tcp_newreno(socket_t fd){
+int
+tcp_newreno(socket_t fd){
 	if (ackno < snd_recover){
 		int ocwnd = snd_cwnd;
 		int onxt = snd_nxt;
@@ -552,7 +566,9 @@ int tcp_newreno(socket_t fd){
 }
 
 
-socket_t timedread(socket_t fd, double t){
+// Perhaps this is unnecesary.... No need to use select
+socket_t
+timedread(socket_t fd, double t){
 	struct timeval tv;
 	fd_set rset;
   
@@ -563,13 +579,15 @@ socket_t timedread(socket_t fd, double t){
 	return ( select(fd+1,&rset,NULL,NULL, &tv) );
 }
 
-void err_sys(char* s){
+void
+err_sys(char* s){
   perror(s);
   done();
   exit(1);
 }
 
-void readConfig(void){
+void
+readConfig(void){
 	/* read config if there, keyword value */
 	FILE *fp;
 	char line[128], var[32];
@@ -670,7 +688,8 @@ void readConfig(void){
   provided by the receiver when packets are lost leaving holes in the data.
 */
 
-void handle_sack(socket_t fd){
+void
+handle_sack(socket_t fd){
   int sackno, decr, ackd;
   double rtt;
   
@@ -840,7 +859,8 @@ void handle_sack(socket_t fd){
   }
 }
 
-void duplicate(socket_t fd, int sackno) {
+void
+duplicate(socket_t fd, int sackno) {
   int i, end; 
   
   /*Go into FastRecovery until sackno >= snd_recover*/
@@ -909,7 +929,8 @@ void duplicate(socket_t fd, int sackno) {
   }
 }
 
-int UpdateScoreBoard(int last_ack) {
+int
+UpdateScoreBoard(int last_ack) {
   int i, sack_left, sack_right, sack_index;
   int retran_decr = 0;
   
@@ -985,7 +1006,8 @@ int UpdateScoreBoard(int last_ack) {
   return(retran_decr);
 }
 
-int CheckSndNxt() {
+int
+CheckSndNxt() {
   int i, sack_index, sack_left, sack_right;
   int force_timeout=0;
   
@@ -1004,7 +1026,8 @@ int CheckSndNxt() {
   return(force_timeout);
 }
 
-int GetNextRetran() {
+int
+GetNextRetran() {
   int i;
   /*get the next packet to be retransmitted--if any*/
   if(length_) {
@@ -1018,13 +1041,15 @@ int GetNextRetran() {
   return(-1);
 }
 
-void MarkRetran (int retran_seqno, int snd_max) { 
+void
+MarkRetran (int retran_seqno, int snd_max) { 
   /*mark the packet as retransmitted*/
   SBN[retran_seqno%SBSIZE].retran_ = 1;
   SBN[retran_seqno%SBSIZE].snd_nxt_ = snd_max;
 }
 
-int RetransOK (int retran_seqno) { 
+int
+RetransOK (int retran_seqno) { 
   /*see if the packet was retransmitted*/
   if(SBN[retran_seqno%SBSIZE].retran_ > 0)
     /*if it was, has it been lost again? */
@@ -1036,7 +1061,8 @@ int RetransOK (int retran_seqno) {
     return(1);
 }
 
-void ClearScoreBoard() {
+void
+ClearScoreBoard() {
   length_ = 0;
 }
 
@@ -1123,7 +1149,8 @@ static struct Aimd_Vals {
   {999999},{    73},{   23}  /*  0.09 */
 };
 
-void floyd_aimd(int cevent){
+void
+floyd_aimd(int cevent){
   
 	static int current =1;  /* points at upper bound */
   
@@ -1140,7 +1167,8 @@ void floyd_aimd(int cevent){
                       (int)snd_cwnd,current,(int)increment,multiplier);
 }
 
-void bwe_calc(double rtt){
+void
+bwe_calc(double rtt){
 	/* bw estimate each lossless RTT, vegas delta */
   /* once per rtt and not in recovery */
   if (vcnt) { /* only if we've been had some samples */
@@ -1160,7 +1188,8 @@ void bwe_calc(double rtt){
   vrttsum=vcnt=vrttmax=0;
 }
 
-void advance_cwnd(void){
+void
+advance_cwnd(void){
 	/* advance cwnd according to slow-start of congestion avoidance */
   if (snd_cwnd <= snd_ssthresh) {
     /* slow start, expo growth */
