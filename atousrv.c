@@ -1,4 +1,4 @@
-/*                          thd@ornl.gov  ffowler@cs.utk.edu
+/*  thd@ornl.gov  ffowler@cs.utk.edu
  *  atousrv [-options] 
 	-s	enable SACK 
 	-d ##	amount to delay ACK's in ms (default 0, often 200)
@@ -31,22 +31,28 @@
 #include "util.h"
 #include "atousrv.h"
 
-Pr_Msg *msg, ack;
+#define PORT "7890"
 
-void usage(void) {
-  fprintf(stderr, "Usage: atousrv [-options]\n   \
-	-s	enable SACK (default reno) \n                          \
-	-d ##	amount to delay ACKs (ms) (default 0, often 200)\n   \
-	-p ##	port number to receive on (default 7890)\n           \
+Pr_Msg *msg, ack;
+struct sockaddr_in	cli_addr;
+int sockfd, rcvspace;
+
+void
+usage(void) {
+  fprintf(stderr, "Usage: atousrv [-options]\n\
+	-s	enable SACK (default reno)\n\
+	-d ##	amount to delay ACKs (ms) (default 0, often 200)\n\
+	-p ##	port number to receive on (default 7890)\n \
 	-b ##	set socket receive buffer size (default 8192)\n      \
-	-D ##   enable debug level\n");
+	-D ##  enable debug level\n");
   exit(0);
 } 
 
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
-void  ctrlc(void){
+void
+ctrlc(void){
 	int i;
 	et = et-st;  /* elapsed time */
 	if (et==0)et=.1;
@@ -60,11 +66,13 @@ void  ctrlc(void){
 	exit(0);
 }
 
-
-
-int main(int argc, char** argv){
-	int optlen,rlth,port = PORT, n;
-	struct sockaddr_in	serv_addr;
+int
+main(int argc, char** argv){
+	int optlen,rlth;
+  char *port = PORT;
+  int numbytes;
+  struct addrinfo hints, *servinfo, *result;
+  int rv;
 	int c, retval=0;
   
 	while((c = getopt(argc, argv, "sd:p:b:D:")) != -1) { 
@@ -77,7 +85,7 @@ int main(int argc, char** argv){
       if (ackdelay < 0) ackdelay = 0;
       break;
     case 'p':
-      port = atoi(optarg);
+      port = optarg;
       break;
     case 'b':
       rcvspace = atoi(optarg);
@@ -90,40 +98,73 @@ int main(int argc, char** argv){
 	  }
 	}
   
-	if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-		err_sys("server: can't open datagram socket");
-  
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC; // This works for buth IPv4 and IPv6
+  hints.ai_socktype = SOCK_DGRAM;
+  hints.ai_flags  = AI_PASSIVE;
+
+  if((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    return 1;
+  }
+
+  // loop through all the results and bind to the first possible
+  for(result = servinfo; result != NULL; result = result->ai_next) {
+    if((sockfd = socket(result->ai_family, 
+                        result->ai_socktype,
+                        result->ai_protocol)) == -1){
+      perror("atousrv: failed to initialize socket");
+      continue;
+    }
+    
+    if ( bind(sockfd, result->ai_addr, result->ai_addrlen) == -1) {
+      close(sockfd);
+      err_sys("atousrv: can't bind local address");
+      continue;
+    }
+    break;
+  }
+
+  // If we got here, it means that we couldn't bind the socket.
+  if(result  == NULL){
+    err_sys("atousrv: failed to bind to socket");
+  }
+
+  freeaddrinfo(servinfo);
+
 	signal(SIGINT, (__sighandler_t) ctrlc);
+
 	/*
 	 * Bind our local address so that the client can send to us.
 	 */
-  
-	memset((char *) &serv_addr,0, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	serv_addr.sin_port        = htons(port);
-  
-	optlen = sizeof(rlth);
+    
 	if (rcvspace) {
     setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
 	}
 	getsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (char *) &rlth, (socklen_t*)&optlen);
-	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-		err_sys("server: can't bind local address");
-	printf("atousrv %s using port %d rcvspace %d sack %d ackdelay %d ms\n",
+
+	printf("atousrv %s using port %s rcvspace %d sack %d ackdelay %d ms\n",
          version,port,rlth,sack,ackdelay);
   
 	memset(buff,0,BUFFSIZE);        /* pretouch */
+
 	msg = (Pr_Msg *)buff;
-	clilen = sizeof(cli_addr);
-	n = recvfrom(sockfd,buff,sizeof(dbuff),0,(struct sockaddr *)&cli_addr,(socklen_t*)&clilen);
+
+	clilen = sizeof cli_addr;
+	if((numbytes = recvfrom(sockfd, buff, sizeof(dbuff), 0, 
+                          (struct sockaddr *)&cli_addr, &clilen)) == -1){
+    err_sys("recvfrom");
+  }
+
 	ackheadr = sizeof(double) + 2*(sizeof(unsigned int));
 	sackinfo = sizeof(unsigned int) * 2;
-	while(n > 0) {
+	while(numbytes > 0) {
 	  pkts++;
-	  et=secs();  /* last read */
-	  if (st == 0)st = et;  /* first pkt time */
-	  vntohl(buff,sizeof( Pr_Msg)/4);  /* to host order, 12 bytes? */
+	  et = secs();  /* last read */
+	  if (st == 0) st = et;  /* first pkt time */
+	  vntohl(buff, sizeof (Pr_Msg)/4);  /* to host order, 12 bytes? */
+
 	  if (msg->msgno > hi) hi = msg->msgno ;  /* high water mark */
     
     if (debug && msg->msgno != expect ) printf("exp %d got %d dups %d sacks %d hocnt %d\n",expect, msg->msgno,dups,sackcnt,hocnt); 
@@ -147,20 +188,24 @@ int main(int argc, char** argv){
 	    bldack();
     }
     
-	  inlth=n;
-	  n = recvfrom(sockfd,buff,sizeof(dbuff),0,(struct sockaddr *)&cli_addr,(socklen_t*)&clilen);
+	  inlth=numbytes;
+	  if((numbytes = recvfrom(sockfd, buff, sizeof(dbuff), 0, 
+                            (struct sockaddr *)&cli_addr, &clilen)) == -1 ){
+      err_sys("rcvfrom");
+    }
 	}
-	if (n < 0 ) err_sys("server recvfrom");
   return 0;
 }
 
 
-void err_sys(char *s){
+void
+err_sys(char *s){
 	perror(s);
 	ctrlc();     /* do stats on error */
 }
 
-void bldack(void){
+void
+bldack(void){
 	int i, j, k, first=-1, retransmit=0, newpkt=0;
   
 	/* construct the reply packet */
@@ -237,7 +282,8 @@ void bldack(void){
   acks++;
 }
 
-int check_order(int newpkt) {
+int
+check_order(int newpkt) {
   int i;
   
   for(i=0; i<3; i++) {
@@ -250,7 +296,8 @@ int check_order(int newpkt) {
   return(-1);
 }
 
-void addho(int n){
+void
+addho(int n){
 	/* add one or more holes */
 	int j;
   
@@ -265,7 +312,8 @@ void addho(int n){
 	}
 }
 
-void fixho(int n){
+void
+fixho(int n){
   /* remove missing pkt, shift vector over replaced pkt */
 	int i,j;
   
@@ -279,10 +327,10 @@ void fixho(int n){
 	dups ++;  /* didn't find a hole */
 }
 
-
-double secs(){
+double
+secs(){
   timeval_t  time;
-  gettimeofday(&time, NULL); // the second argument for gettimeofday is obsolete
+  gettimeofday(&time, NULL);
 	if(rtt_base==0) {
 	  rtt_base = time.tv_sec;
 #if DEBUG == 1
@@ -292,7 +340,8 @@ double secs(){
   return(time.tv_sec+ time.tv_usec*1.e-6);
 }
 
-unsigned int millisecs(){
+unsigned int
+millisecs(){
   struct timeval tv;
 	unsigned int ts;
   
@@ -303,7 +352,8 @@ unsigned int millisecs(){
   return(ts);
 }
 
-int acktimer(socket_t fd, int t) {
+int
+acktimer(socket_t fd, int t) {
   struct timeval tv;
   fd_set rset;
   int n;

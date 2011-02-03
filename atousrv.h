@@ -2,7 +2,6 @@
 #define ATOUSRV_H_
 
 #define MAXHO 1024
-#define PORT 7890
 #define BUFFSIZE  65536
 
 char *RCSid = "$Header: /home/thistle/dunigan/src/atou/atousrv.c,v 1.8 2002/06/20 14:28:46 dunigan Exp dunigan $";
@@ -16,8 +15,8 @@ int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;
 #define MAXHO 1024
 int  hocnt, holes[MAXHO];
 /*implementing sack & delack */
-int sack=0, clilen; 
-struct sockaddr_in	cli_addr;
+int sack=0;
+socklen_t clilen;
 int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;
 int  settime=0;
 int start[3], endd[3];
