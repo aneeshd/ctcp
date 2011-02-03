@@ -135,6 +135,7 @@ doit(char* host){
   // Get the server's info
   if((rv = getaddrinfo(host, port, &hints, &servinfo)) != 0){
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    err_sys(""); 
     return 1;
   }
 
@@ -150,7 +151,7 @@ doit(char* host){
   }
 
   if ( result == NULL ) { // If we are here, we failed to initialize the socket
-    fprintf(stderr, "atoucli: failed to initialize socket");
+    err_sys("atoucli: failed to initialize socket");
     return 2;
   }
 
