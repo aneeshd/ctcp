@@ -345,8 +345,11 @@ send_one(socket_t fd, unsigned int n){
 	msg->msgno = n;
 	msg->tstamp = getTime();
 
-	if (debug > 3) fprintf(db,"%f %d xmt\n",
-                         msg->tstamp-et,n);
+	if (debug > 3) 
+    {
+      fprintf(db,"%f %d xmt\n",
+              msg->tstamp-et,n);
+    }
 
   /*fmf-check to see if this pkt should be dropped*/
 	/* could add a drop_rate too with rand() */
@@ -356,19 +359,19 @@ send_one(socket_t fd, unsigned int n){
     }
 	vhtonl(buff,sizeof(Pr_Msg)/4);  /* to net order, 12 bytes? */
 
- again:
+  do{
+
 	if((numbytes = sendto(fd, buff, mss, 0, 
                         result->ai_addr, result->ai_addrlen)) == -1){
        perror("atoucli: sendto");
        exit(1);
   }
+  
+  } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
 
-  // Try te get read of this goto ---> EEEW
-	if (numbytes != mss) {
-		enobufs++;
-		if (errno == ENOBUFS) goto again;
-		err_sys("write");
-	}
+  if(numbytes != mss){
+    err_sys("write");
+  }
 
 	if (debug > 8)printf("send %d snd_nxt %d snd_max %d\n", n,snd_nxt,snd_max);
 	opkts++;
@@ -453,16 +456,19 @@ handle_ack(socket_t fd){
 		if ( ackno < snd_una ) dupacks=0; /* out of order */
 	} else  {
     goodacks++;
+
     if (ackno == snd_una ){
       /* dup acks */
       dups++;
       if (++dupacks == dup_thresh) { 
         /* rexmit threshold */
-        if (debug > 1)fprintf(stderr,
-                              "3duprxmit %6.2f pkt %d nxt %d max %d cwnd %d thresh %d recover %d %d\n",
-                              rcvt-et,
-                              snd_una,snd_nxt,snd_max,(int)snd_cwnd,
-                              snd_ssthresh,snd_recover,(int)vdelta);
+        if (debug > 1){
+          fprintf(stderr,
+                  "3duprxmit %6.2f pkt %d nxt %d max %d cwnd %d thresh %d recover %d %d\n",
+                  rcvt-et,
+                  snd_una,snd_nxt,snd_max,(int)snd_cwnd,
+                  snd_ssthresh,snd_recover,(int)vdelta);
+        }
         dup3s++;
         rxmts++;
         bwe_pkt=0;
