@@ -1,0 +1,50 @@
+#!/usr/bin/python
+import sys
+import matplotlib.pyplot as plt
+
+def main(args):
+
+    times = []
+    instant_BW = []
+    average_BW = []
+ 
+    mss = 1472
+    current= 0.1
+    res = 0.1
+    abw = 0
+    bw = 0
+
+    f = open(args[0], 'r')
+    for line in f:
+        values = line.split(" ") 
+
+
+        if values[-1] == "xmt\n":
+            # The variable values is a list of the form
+            # [time, segment, xmt]
+
+            abw += mss
+            bw += mss
+
+            time = float(values[0])
+            if time > current:
+                times.append(time)
+
+                instant_BW.append(8e-6*bw/res)
+                average_BW.append(8e-6*1.0*abw/current)
+                
+                current = res + current
+                bw = 0
+    
+#    print average_BW
+    plt.plot(times, instant_BW, 'r--', times, average_BW, 'g^')
+    plt.xlabel('time')
+    plt.ylabel('Mbs')
+    plt.show()
+
+                
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        sys.exit("Usage: tcp_grapher <atoucli_output>")
+    main(sys.argv[1:])
+    
