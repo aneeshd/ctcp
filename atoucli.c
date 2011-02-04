@@ -49,6 +49,19 @@ int mss=1472;			/* user payload, can be > MTU for UDP */
 
 struct addrinfo *result; //This is where the info about the server is stored
 
+/* TCP pcb like stuff */
+int dupacks;			/* consecutive dup acks recd */
+unsigned int snd_nxt; 		/* send next */
+unsigned int snd_max; 		/* biggest send */
+unsigned int snd_una; 		/* last unacked */
+unsigned int snd_fack;		/* Forward (right) most ACK */
+unsigned int snd_recover;	/* One RTT beyond last good data, newreno */
+double snd_cwnd;		/* congestion-controlled window */
+unsigned int snd_ssthresh;	/* slow start threshold */
+
+unsigned int ackno;
+
+
 double dbuff[BUFFSIZE/8];
 int *buff = (int *)dbuff;
 
