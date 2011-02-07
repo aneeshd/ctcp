@@ -1,0 +1,9 @@
+/////////////////////////////////////////
+////February 7th, 2011/////
+////////////////////////////////////////
+
+* Swap names atoucli and atousrv
+* Server listens to the socket and waits for the client to request for a transmission -> back to listen.
+* Running the atoucli sends a requests and receives everything
+* Rename db.tmp to be receiver and time dependant
+* Client can send more than one request at a time
