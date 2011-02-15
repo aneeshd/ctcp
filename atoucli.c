@@ -9,7 +9,7 @@
  *   emergency timeout (if ack has not been sent in last 200 ms)
  * TODO:  sack, TCP control port?
  *   could do delayed ACK with select() timeout (200ms), with timer signal
- * (too much overhead), or best, select() timeout with delta mod 200 ms
+n * (too much overhead), or best, select() timeout with delta mod 200 ms
  */
 
 #include <sys/types.h>
@@ -33,12 +33,13 @@
 #define PORT "7890"
 
 Pr_Msg *msg, ack;
-struct sockaddr_in	cli_addr;
+struct sockaddr_in	srv_addr;
+socklen_t srvlen;
 int sockfd, rcvspace;
 
 void
 usage(void) {
-  fprintf(stderr, "Usage: atoucli [-options]\n\
+  fprintf(stderr, "Usage: atoucli -h host [-options]\n\
 	-s	enable SACK (default reno)\n\
 	-d ##	amount to delay ACKs (ms) (default 0, often 200)\n\
 	-p ##	port number to receive on (default 7890)\n \
@@ -70,12 +71,15 @@ main(int argc, char** argv){
 	int optlen,rlth;
   char *port = PORT;
   int numbytes;
-  struct addrinfo hints, *servinfo, *result;
+  struct addrinfo hints, *servinfo;
   int rv;
 	int c, retval=0;
-  
-	while((c = getopt(argc, argv, "sd:p:b:D:")) != -1) { 
+
+	while((c = getopt(argc, argv, "h:sd:p:b:D:")) != -1) { 
 	  switch (c) {
+    case 'h':
+      host = optarg;
+      fprintf(stdout, "the host is %s\n", host);
     case 's':
       sack=1;
       break;
@@ -101,9 +105,8 @@ main(int argc, char** argv){
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC; // This works for buth IPv4 and IPv6
   hints.ai_socktype = SOCK_DGRAM;
-  hints.ai_flags  = AI_PASSIVE;
 
-  if((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
+  if((rv = getaddrinfo(host, port, &hints, &servinfo)) != 0) {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     return 1;
   }
@@ -114,12 +117,6 @@ main(int argc, char** argv){
                         result->ai_socktype,
                         result->ai_protocol)) == -1){
       perror("atoucli: failed to initialize socket");
-      continue;
-    }
-    
-    if ( bind(sockfd, result->ai_addr, result->ai_addrlen) == -1) {
-      close(sockfd);
-      err_sys("atoucli: can't bind local address");
       continue;
     }
     break;
@@ -134,9 +131,17 @@ main(int argc, char** argv){
 
 	signal(SIGINT, (__sighandler_t) ctrlc);
 
-	/*
-	 * Bind our local address so that the client can send to us.
-	 */
+  // Send a request 
+  int req;
+  req = 1861;
+  // Need to use vhtons
+
+  // send the request
+  if((numbytes = sendto(sockfd, &req, sizeof(int), 0, 
+                        result->ai_addr, result->ai_addrlen)) == -1){
+    err_sys("sendto");
+  }
+                        
     
 	if (rcvspace) {
     setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
@@ -150,9 +155,9 @@ main(int argc, char** argv){
 
 	msg = (Pr_Msg *)buff;
 
-	clilen = sizeof cli_addr;
+	srvlen = sizeof srv_addr;
 	if((numbytes = recvfrom(sockfd, buff, sizeof(dbuff), 0, 
-                          (struct sockaddr *)&cli_addr, &clilen)) == -1){
+                          (struct sockaddr *)&srv_addr, &srvlen)) == -1){
     err_sys("recvfrom");
   }
 
@@ -189,8 +194,8 @@ main(int argc, char** argv){
     
 	  inlth=numbytes;
 	  if((numbytes = recvfrom(sockfd, buff, sizeof(dbuff), 0, 
-                            (struct sockaddr *)&cli_addr, &clilen)) == -1 ){
-      err_sys("rcvfrom");
+                            (struct sockaddr *)&srv_addr, &srvlen)) == -1 ){
+      err_sys("recvfrom");
     }
 	}
   return 0;
@@ -275,7 +280,8 @@ bldack(void){
   } else ack.msgno =  expect;
   k = ackheadr+ack.blkcnt*sackinfo;
   vhtonl((int*)&ack,k/4);  /* to net order */
-  if (sendto(sockfd,(char *)&ack,k,0,(struct sockaddr *)&cli_addr,clilen)!=k){
+  if (sendto(sockfd, (char *)&ack, k, 0, 
+             result->ai_addr,result->ai_addrlen)!=k){
   	err_sys("sendto");
   }
   acks++;
