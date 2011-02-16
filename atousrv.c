@@ -42,11 +42,12 @@
 
 
 Pr_Msg *msg, *ack;
+char *host;
 int sndbuf = 32768;		/* udp send buff, bigger than mss */
 int rcvbuf = 32768;		/* udp recv buff for ACKs*/
 int mss=1472;			/* user payload, can be > MTU for UDP */
 
-struct addrinfo *result; //This is where the info about the client is stored
+struct addrinfo *result; //This is where the info about the server is stored
 
 /* TCP pcb like stuff */
 int dupacks;			/* consecutive dup acks recd */
@@ -59,11 +60,7 @@ double snd_cwnd;		/* congestion-controlled window */
 unsigned int snd_ssthresh;	/* slow start threshold */
 
 unsigned int ackno;
-char* host = "127.0.0.1"; // Default value TODO: Fix
 
-
-struct sockaddr_storage from;
-socklen_t fromlen;
 
 double dbuff[BUFFSIZE/8];
 int *buff = (int *)dbuff;
@@ -77,7 +74,7 @@ char port[50] = PORT;
  */
 void
 usage(void){
-	printf("atousrv [configfile] \n");
+	printf("atousrv host [configfile] \n");
 	exit(1);
 }
 
@@ -94,29 +91,62 @@ ctrlc(){
 
 int
 main (int argc, char** argv){
-  socket_t	fd;			/* network file descriptor */
-  struct addrinfo hints, *servinfo;
-  int yes = 1;
-  int rv;
-  int numbytes;
 
-	if (argc > 1) configfile = argv[1];
+	if (argc < 2) usage();
+
+	host = argv[1];
+
+	if (argc > 2) configfile = argv[2];
 
 	signal(SIGINT,ctrlc);
 	readConfig();
 
 	if (debug > 3) db = fopen("db.tmp","w");
 
-  //----------------------------- INIT SOCKET -------------------------//
+	doit(host);
+	done();
+  return 0;
+}
+
+/*
+ * This is contains the main functionality and flow of the client program
+ */
+int
+doit(char* host){
+
+	struct sockaddr from;
+  struct sockaddr_storage;
+  struct addrinfo hints, *servinfo;
+	int fromlen = sizeof(from);
+	int lost = 0;
+  int duplicates = 0;
+  int outofseq = 0;
+  socket_t	fd;			/* network file descriptor */
+  int rv;
+  int	i,r;
+	double t;
+  
+	outofseq=0;
+  duplicates=0;
+  lost=0;
+
+	if (thresh_init) {
+    snd_ssthresh = thresh_init*rcvrwin;
+  } else {
+    snd_ssthresh = 2147483647;  /* normal TCP, infinite */
+  }
+
+	snd_cwnd = initsegs;
+  
 
   // Setup the hints struct
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_DGRAM;
-  hints.ai_flags = AI_PASSIVE; // Use my IP
 
-  // Get the client's info
-  if((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0){
+
+  // Get the server's info
+  if((rv = getaddrinfo(host, port, &hints, &servinfo)) != 0){
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     err_sys(""); 
     return 1;
@@ -127,64 +157,17 @@ main (int argc, char** argv){
     if((fd = socket(result->ai_family, 
                     result->ai_socktype,
                     result->ai_protocol)) == -1){
-      perror("atousrv: error during socket initialization\n");
+      perror("atousrv: error during socket initialization");
       continue;
-      
-      if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1){ // Allows to reuse the port
-        err_sys("setsockopt\n");
-      }
-
-      if(bind(fd, result->ai_addr, result->ai_addrlen) == -1){
-        close(fd);
-        perror("atousrv: Failed to bind\n");
-        continue;
-      }
     }
     break;
   }
 
   if ( result == NULL ) { // If we are here, we failed to initialize the socket
-    err_sys("atousrv: failed to initialize socket\n");
+    err_sys("atousrv: failed to initialize socket");
     return 2;
   }
 
-  // ---------------------------------- WAIT FOR CONNECTIONS --------------------------------//
-  fromlen = sizeof from;
-  int req;
-  fprintf(stdout, "Waiting for new connections\n");
-  while(1){
-
-    if((numbytes = recvfrom(fd, &req, sizeof(req), 0, 
-                            (struct sockaddr *)&from, &fromlen)) == -1){
-      err_sys("atousrv: recvfrom");
-    }
-    
-    fprintf(stdout, "Got a request, starting to transmit\nxo");
-
-    // If got a message, then do it
-    doit(fd);
-    done();
-    fprintf(stdout, "Waiting for new connections\n\n");
-  }
-  return 0;
-}
-
-/*
- * This is contains the main functionality and flow of the server program
- */
-int
-doit(socket_t fd){
-  int	i,r;
-	double t;
-
-	if (thresh_init) {
-    snd_ssthresh = thresh_init*rcvrwin;
-  } else {
-    snd_ssthresh = 2147483647;  /* normal TCP, infinite */
-  }
-
-	snd_cwnd = initsegs;
-  
 	i=sizeof(sndbuf);
 
   // Not really sure if this is needed
@@ -195,7 +178,6 @@ doit(socket_t fd){
   getsockopt(fd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,(socklen_t*)&i);
   printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
   //----------------------------------------------------------------------------------//
-
 
 	/* init control variables */
 	memset(buff,0,BUFFSIZE);        /* pretouch */
@@ -218,11 +200,9 @@ doit(socket_t fd){
 
 		if (r > 0) {  /* ack ready */
 
-			if((r= recvfrom(fd, buff, mss, 0, (struct sockaddr *)&from, &fromlen)) == -1){
-        err_sys("atousrv: recvfrom\n");
-      }
+			r= recvfrom(fd, buff, mss, 0, &from, (socklen_t*)&fromlen);
 
-			if (r <= 0) err_sys("read\n");
+			if (r <= 0) err_sys("read");
 			rcvt = getTime();
 			ipkts++;
       vntohl(buff,sizeof(Pr_Msg)/4);/* to host order */
@@ -231,7 +211,7 @@ doit(socket_t fd){
       else
         handle_ack(fd);
 		} else if (r < 0) {  
-			err_sys("select\n");
+			err_sys("select");
 		}
 
 		t=getTime();
@@ -396,14 +376,14 @@ send_one(socket_t fd, unsigned int n){
 
 	if((numbytes = sendto(fd, buff, mss, 0, 
                         result->ai_addr, result->ai_addrlen)) == -1){
-       perror("atousrv: sendto\n");
+       perror("atousrv: sendto");
        exit(1);
   }
   
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
 
   if(numbytes != mss){
-    err_sys("write\n");
+    err_sys("write");
   }
 
 	if (debug > 8)printf("send %d snd_nxt %d snd_max %d\n", n,snd_nxt,snd_max);

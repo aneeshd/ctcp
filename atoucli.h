@@ -7,7 +7,6 @@
 char *RCSid = "$Header: /home/thistle/dunigan/src/atou/atousrv.c,v 1.8 2002/06/20 14:28:46 dunigan Exp dunigan $";
 char *version = "$Revision: 1.8 $";
 double dbuff[BUFFSIZE/8];
-struct addrinfo *result;
 int *buff = (int *)dbuff;
 int sockfd, rcvspace;
 int inlth,sackcnt,pkts, dups, drops,hi,maxooo;
@@ -21,7 +20,6 @@ socklen_t clilen;
 int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;
 int  settime=0;
 int start[3], endd[3];
-char* host = "127.0.0.1"; // By default try to connect to localhost
 
 /* stats */
 double et,minrtt=999999., maxrtt=0, avrgrtt;

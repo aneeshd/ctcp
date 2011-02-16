@@ -104,7 +104,7 @@ void readConfig(void);
 /*
  *
  */
-int doit(socket_t fd);
+int doit(char* host);
 
 /*
  *

@@ -7,15 +7,13 @@
 typedef int socket_t;
 typedef struct timeval timeval_t;
 
-
-  
 typedef struct {
-  double tstamp;
-  unsigned int msgno;
+        double tstamp;
+        unsigned int msgno;
 	unsigned int blkcnt;
-  struct Sblks {
-    unsigned int sblk,eblk;
-  } sblks[3];
+        struct Sblks {
+                unsigned int sblk,eblk;
+        } sblks[3];
 } Pr_Msg;
 
 void vntohl(int *p, int cnt);
