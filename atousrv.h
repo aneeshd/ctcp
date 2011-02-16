@@ -12,7 +12,26 @@ FILE *db;     /* debug trace file */
 char *RCSid = "$Header: /home/wisp/dunigan/src/atou/atoucli.c,v 1.38 2003/01/16 19:07:57 dunigan Exp dunigan $";
 char *version = "$Revision: 1.38 $";
 
-  /* configurable variables */
+struct addrinfo *result; //This is where the info about the server is stored
+struct sockaddr cli_addr;
+socklen_t clilen = sizeof cli_addr;
+
+double dbuff[BUFFSIZE/8];
+int *buff = (int *)dbuff;
+
+/* TCP pcb like stuff */
+int dupacks;			/* consecutive dup acks recd */
+unsigned int snd_nxt; 		/* send next */
+unsigned int snd_max; 		/* biggest send */
+unsigned int snd_una; 		/* last unacked */
+unsigned int snd_fack;		/* Forward (right) most ACK */
+unsigned int snd_recover;	/* One RTT beyond last good data, newreno */
+double snd_cwnd;		/* congestion-controlled window */
+unsigned int snd_ssthresh;	/* slow start threshold */
+
+unsigned int ackno;
+
+/* configurable variables */
 int droplist[11];  /* debuggin */
 int debug;
 double tick = 1.0;		/* recvfrom timeout -- select */
@@ -104,7 +123,7 @@ void readConfig(void);
 /*
  *
  */
-int doit(char* host);
+int doit( socket_t fd);
 
 /*
  *

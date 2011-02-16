@@ -31,9 +31,11 @@
 #include "atoucli.h"
 
 #define PORT "7890"
+#define HOST "127.0.0.1"
 
 Pr_Msg *msg, ack;
-struct sockaddr_in	cli_addr;
+struct sockaddr cli_addr;
+struct addrinfo *result;
 int sockfd, rcvspace;
 
 void
@@ -65,17 +67,21 @@ ctrlc(void){
 	exit(0);
 }
 
+
 int
 main(int argc, char** argv){
 	int optlen,rlth;
   char *port = PORT;
+  char *host = HOST;
   int numbytes;
-  struct addrinfo hints, *servinfo, *result;
+  struct addrinfo hints, *servinfo;
   int rv;
 	int c, retval=0;
   
-	while((c = getopt(argc, argv, "sd:p:b:D:")) != -1) { 
+	while((c = getopt(argc, argv, "h:sd:p:b:D:")) != -1) { 
 	  switch (c) {
+    case 'h':
+      host = optarg;
     case 's':
       sack=1;
       break;
@@ -101,9 +107,8 @@ main(int argc, char** argv){
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC; // This works for buth IPv4 and IPv6
   hints.ai_socktype = SOCK_DGRAM;
-  hints.ai_flags  = AI_PASSIVE;
-
-  if((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
+  
+  if((rv = getaddrinfo(host, port, &hints, &servinfo)) != 0) {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     return 1;
   }
@@ -116,16 +121,10 @@ main(int argc, char** argv){
       perror("atoucli: failed to initialize socket");
       continue;
     }
-    
-    if ( bind(sockfd, result->ai_addr, result->ai_addrlen) == -1) {
-      close(sockfd);
-      err_sys("atoucli: can't bind local address");
-      continue;
-    }
     break;
   }
 
-  // If we got here, it means that we couldn't bind the socket.
+  // If we got here, it means that we couldn't initialize the socket.
   if(result  == NULL){
     err_sys("atoucli: failed to bind to socket");
   }
@@ -134,9 +133,15 @@ main(int argc, char** argv){
 
 	signal(SIGINT, (__sighandler_t) ctrlc);
 
-	/*
-	 * Bind our local address so that the client can send to us.
-	 */
+  // Send request to the server.
+  fprintf(stdout, "Sending request\n");
+  int req = 1861;
+  if((numbytes = sendto(sockfd, &req, sizeof(int), 0,
+                        result->ai_addr, result->ai_addrlen)) == -1){
+    err_sys("sendto: Request failed");
+  }
+  fprintf(stdout, "Request sent\n");
+
     
 	if (rcvspace) {
     setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
@@ -151,8 +156,8 @@ main(int argc, char** argv){
 	msg = (Pr_Msg *)buff;
 
 	clilen = sizeof cli_addr;
-	if((numbytes = recvfrom(sockfd, buff, sizeof(dbuff), 0, 
-                          (struct sockaddr *)&cli_addr, &clilen)) == -1){
+	if((numbytes = recvfrom(sockfd, buff, sizeof(dbuff), 0,
+                          &cli_addr, &clilen)) == -1){
     err_sys("recvfrom");
   }
 
@@ -189,7 +194,7 @@ main(int argc, char** argv){
     
 	  inlth=numbytes;
 	  if((numbytes = recvfrom(sockfd, buff, sizeof(dbuff), 0, 
-                            (struct sockaddr *)&cli_addr, &clilen)) == -1 ){
+                            &cli_addr, &clilen)) == -1 ){
       err_sys("rcvfrom");
     }
 	}
@@ -275,7 +280,7 @@ bldack(void){
   } else ack.msgno =  expect;
   k = ackheadr+ack.blkcnt*sackinfo;
   vhtonl((int*)&ack,k/4);  /* to net order */
-  if (sendto(sockfd,(char *)&ack,k,0,(struct sockaddr *)&cli_addr,clilen)!=k){
+  if (sendto(sockfd,(char *)&ack,k,0,result->ai_addr,result->ai_addrlen)!=k){
   	err_sys("sendto");
   }
   acks++;

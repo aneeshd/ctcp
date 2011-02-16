@@ -42,39 +42,20 @@
 
 
 Pr_Msg *msg, *ack;
-char *host;
 int sndbuf = 32768;		/* udp send buff, bigger than mss */
 int rcvbuf = 32768;		/* udp recv buff for ACKs*/
 int mss=1472;			/* user payload, can be > MTU for UDP */
-
-struct addrinfo *result; //This is where the info about the server is stored
-
-/* TCP pcb like stuff */
-int dupacks;			/* consecutive dup acks recd */
-unsigned int snd_nxt; 		/* send next */
-unsigned int snd_max; 		/* biggest send */
-unsigned int snd_una; 		/* last unacked */
-unsigned int snd_fack;		/* Forward (right) most ACK */
-unsigned int snd_recover;	/* One RTT beyond last good data, newreno */
-double snd_cwnd;		/* congestion-controlled window */
-unsigned int snd_ssthresh;	/* slow start threshold */
-
-unsigned int ackno;
-
-
-double dbuff[BUFFSIZE/8];
-int *buff = (int *)dbuff;
-
+int numbytes;
 
 // Should make sure that 50 bytes is enough to store the port string
-char port[50] = PORT;
+char *port = PORT;
 
 /*
  * Print usage message
  */
 void
 usage(void){
-	printf("atousrv host [configfile] \n");
+	printf("atousrv [configfile] \n");
 	exit(1);
 }
 
@@ -91,44 +72,17 @@ ctrlc(){
 
 int
 main (int argc, char** argv){
-
-	if (argc < 2) usage();
-
-	host = argv[1];
-
-	if (argc > 2) configfile = argv[2];
+  struct sockaddr_storage;
+  struct addrinfo hints, *servinfo;
+  socket_t	sockfd;			/* network file descriptor */
+  int rv;
+  
+	if (argc > 1) configfile = argv[1];
 
 	signal(SIGINT,ctrlc);
 	readConfig();
 
 	if (debug > 3) db = fopen("db.tmp","w");
-
-	doit(host);
-	done();
-  return 0;
-}
-
-/*
- * This is contains the main functionality and flow of the client program
- */
-int
-doit(char* host){
-
-	struct sockaddr from;
-  struct sockaddr_storage;
-  struct addrinfo hints, *servinfo;
-	int fromlen = sizeof(from);
-	int lost = 0;
-  int duplicates = 0;
-  int outofseq = 0;
-  socket_t	fd;			/* network file descriptor */
-  int rv;
-  int	i,r;
-	double t;
-  
-	outofseq=0;
-  duplicates=0;
-  lost=0;
 
 	if (thresh_init) {
     snd_ssthresh = thresh_init*rcvrwin;
@@ -137,16 +91,15 @@ doit(char* host){
   }
 
 	snd_cwnd = initsegs;
-  
 
   // Setup the hints struct
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_DGRAM;
-
+  hints.ai_flags = AI_PASSIVE;
 
   // Get the server's info
-  if((rv = getaddrinfo(host, port, &hints, &servinfo)) != 0){
+  if((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0){
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     err_sys(""); 
     return 1;
@@ -154,28 +107,61 @@ doit(char* host){
 
   // Loop through all the results and connect to the first possible
   for(result = servinfo; result != NULL; result = result->ai_next) {
-    if((fd = socket(result->ai_family, 
+    if((sockfd = socket(result->ai_family, 
                     result->ai_socktype,
                     result->ai_protocol)) == -1){
       perror("atousrv: error during socket initialization");
       continue;
     }
+
+    if (bind(sockfd, result->ai_addr, result->ai_addrlen) == -1) {
+      close(sockfd);
+      err_sys("atousrv: can't bind local address");
+      continue;
+    }
+
     break;
   }
 
-  if ( result == NULL ) { // If we are here, we failed to initialize the socket
+  if (result == NULL) { // If we are here, we failed to initialize the socket
     err_sys("atousrv: failed to initialize socket");
     return 2;
   }
+
+  freeaddrinfo(servinfo);
+
+  int req;
+  fprintf(stdout, "waiting for requests\n");
+  while(1){
+    if((numbytes = recvfrom(sockfd, &req, sizeof(int), 0,
+                            &cli_addr, &clilen)) == -1){
+      err_sys("recvfrom: Failed to receive the request\n");
+    }
+    fprintf(stdout, "got request\n");
+    
+    doit(sockfd);
+    done();
+    fprintf(stdout, "waiting for requests\n");
+  }
+  return 0;
+}
+
+/*
+ * This is contains the main functionality and flow of the client program
+ */
+int
+doit(socket_t sockfd){
+  int	i,r;
+	double t;
 
 	i=sizeof(sndbuf);
 
   // Not really sure if this is needed
   //--------------- Setting the socket options --------------------------------//
-	setsockopt(fd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,i);
-	getsockopt(fd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,(socklen_t*)&i);
-  setsockopt(fd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,i);
-  getsockopt(fd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,(socklen_t*)&i);
+	setsockopt(sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,i);
+	getsockopt(sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,(socklen_t*)&i);
+  setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,i);
+  getsockopt(sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,(socklen_t*)&i);
   printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
   //----------------------------------------------------------------------------------//
 
@@ -192,24 +178,25 @@ doit(char* host){
 	due = getTime() + timeout;  /* when una is due */
 
   // This is where the segments are sent
-	send_segs(fd);
+	send_segs(sockfd);
 
 	while(snd_una < maxpkts){
 
-		r = timedread(fd, tick);
+		r = timedread(sockfd, tick);
 
 		if (r > 0) {  /* ack ready */
-
-			r= recvfrom(fd, buff, mss, 0, &from, (socklen_t*)&fromlen);
+      
+      
+			r= recvfrom(sockfd, buff, mss, 0, &cli_addr, &clilen);
 
 			if (r <= 0) err_sys("read");
 			rcvt = getTime();
 			ipkts++;
       vntohl(buff,sizeof(Pr_Msg)/4);/* to host order */
       if(sack)
-        handle_sack(fd);
+        handle_sack(sockfd);
       else
-        handle_ack(fd);
+        handle_ack(sockfd);
 		} else if (r < 0) {  
 			err_sys("select");
 		}
@@ -246,7 +233,7 @@ doit(char* host){
 			      snd_recover = snd_max-1;
 			    }
 			    if(FastRecovery) {  /*ARE in FastRecovery*/
-			      send_one(fd, snd_una);
+			      send_one(sockfd, snd_una);
 			      retran_data++;
             MarkRetran(snd_una, snd_nxt-1);
             Pipe=1;
@@ -255,12 +242,12 @@ doit(char* host){
 			  }
         else { /*timeout but no losses indicated!?!*/
 			    snd_nxt = snd_una;
-          send_segs(fd);
+          send_segs(sockfd);
 			  }
 			}
 			else {   /*newreno is implemented*/
         snd_nxt = snd_una;
-        send_segs(fd);  /* resend */
+        send_segs(sockfd);  /* resend */
       }	
 			due = t + 2*timeout;  /* fancy exp. backoff? */
 		}
@@ -271,7 +258,7 @@ doit(char* host){
 
 
 void
-send_segs(socket_t fd){
+send_segs(socket_t sockfd){
 	int win=0, trimwin=0, retran=0;
   
 	if (snd_cwnd > rcvrwin) { 
@@ -324,7 +311,7 @@ send_segs(socket_t fd){
 	while (win-- && ((snd_nxt < maxpkts) || (retran>0))) {
 	  if(FastRecovery) {
       if(retran>0) {
-        send_one(fd, retran);
+        send_one(sockfd, retran);
         MarkRetran(retran, snd_nxt-1);
         rxmts++; 
         packs++;
@@ -335,14 +322,14 @@ send_segs(socket_t fd){
                                retran,snd_nxt, snd_max, (int)snd_cwnd, snd_ssthresh,snd_recover,snd_una);
       }
       else {
-        send_one(fd, snd_nxt);
+        send_one(sockfd, snd_nxt);
         snd_nxt++;
       }
       Pipe++;
       retran = GetNextRetran();
 	  }
     else {
-      send_one(fd, snd_nxt);
+      send_one(sockfd, snd_nxt);
       snd_nxt++;
 	  }
 	}
@@ -350,9 +337,9 @@ send_segs(socket_t fd){
 
 
 void
-send_one(socket_t fd, unsigned int n){
+send_one(socket_t sockfd, unsigned int n){
 	/* send msg number n */
-	int i, numbytes;
+	int i;
   
 	if (snd_nxt >= snd_max) snd_max = snd_nxt+1;
 	msg->msgno = n;
@@ -374,8 +361,8 @@ send_one(socket_t fd, unsigned int n){
 
   do{
 
-	if((numbytes = sendto(fd, buff, mss, 0, 
-                        result->ai_addr, result->ai_addrlen)) == -1){
+	if((numbytes = sendto(sockfd, buff, mss, 0, 
+                        &cli_addr, clilen)) == -1){
        perror("atousrv: sendto");
        exit(1);
   }
@@ -394,7 +381,7 @@ send_one(socket_t fd, unsigned int n){
 void
 done(void){
 	char myname[128];
-  
+  char* host = "Host"; // TODO: extract this from the packet
 
 	mss-=12;
   gethostname(myname,sizeof(myname));
@@ -425,7 +412,7 @@ done(void){
 }
 
 void
-handle_ack(socket_t fd){
+handle_ack(socket_t sockfd){
 	double rtt;
 	int ackd;	/* ack advance */
   
@@ -499,16 +486,16 @@ handle_ack(socket_t fd){
           snd_cwnd += dupacks;  /* inflate */
         }
         due = rcvt + timeout;   /*restart timer */
-        send_one(fd,snd_una);   /* retransmit */
+        send_one(sockfd,snd_una);   /* retransmit */
         return;
       } else if (dupacks > dup_thresh) {
         /* if dupacks < 3 worry about linear incr. ? */
         snd_cwnd++;  /* dup, but stuff still leaving net*/
-        send_segs(fd);   /* right edge recovery */
+        send_segs(sockfd);   /* right edge recovery */
       } else {
         /* dupacks < dup_thresh */
         if(snd_nxt < maxpkts) {
-          send_one(fd, snd_nxt);  /* rfc 3042 */
+          send_one(sockfd, snd_nxt);  /* rfc 3042 */
           snd_nxt++;
         }
       }
@@ -519,7 +506,7 @@ handle_ack(socket_t fd){
         if (dupacks > dup_thresh && snd_cwnd > snd_ssthresh)
           snd_cwnd = snd_ssthresh; /* deflate */
         dupacks=0;  /* clear */
-      } else if (dupacks > dup_thresh && !tcp_newreno(fd) ){
+      } else if (dupacks > dup_thresh && !tcp_newreno(sockfd) ){
         /* in newreno but not a partial ack,
          *inflation left us with ssthresh outstanding
          * rather than send a burst, use slow start
@@ -547,7 +534,7 @@ handle_ack(socket_t fd){
       idle=0;
       due = rcvt + timeout;   /*restart timer */
       advance_cwnd();
-      send_segs(fd);  /* send some if we can */
+      send_segs(sockfd);  /* send some if we can */
     }
   }
 }
@@ -560,7 +547,7 @@ handle_ack(socket_t fd){
  */
 
 int
-tcp_newreno(socket_t fd){
+tcp_newreno(socket_t sockfd){
 	if (ackno < snd_recover){
 		int ocwnd = snd_cwnd;
 		int onxt = snd_nxt;
@@ -574,7 +561,7 @@ tcp_newreno(socket_t fd){
 		due = rcvt + timeout;   /*restart timer */
 		snd_cwnd = 1 + ackno - snd_una;
 		snd_nxt = ackno;
-		send_segs(fd); 
+		send_segs(sockfd); 
 		snd_cwnd = ocwnd;
 		if (onxt > snd_nxt) snd_nxt = onxt;
 		/* partial deflation, una not updated yet */
@@ -588,15 +575,15 @@ tcp_newreno(socket_t fd){
 
 // Perhaps this is unnecesary.... No need to use select
 socket_t
-timedread(socket_t fd, double t){
+timedread(socket_t sockfd, double t){
 	struct timeval tv;
 	fd_set rset;
   
 	tv.tv_sec = t;
 	tv.tv_usec = (t - tv.tv_sec)*1000000;
 	FD_ZERO(&rset);
-	FD_SET(fd, &rset);
-	return ( select(fd+1,&rset,NULL,NULL, &tv) );
+	FD_SET(sockfd, &rset);
+	return ( select(sockfd+1,&rset,NULL,NULL, &tv) );
 }
 
 void
@@ -709,7 +696,7 @@ readConfig(void){
 */
 
 void
-handle_sack(socket_t fd){
+handle_sack(socket_t sockfd){
   int sackno, decr, ackd;
   double rtt;
   
@@ -790,11 +777,11 @@ handle_sack(socket_t fd){
             if(debug > 5)
               fprintf(db, "Updates: %d\n", SACKed);
           }
-          duplicate(fd, sackno);
+          duplicate(sockfd, sackno);
         }  
         else {           /* No--just got dup 1 or dup 2 */
           if(snd_nxt < maxpkts) {
-            send_one(fd, snd_nxt);
+            send_one(sockfd, snd_nxt);
             snd_nxt++;
             if(snd_cwnd < snd_ssthresh) {
               snd_cwnd += ssincr;
@@ -819,7 +806,7 @@ handle_sack(socket_t fd){
             wintrim = 0;
         }
         SACKed=0;
-        send_segs(fd);
+        send_segs(sockfd);
         if(snd_cwnd < snd_ssthresh) {
           snd_cwnd += ssincr;
         }
@@ -874,13 +861,13 @@ handle_sack(socket_t fd){
       due = rcvt+timeout; /*restart timer */
       if(debug > 8)
         fprintf(db, "handle_sack--Partial Ack reset timer: %f\n", due);
-      send_segs(fd);
+      send_segs(sockfd);
     }
   }
 }
 
 void
-duplicate(socket_t fd, int sackno) {
+duplicate(socket_t sockfd, int sackno) {
   int i, end; 
   
   /*Go into FastRecovery until sackno >= snd_recover*/
@@ -939,10 +926,10 @@ duplicate(socket_t fd, int sackno) {
   if(debug > 8)
     fprintf(db, "3duprxmit for pkt %d--reset timer: %f\n", sackno, due);
   
-  send_one(fd, snd_una);
+  send_one(sockfd, snd_una);
   retran_data++; Pipe++;
   MarkRetran(snd_una, snd_nxt-1);
-  send_segs(fd);
+  send_segs(sockfd);
   if(snd_cwnd < snd_ssthresh) {
     fprintf(db, "slow start and 3 dups: %f < %u\n", snd_cwnd, snd_ssthresh);
     snd_cwnd += ssincr;  
