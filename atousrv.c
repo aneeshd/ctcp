@@ -1,24 +1,3 @@
-/* Version implementing the following options based on the config file:
-   NEWRENO using the algorithm from rfc2582
-   SACK using the scoreboard algorithms and structures from ns (Network Simulator) 
-   WINTRIM using the algorithm from "Forward Acknowledgement: Refining TCP Congestion Control" by Mathis and Mahdavi
-   FACK using the algorithm from same paper as WINTRIM
-   SACK can be used alone or with WINTRIM--FACK includes WINTRIM & builds
-     on SACK
-*/
-/*  atousrv.c   udp version    thd@ornl.gov  ffowler@cs.utk.edu
- * atousrv host [configfile]
- *    also optional config file,  test with probesrv
- *   a reliable (TCP-like) UDP transport protocol for bulk transfers
- *    over high bandwidth, high delay networks
- * TODO:  sack
- *      once we have sack, can do "effective window" (rcvr consumes non-contig)
- *       may need to multi-thread, so can process ack's  ?
- *        and for RCVBUF for incoming ACK's (small 16K), haven't seen lost ACKs
- *    could add a TCP control port
- *       need to use RTO calculations for timeouts (1s ok for ornl-nersc)
- *  connect() will break return pkts from swift
- */
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -77,10 +56,13 @@ main (int argc, char** argv){
   socket_t	sockfd;			/* network file descriptor */
   int rv;
   
+  
 	if (argc > 1) configfile = argv[1];
 
 	signal(SIGINT,ctrlc);
 	readConfig();
+
+
 
 	if (debug > 3) db = fopen("db.tmp","w");
 
@@ -170,10 +152,10 @@ doit(socket_t sockfd){
 	ack=msg = (Pr_Msg *)buff;
 
 	/* send out initial segments, then go for it */
-	et = getTime();
+	et = getTime(); 
 	snd_fack=snd_una=snd_nxt=1;
 	if (bwe_on) bwe_pkt = snd_nxt;
-	if (maxpkts == 0 && maxtime) maxpkts = 1000000000;
+	if (maxpkts == 0 && maxtime) maxpkts = 1000000000; // Default time is 10 seconds
 
 	due = getTime() + timeout;  /* when una is due */
 
@@ -186,13 +168,13 @@ doit(socket_t sockfd){
 
 		if (r > 0) {  /* ack ready */
       
-      
-			r= recvfrom(sockfd, buff, mss, 0, &cli_addr, &clilen);
+      // The recvfrom should be done to a separate buffer (not buff)
+			r= recvfrom(sockfd, buff, mss, 0, &cli_addr, &clilen); // TODO maybe we can set flags so that recvfrom has a timeout of tick seconds
 
 			if (r <= 0) err_sys("read");
 			rcvt = getTime();
-			ipkts++;
-      vntohl(buff,sizeof(Pr_Msg)/4);/* to host order */
+			ipkts++; // TODO: Marshall and unmarshal structured data
+      vntohl(buff,sizeof(Pr_Msg)/4); // to host order . TODO: sizeof(Pr_Msg)/4 is always 10. This is WRONg
       if(sack)
         handle_sack(sockfd);
       else
@@ -201,6 +183,7 @@ doit(socket_t sockfd){
 			err_sys("select");
 		}
 
+    //TODO: We left off here
 		t=getTime();
 		if (maxtime && (t-et) > maxtime) maxpkts = snd_max; /*time up*/
 		/* see if a packet has timedout */
@@ -302,9 +285,9 @@ send_segs(socket_t sockfd){
 	}
   
 	if (win <= 0 || snd_nxt >= maxpkts) return;  /* no avail window |done */
-	if (win > maxburst) maxburst=win;
+	if (win > maxburst) maxburst=win; //
   /*Can't send more than a specified burst_limit at a time*/
-	if (burst_limit && win > burst_limit) 
+	if (burst_limit && (win > burst_limit)) // setting burst_limit = 0 is the same as infc
 	  win = burst_limit;
 	if(FastRecovery) 
     retran = GetNextRetran();
@@ -361,10 +344,10 @@ send_one(socket_t sockfd, unsigned int n){
 
   do{
 
-	if((numbytes = sendto(sockfd, buff, mss, 0, 
-                        &cli_addr, clilen)) == -1){
-       perror("atousrv: sendto");
-       exit(1);
+    if((numbytes = sendto(sockfd, buff, mss, 0, 
+                          &cli_addr, clilen)) == -1){
+      perror("atousrv: sendto");
+      exit(1);
   }
   
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
@@ -430,10 +413,10 @@ handle_ack(socket_t sockfd){
   vcnt++;
 	/* RTO calculations */
 	srtt = (1-g)*srtt + g*rtt;
-	delta = rtt - srtt;
-	if (delta < 0 ) delta = -delta;
+	delta = fabs(rtt - srtt);
+  //	if (delta < 0 ) delta = -delta; // TODO: delete this
 	rttvar = (1-h)*rttvar + h * (delta - rttvar);
-	rto = srtt + 4*rttvar;  /* may want to force it > 1 */
+	rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
   
 	if (debug > 3) {
     fprintf(db,"%f %d %f  %d %d ack\n",
@@ -457,7 +440,7 @@ handle_ack(socket_t sockfd){
 	} else  {
     goodacks++;
 
-    if (ackno == snd_una ){
+    if (ackno == snd_una ){ // This probably should be ackno == snd_una-1 (unless snd_una is defined differently)
       /* dup acks */
       dups++;
       if (++dupacks == dup_thresh) { 
@@ -522,7 +505,7 @@ handle_ack(socket_t sockfd){
       ackd = ackno-snd_una;
       if (ackd > maxack) maxack = ackd;
       snd_una = ackno;
-      if (snd_nxt < ackno) snd_nxt = ackno;
+      if (snd_nxt < ackno) snd_nxt = ackno; 
       if (bwe_on && ackno > snd_recover && bwe_pkt == 0){
         bwe_prev = bwe_pkt = snd_nxt; /* out of recovery */
         vrttmin = 999999;  /* restart vegas collecting */
@@ -573,7 +556,7 @@ tcp_newreno(socket_t sockfd){
 }
 
 
-// Perhaps this is unnecesary.... No need to use select
+// Perhaps this is unnecesary.... No need to use select -> maybe use libevent (maybe does not have timeou?)
 socket_t
 timedread(socket_t sockfd, double t){
 	struct timeval tv;
@@ -1186,7 +1169,7 @@ bwe_calc(double rtt){
     vdelta = minrtt * ((snd_nxt - snd_una)/minrtt - (snd_nxt - bwe_pkt)/vrtt);
     if (vdelta > max_delta) max_delta=vdelta;  /* vegas delta */
   } else vdelta=0;  /* no samples */
-  bwertt = 8.e-6 * mss * (ackno-bwe_prev-1)/rtt;
+  bwertt = 8.e-6 * mss * (ackno-bwe_prev-1)/rtt; // shift by 20 to the left to convert to Mbits
   if (bwertt > bwertt_max) bwertt_max = bwertt;
   if (debug > 4 ) fprintf(stderr,"bwertt %f %f %f %d %f\n",rcvt-et,bwertt,rtt,ackno-bwe_prev-1,vdelta);
   bwe_prev = bwe_pkt;
@@ -1195,6 +1178,8 @@ bwe_calc(double rtt){
   vrttsum=vcnt=vrttmax=0;
 }
 
+
+//TODO: Look at the vegas calculations 
 void
 advance_cwnd(void){
 	/* advance cwnd according to slow-start of congestion avoidance */

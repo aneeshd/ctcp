@@ -6,7 +6,7 @@
 
 #define PORT "7890" // This is the port that the server is listening to
 #define BUFFSIZE    65535
-
+#define RTT_DECAY 4 // This is used as the factor to approximate the rto
 
 FILE *db;     /* debug trace file */
 char *RCSid = "$Header: /home/wisp/dunigan/src/atou/atoucli.c,v 1.38 2003/01/16 19:07:57 dunigan Exp dunigan $";
@@ -34,7 +34,7 @@ unsigned int ackno;
 /* configurable variables */
 int droplist[11];  /* debuggin */
 int debug;
-double tick = 1.0;		/* recvfrom timeout -- select */
+double tick = 0.2;		/* recvfrom timeout -- select */
 double timeout=0.5;		/* pkt timeout */
 int idle=0;                     /* successive timeouts */
 int maxidle=10;                 /* max idle before abort */
@@ -71,20 +71,9 @@ double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;
 
 int initial_ss =1;   /* initial slow start */
 
-unsigned int bwe_pkt, bwe_prev, bwe_on=1;
+unsigned int bwe_pkt, bwe_prev, bwe_on=1; // Bandwith estimate??
 double bwertt, bwertt_max;
 double max_delta;  /* vegas like tracker */
-
-
-/* TCP pcb like stuff */
-int dupacks;			/* consecutive dup acks recd */
-unsigned int snd_nxt; 		/* send next */
-unsigned int snd_max; 		/* biggest send */
-unsigned int snd_una; 		/* last unacked */
-unsigned int snd_fack;		/* Forward (right) most ACK */
-unsigned int snd_recover;	/* One RTT beyond last good data, newreno */
-double snd_cwnd;		/* congestion-controlled window */
-unsigned int snd_ssthresh;	/* slow start threshold */
 
 unsigned int ackno;
 

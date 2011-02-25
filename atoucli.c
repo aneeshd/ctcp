@@ -1,17 +1,3 @@
-/*  atoucli [-options] 
-	-s	enable SACK 
-	-d ##	amount to delay ACK's in ms (default 0, often 200)
-	-p ##	port number to receive on (default 7890)
-	-b ##	set socket receive buffer size (default 8192)
-	-D ##   enable debug level
- * udp server   (only good for one session, have to ctrl-c it )
- * version sending ack for every other packet & using select timer for
- *   emergency timeout (if ack has not been sent in last 200 ms)
- * TODO:  sack, TCP control port?
- *   could do delayed ACK with select() timeout (200ms), with timer signal
- * (too much overhead), or best, select() timeout with delta mod 200 ms
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
