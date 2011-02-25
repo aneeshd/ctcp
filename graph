@@ -56,7 +56,7 @@ def main(args):
             
 
 #    print average_BW
-    plt.plot(times, instant_BW, 'r--', times, average_BW, 'g-')
+    plt.plot(times, instant_BW, 'r--', times, average_BW, 'g--')
     plt.xlabel('time')
     plt.ylabel('Mbs')
     plt.show()

@@ -49,7 +49,7 @@ tags: $(SRCS)
 
 clean:
 	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS \
-	*.o *.d
+	*.o *.d *.tmp
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)

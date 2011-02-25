@@ -1,0 +1,12 @@
+///////////////////////////
+////February 7th, 2011/////
+///////////////////////////
+
+* [DONE] Swap names atoucli and atousrv
+* [DONE] Server listens to the socket and waits for the client to request for a transmission -> back to listen.
+* [DONE] Running the atoucli sends a requests and receives everything
+* [DONE] Update the usage of atoucli and atousrv 
+* Rename db.tmp to be receiver and time dependant
+* [IGNORED] Client can send more than one request at a time -> Involves annoying multithreading that is not needed right now.
+* Get rid of dup_acks
+
