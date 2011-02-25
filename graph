@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import sys
 import matplotlib.pyplot as plt
+import math
 
 def main(args):
 
@@ -27,7 +28,8 @@ def main(args):
             bw += mss
 
             time = float(values[0])
-            if time > current:
+           
+            if time > current and time <= (current + res):
                 times.append(time)
 
                 instant_BW.append(8e-6*bw/res)
@@ -35,9 +37,26 @@ def main(args):
                 
                 current = res + current
                 bw = 0
-    
+            elif time > (current + res):
+                zero_point = res*math.floor(time/res)
+                times.append(current)
+                times.append(zero_point)
+
+                instant_BW.append(0)
+                instant_BW.append(0)
+
+                average_BW.append(8e-6*1.0*abw/current)
+                average_BW.append(8e-6*1.0*abw/zero_point)
+		
+		current = zero_point + res
+		bw = 0
+
+
+                
+            
+
 #    print average_BW
-    plt.plot(times, instant_BW, 'r--', times, average_BW, 'g^')
+    plt.plot(times, instant_BW, 'r--', times, average_BW, 'g-')
     plt.xlabel('time')
     plt.ylabel('Mbs')
     plt.show()
