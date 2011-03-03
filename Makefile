@@ -20,10 +20,10 @@ NEWMODE := mode
 # This is the usual DEBUG mode trick. Add DEBUG=1 to the make command line to 
 # build without optimizations and with assertions ON. 
 ifeq ($(DEBUG),1)
-	CFLAGS := -DDEBUG -O0 $(CFLAGS)
+	CFLAGS +=  -O0 -DDEBUG
 	NEWMODE += debug
 else
-	CFLAGS := -O2 -ffast-math -DNDEBUG $(CFLAGS)
+	CFLAGS += -DNDEBUG
 	NEWMODE += nodebug
 endif
 
