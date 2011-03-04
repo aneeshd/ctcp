@@ -9,4 +9,4 @@
 * Rename db.tmp to be receiver and time dependant
 * [IGNORED] Client can send more than one request at a time -> Involves annoying multithreading that is not needed right now.
 * Get rid of dup_acks
-
+* Clean the state of the server after the client is done.
