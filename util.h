@@ -4,8 +4,20 @@
 #define TRUE 1
 #define FALSE 0
 
+#define MSS 1472
+
 typedef int socket_t;
 typedef struct timeval timeval_t;
+
+typedef struct{
+  /*
+   * Assumes that tstamp and msgno are already in network byte older
+   */
+  double tstamp;
+  unsigned int msgno;
+  // Can add an extra field for sha1 checksum
+  char *payload;
+} Ctcp_Pckt;
 
 typedef struct {
   double tstamp;
@@ -16,7 +28,10 @@ typedef struct {
   } sblks[3];
 } Pr_Msg;
 
-void vntohl(int *p, int cnt);
-void vhtonl(int *p, int cnt);
+void vntohl(int *p, double cnt);
+void vhtonl(int *p, double cnt);
 double getTime(void);
+Ctcp_Pckt* Packet(unsigned int msgno, char* payload);
+void marshall(Ctcp_Pckt msg, char* buf, int payload_size, int mss);
+void unmarshall(Ctcp_Pckt* msg, char* buf, int payload_size, int mss);
 #endif // UTIL_H_
