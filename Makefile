@@ -5,6 +5,7 @@ LDFLAGS :=
 TARGETS := util \
 	atoucli \
 	atousrv \
+	test \
 
 HEADERS := scoreboard.h \
 
@@ -50,6 +51,7 @@ tags: $(SRCS)
 clean:
 	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS \
 	*.o *.d *.tmp
+
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)
