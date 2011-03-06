@@ -48,8 +48,11 @@ $(OBJS) : %.o :  %.c $(HEADERS) .buildmode Makefile
 tags: $(SRCS)
 	ctags -eR
 
+tests: test.c util.c util.h Makefile
+	$(CXX) $(CFLAGS) -o test test.c util.c $(LDFLAGS)
+
 clean:
-	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS \
+	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS test\
 	*.o *.d *.tmp
 
 
