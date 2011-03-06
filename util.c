@@ -48,21 +48,24 @@ Packet(unsigned int msgno, char* payload){
  * This assumes that there is enough space in buf to store all of these.
  */
 void
-marshall(Ctcp_Pckt msg, char* buf, int payload_size, int mss){
+marshall(Ctcp_Pckt msg, char* buf){
   int index = 0;
   int part = 0;
+  int payload_size = msg.payload_size;
 
+  htonp(&msg);
   memcpy(buf + index, &msg.tstamp, (part = sizeof(msg.tstamp)));
   index += part;
   memcpy(buf + index, &msg.msgno, (part = sizeof(msg.msgno)));
   index += part;
-  memcpy(buf + index, msg.payload, (part = payload_size));
+  memcpy(buf + index, &msg.payload_size, (part = sizeof(msg.payload_size)));
   index += part;
-  assert(index <= mss);
+  memcpy(buf + index, msg.payload, payload_size);
+  index += part;
 }
 
 void
-unmarshall(Ctcp_Pckt* msg, char* buf, int payload_size, int mss){
+unmarshall(Ctcp_Pckt* msg, char* buf){
   int index = 0;
   int part = 0;
 
@@ -70,6 +73,21 @@ unmarshall(Ctcp_Pckt* msg, char* buf, int payload_size, int mss){
   index += part;
   memcpy(&msg->msgno, buf+index, (part = sizeof(msg->msgno)));
   index += part;
-  memcpy(msg->payload, buf+index, (part = payload_size));
-  assert(index <= mss);
+  memcpy(&msg->payload_size, buf+index, (part = sizeof(msg->payload_size)));
+  index += part;
+  ntohp(msg);
+  memcpy(msg->payload, buf+index, msg->payload_size);
+  index += part;
+}
+
+void
+htonp(Ctcp_Pckt* msg){
+  msg->msgno = htonl(msg->msgno);
+  msg->payload_size = htonl(msg->payload_size);
+}
+
+void
+ntohp(Ctcp_Pckt* msg){
+  msg->msgno = ntohl(msg->msgno);
+  msg->payload_size = ntohl(msg->payload_size);
 }

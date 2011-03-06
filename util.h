@@ -15,6 +15,7 @@ typedef struct{
    */
   double tstamp;
   unsigned int msgno;
+  int payload_size;
   // Can add an extra field for sha1 checksum
   char *payload;
 } Ctcp_Pckt;
@@ -32,6 +33,8 @@ void vntohl(int *p, double cnt);
 void vhtonl(int *p, double cnt);
 double getTime(void);
 Ctcp_Pckt* Packet(unsigned int msgno, char* payload);
-void marshall(Ctcp_Pckt msg, char* buf, int payload_size, int mss);
-void unmarshall(Ctcp_Pckt* msg, char* buf, int payload_size, int mss);
+void marshall(Ctcp_Pckt msg, char* buf);
+void unmarshall(Ctcp_Pckt* msg, char* buf);
+void htonp(Ctcp_Pckt *msg);
+void ntohp(Ctcp_Pckt *msg);
 #endif // UTIL_H_
