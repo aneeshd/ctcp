@@ -51,7 +51,7 @@ Packet(unsigned int msgno, char* payload){
 int
 marshall(Ctcp_Pckt msg, char* buf){
   int index = 0;
-  int part = 0;
+  int part = 0;  
   int payload_size = msg.payload_size;
 
   htonp(&msg);
@@ -61,7 +61,7 @@ marshall(Ctcp_Pckt msg, char* buf){
   index += part;
   memcpy(buf + index, &msg.payload_size, (part = sizeof(msg.payload_size)));
   index += part;
-  memcpy(buf + index, msg.payload, payload_size);
+  memcpy(buf + index, msg.payload, (part = payload_size));
   index += part;
   return index;
 }
@@ -79,7 +79,7 @@ unmarshall(Ctcp_Pckt* msg, char* buf){
   index += part;
   ntohp(msg);
   msg->payload = malloc(msg->payload_size);
-  memcpy(msg->payload, buf+index, msg->payload_size);
+  memcpy(msg->payload, buf+index, (part = msg->payload_size));
   index += part;
   return index;
 }
