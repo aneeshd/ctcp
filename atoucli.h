@@ -4,10 +4,11 @@
 #define MAXHO 1024
 #define BUFFSIZE  65536
 
-char *RCSid = "$Header: /home/thistle/dunigan/src/atou/atousrv.c,v 1.8 2002/06/20 14:28:46 dunigan Exp dunigan $";
+FILE *rcv_file;
+
 char *version = "$Revision: 1.8 $";
 double dbuff[BUFFSIZE/8];
-int *buff = (int *)dbuff;
+char *buff = (char *)dbuff;
 int sockfd, rcvspace;
 int inlth,sackcnt,pkts, dups, drops,hi,maxooo;
 int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;
@@ -42,7 +43,7 @@ void err_sys(char *s);
 
 /*
  */
-void bldack();
+void bldack(void);
 
 /*
  */

@@ -33,8 +33,8 @@ void vntohl(int *p, double cnt);
 void vhtonl(int *p, double cnt);
 double getTime(void);
 Ctcp_Pckt* Packet(unsigned int msgno, char* payload);
-void marshall(Ctcp_Pckt msg, char* buf);
-void unmarshall(Ctcp_Pckt* msg, char* buf);
+int marshall(Ctcp_Pckt msg, char* buf);
+int unmarshall(Ctcp_Pckt* msg, char* buf);
 void htonp(Ctcp_Pckt *msg);
 void ntohp(Ctcp_Pckt *msg);
 #endif // UTIL_H_

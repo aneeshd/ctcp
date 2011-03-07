@@ -46,8 +46,9 @@ Packet(unsigned int msgno, char* payload){
 /*
  * Takes a Ctcp_Pckt struct and puts its raw contents into the buffer.
  * This assumes that there is enough space in buf to store all of these.
+ * The return value is the number of bytes used for the marshalling
  */
-void
+int
 marshall(Ctcp_Pckt msg, char* buf){
   int index = 0;
   int part = 0;
@@ -62,9 +63,10 @@ marshall(Ctcp_Pckt msg, char* buf){
   index += part;
   memcpy(buf + index, msg.payload, payload_size);
   index += part;
+  return index;
 }
 
-void
+int
 unmarshall(Ctcp_Pckt* msg, char* buf){
   int index = 0;
   int part = 0;
@@ -76,8 +78,10 @@ unmarshall(Ctcp_Pckt* msg, char* buf){
   memcpy(&msg->payload_size, buf+index, (part = sizeof(msg->payload_size)));
   index += part;
   ntohp(msg);
+  msg->payload = malloc(msg->payload_size);
   memcpy(msg->payload, buf+index, msg->payload_size);
   index += part;
+  return index;
 }
 
 void

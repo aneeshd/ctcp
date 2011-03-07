@@ -9,7 +9,7 @@
 #define RTT_DECAY 4 // This is used as the factor to approximate the rto
 
 FILE *db;     /* debug trace file */
-char *RCSid = "$Header: /home/wisp/dunigan/src/atou/atoucli.c,v 1.38 2003/01/16 19:07:57 dunigan Exp dunigan $";
+FILE *snd_file; // The file to be sent
 char *version = "$Revision: 1.38 $";
 
 struct addrinfo *result; //This is where the info about the server is stored
@@ -17,7 +17,8 @@ struct sockaddr cli_addr;
 socklen_t clilen = sizeof cli_addr;
 
 double dbuff[BUFFSIZE/8];
-int *buff = (int *)dbuff;
+char *buff = (char *)dbuff;
+
 
 /* TCP pcb like stuff */
 int dupacks;			/* consecutive dup acks recd */
@@ -30,6 +31,7 @@ double snd_cwnd;		/* congestion-controlled window */
 unsigned int snd_ssthresh;	/* slow start threshold */
 
 unsigned int ackno;
+unsigned int file_position; // Indicates the msg number at which we are in the file at any given moment
 
 /* configurable variables */
 int droplist[11];  /* debuggin */
@@ -75,7 +77,6 @@ unsigned int bwe_pkt, bwe_prev, bwe_on=1; // Bandwith estimate??
 double bwertt, bwertt_max;
 double max_delta;  /* vegas like tracker */
 
-unsigned int ackno;
 
 /* stats */
 int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;
@@ -132,12 +133,7 @@ socket_t timedread(socket_t fd, double t);
 /*
  *
  */
-void handle_ack(socket_t fd);
-
-/*
- *
- */
-void handle_sack(socket_t fd);
+void handle_ack(socket_t fd, Ctcp_Pckt* ack);
 
 /*
  *
@@ -168,5 +164,7 @@ void advance_cwnd(void);
  *
  */
 void duplicate(socket_t fd, int sackno);
+
+void restart(void);
 
 #endif // ATOUCLI_H_

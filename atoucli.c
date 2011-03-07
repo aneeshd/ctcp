@@ -19,7 +19,7 @@
 #define PORT "7890"
 #define HOST "127.0.0.1"
 
-Pr_Msg *msg, ack;
+Ctcp_Pckt *msg;
 struct sockaddr cli_addr;
 struct addrinfo *result;
 int sockfd, rcvspace;
@@ -62,7 +62,7 @@ main(int argc, char** argv){
   int numbytes;
   struct addrinfo hints, *servinfo;
   int rv;
-	int c, retval=0;
+	int c;
   
 	while((c = getopt(argc, argv, "h:sd:p:b:D:")) != -1) { 
 	  switch (c) {
@@ -89,7 +89,9 @@ main(int argc, char** argv){
 	  }
 	}
   
-
+  // Open the file where the contents of the file transfer will be stored
+  rcv_file = fopen("atou_cli_rcv",  "wb");
+  
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC; // This works for buth IPv4 and IPv6
   hints.ai_socktype = SOCK_DGRAM;
@@ -139,51 +141,35 @@ main(int argc, char** argv){
   
 	memset(buff,0,BUFFSIZE);        /* pretouch */
 
-	msg = (Pr_Msg *)buff;
+  do{
+    clilen = sizeof cli_addr; // TODO: this is not necessary -> remove
+    // TODO: should be reading only a packet or multiple packets at a time, need to know the packet size in advance...
+    if((numbytes = recvfrom(sockfd, buff, MSS, 0, 
+                            &cli_addr, &clilen)) == -1){
+      err_sys("recvfrom");
+    }
+    
+    if(numbytes <= 0) break;
 
-	clilen = sizeof cli_addr;
-	if((numbytes = recvfrom(sockfd, buff, sizeof(dbuff), 0,
-                          &cli_addr, &clilen)) == -1){
-    err_sys("recvfrom");
-  }
-
-	ackheadr = sizeof(double) + 2*(sizeof(unsigned int));
-	sackinfo = sizeof(unsigned int) * 2;
-	while(numbytes > 0) {
 	  pkts++;
 	  et = secs();  /* last read */
 	  if (st == 0) st = et;  /* first pkt time */
-	  vntohl(buff, sizeof (Pr_Msg)/4);  /* to host order, 12 bytes? */
+
+    // Unmarshall the packet 
+    unmarshall(msg, buff);
 
 	  if (msg->msgno > hi) hi = msg->msgno ;  /* high water mark */
-    
+
     if (debug && msg->msgno != expect ) printf("exp %d got %d dups %d sacks %d hocnt %d\n",expect, msg->msgno,dups,sackcnt,hocnt); 
     
-	  if (msg->msgno > expect)addho(msg->msgno);
-	  if (msg->msgno < expect)fixho(msg->msgno);
-    
-	  expected = expect;
-	  if (msg->msgno >= expect) expect = msg->msgno + 1;
-    
-	  if(ackdelay) { /* using delayed acks */
-	    if(msg->msgno != expected) sendack=1;  /* ack if unexpected */
-	    settime = ackdelay - (millisecs()%ackdelay);
-      retval = acktimer(sockfd, settime); /* set the timer */
-      if(sendack || (expected%2))  {
-	      bldack();
-	      sendack=0;
-	    }
-	  }	    
-    else { /* not using delayed acks */
-	    bldack();
-    }
-    
-	  inlth=numbytes;
-	  if((numbytes = recvfrom(sockfd, buff, sizeof(dbuff), 0, 
-                            &cli_addr, &clilen)) == -1 ){
-      err_sys("rcvfrom");
-    }
-	}
+    bldack();
+
+	  inlth = numbytes;
+
+  }while(numbytes > 0);
+
+  fclose(rcv_file);
+
   return 0;
 }
 
@@ -196,125 +182,28 @@ err_sys(char *s){
 
 void
 bldack(void){
-	int i, j, k, first=-1, retransmit=0, newpkt=0;
+  Ctcp_Pckt ack;
+  ack.tstamp = getTime();
+  ack.payload_size = 0;
   
-	/* construct the reply packet */
-	ack.tstamp = msg->tstamp;
-	ack.blkcnt=0;   /* assume no sacks */
-	if (hocnt) {  /* we have a list of lost pkts */
-	  newpkt = msg->msgno;
-    ack.msgno = holes[0];  /* oldest missing */
-	  if(sack) {
-      /*if sack is enabled and there are missing packets--
-        find the beginning and ending of up to 3 contiguous blocks of data
-        received and put (most recently recvd first)into the ack table(sblks).
-      */
-      j = 0;
-      k = hocnt-1;
-      /*start with the latest pkt received--unless it is a retransmit */
-      if(msg->msgno>=expected)
-        i = msg->msgno;
-      else {
-        retransmit=1;
-        if(expected<expect)
-          i = expected;
-        else
-          i = expected-1;
-      }
-      
-      while((k>=0)&&(j<3)) {
-        /*record the end of the block*/
-        ack.blkcnt++;
-        endd[j]=i;
-        while(holes[k]<i) {
-          i--;
-        }
-        /*find and record the beginning of the block*/
-        start[j]=i+1;
-        j++;
-        /*find the end of the next most recent, isolated, contiguous 
-          block of data received */
-        while((holes[k]==i)&&(k>=0)) {
-          k--;
-          i--;
-        }
-      }
-      /*zero out any blks not used*/
-      for(i=j; i<3; i++)
-        start[i] = endd[i] = 0;
-      sackcnt++;
-      /*make sure most recently reported block is first!*/
-      if(retransmit && newpkt>holes[0]) { 
-        first = check_order(newpkt);
-        if(first<0)
-          k=0;
-        else 
-          k=1;
-      }
-      else
-        k=0;
-      for(i=0; i<3; i++) {
-        if(i!=first) { 
-          ack.sblks[k].sblk=start[i];
-          ack.sblks[k].eblk=endd[i];
-          k++;
-        }
-      }
-    }
-    
-    /* No HOLES  */
-  } else ack.msgno =  expect;
-  k = ackheadr+ack.blkcnt*sackinfo;
-  vhtonl((int*)&ack,k/4);  /* to net order */
-  if (sendto(sockfd,(char *)&ack,k,0,result->ai_addr,result->ai_addrlen)!=k){
-  	err_sys("sendto");
+  // check whether the packet we got has the packet number we expected
+  if(msg->msgno == expect){
+    // If so then write the payload to the file
+    fwrite(msg->payload, 1, msg->payload_size, rcv_file);
+
+    // And increase expect
+    expect++;
+  }
+
+  ack.msgno = expect;
+  
+  // Marshall the ack into buff
+  int size = marshall(ack, buff);
+  
+  if(sendto(sockfd, buff, size, 0, result->ai_addr, result->ai_addrlen) == -1){
+    err_sys("bldack: sendto");
   }
   acks++;
-}
-
-int
-check_order(int newpkt) {
-  int i;
-  
-  for(i=0; i<3; i++) {
-    if(newpkt>=start[i] && newpkt<=endd[i]) {
-      ack.sblks[0].sblk = start[i];
-      ack.sblks[0].eblk = endd[i];
-      return(i);
-    }
-  }
-  return(-1);
-}
-
-void
-addho(int n){
-	/* add one or more holes */
-	int j;
-  
-	if (n-expect > maxooo) maxooo = n -expect;
-	if (hocnt + n - expect > MAXHO) {
-    printf("hole table overflow %d %d %d %d\n",hocnt,n,expect,MAXHO);
-	  return;
-	}
-	for (j=expect; j< n; j++){
-	  holes[hocnt++] = j;
-	  drops++;   /* or could just be out of order */
-	}
-}
-
-void
-fixho(int n){
-  /* remove missing pkt, shift vector over replaced pkt */
-	int i,j;
-  
-	for (i=0;i<hocnt;i++) {
-		if (holes[i]==n) {
-			for(j=i; j< hocnt-1; j++) holes[j] = holes[j+1];
-			hocnt--;
-			return;
-		}
-	}
-	dups ++;  /* didn't find a hole */
 }
 
 double
