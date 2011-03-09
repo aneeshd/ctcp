@@ -19,7 +19,6 @@
 #define PORT "7890"
 #define HOST "127.0.0.1"
 
-Ctcp_Pckt *msg;
 struct sockaddr cli_addr;
 struct addrinfo *result;
 int sockfd, rcvspace;
@@ -141,6 +140,8 @@ main(int argc, char** argv){
   
 	memset(buff,0,BUFFSIZE);        /* pretouch */
 
+  Ctcp_Pckt *msg = malloc(sizeof(Ctcp_Pckt));
+
   do{
     clilen = sizeof cli_addr; // TODO: this is not necessary -> remove
     // TODO: should be reading only a packet or multiple packets at a time, need to know the packet size in advance...
@@ -162,7 +163,7 @@ main(int argc, char** argv){
 
     if (debug && msg->msgno != expect ) printf("exp %d got %d dups %d sacks %d hocnt %d\n",expect, msg->msgno,dups,sackcnt,hocnt); 
     
-    bldack();
+    bldack(msg);
 
 	  inlth = numbytes;
 
@@ -181,7 +182,7 @@ err_sys(char *s){
 }
 
 void
-bldack(void){
+bldack(Ctcp_Pckt *msg){
   Ctcp_Pckt ack;
   ack.tstamp = getTime();
   ack.payload_size = 0;
@@ -199,8 +200,8 @@ bldack(void){
   
   // Marshall the ack into buff
   int size = marshall(ack, buff);
-  
-  if(sendto(sockfd, buff, size, 0, result->ai_addr, result->ai_addrlen) == -1){
+  clilen = sizeof(cli_addr);
+  if(sendto(sockfd,buff, size, 0, &cli_addr, clilen) == -1){
     err_sys("bldack: sendto");
   }
   acks++;
