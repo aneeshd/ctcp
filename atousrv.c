@@ -118,7 +118,7 @@ main (int argc, char** argv){
       err_sys("recvfrom: Failed to receive the request\n");
     }
 
-    snd_file = fopen("Foto.jpg", "rb");
+    snd_file = fopen("Avatar.mov", "rb");
     doit(sockfd);
     //    restart();
     done();
