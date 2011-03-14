@@ -20,15 +20,6 @@ typedef struct{
   char *payload;
 } Ctcp_Pckt;
 
-typedef struct {
-  double tstamp;
-  unsigned int msgno;
-	unsigned int blkcnt;
-  struct Sblks {
-    unsigned int sblk,eblk;
-  } sblks[3];
-} Pr_Msg;
-
 void vntohl(int *p, double cnt);
 void vhtonl(int *p, double cnt);
 double getTime(void);
