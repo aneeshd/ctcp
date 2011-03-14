@@ -128,7 +128,8 @@ main(int argc, char** argv){
   // Send request to the server.
   fprintf(stdout, "Sending request\n");
   //int req = 1861;
-  if((numbytes = sendto(sockfd, file_name, strlen(file_name)*sizeof(char), 0,
+  printf("%s  %d\n", file_name, strlen(file_name));
+  if((numbytes = sendto(sockfd, file_name, (strlen(file_name)+1)*sizeof(char), 0,
                         result->ai_addr, result->ai_addrlen)) == -1){
     err_sys("sendto: Request failed");
   }

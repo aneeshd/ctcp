@@ -110,13 +110,16 @@ main (int argc, char** argv){
 
   freeaddrinfo(servinfo);
 
-  char *file_name;
+  char *file_name = malloc(1024);
   while(1){
     fprintf(stdout, "\nWaiting for requests...\n");
     if((numbytes = recvfrom(sockfd, file_name, 1024, 0,
                             &cli_addr, &clilen)) == -1){
+      printf("%s\n", file_name);
       err_sys("recvfrom: Failed to receive the request\n");
     }
+
+    printf("outside the loop... %s/n", file_name);
 
     snd_file = fopen(file_name, "rb");
     doit(sockfd);
