@@ -94,7 +94,7 @@ main(int argc, char** argv){
 	}
   
   // Open the file where the contents of the file transfer will be stored
-  rcv_file = fopen("atou_cli_rcv",  "wb");
+  rcv_file = fopen(file_name,  "wb");
   
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC; // This works for buth IPv4 and IPv6
@@ -128,7 +128,7 @@ main(int argc, char** argv){
   // Send request to the server.
   fprintf(stdout, "Sending request\n");
   //int req = 1861;
-  printf("%s  %d\n", file_name, strlen(file_name));
+  //printf("%s  %d\n", file_name, strlen(file_name));
   if((numbytes = sendto(sockfd, file_name, (strlen(file_name)+1)*sizeof(char), 0,
                         result->ai_addr, result->ai_addrlen)) == -1){
     err_sys("sendto: Request failed");
