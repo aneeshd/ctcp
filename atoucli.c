@@ -18,8 +18,9 @@
 
 #define PORT "7890"
 #define HOST "127.0.0.1"
+#define FILE_NAME "Avatar.mov"
 
-struct sockaddr cli_addr;
+struct sockaddr srv_addr;
 struct addrinfo *result;
 int sockfd, rcvspace;
 
@@ -56,6 +57,7 @@ ctrlc(void){
 int
 main(int argc, char** argv){
 	int optlen,rlth;
+  char *file_name = FILE_NAME;
   char *port = PORT;
   char *host = HOST;
   int numbytes;
@@ -63,7 +65,7 @@ main(int argc, char** argv){
   int rv;
 	int c;
   
-	while((c = getopt(argc, argv, "h:sd:p:b:D:")) != -1) { 
+	while((c = getopt(argc, argv, "h:sd:p:b:D:f:")) != -1) { 
 	  switch (c) {
     case 'h':
       host = optarg;
@@ -82,6 +84,9 @@ main(int argc, char** argv){
       break;
     case 'D':
       debug = atoi(optarg);
+      break;
+    case 'f':
+      file_name = optarg;
       break;
     default:
       usage();
@@ -122,8 +127,8 @@ main(int argc, char** argv){
 
   // Send request to the server.
   fprintf(stdout, "Sending request\n");
-  int req = 1861;
-  if((numbytes = sendto(sockfd, &req, sizeof(int), 0,
+  //int req = 1861;
+  if((numbytes = sendto(sockfd, file_name, strlen(file_name)*sizeof(char), 0,
                         result->ai_addr, result->ai_addrlen)) == -1){
     err_sys("sendto: Request failed");
   }
@@ -143,10 +148,10 @@ main(int argc, char** argv){
   Ctcp_Pckt *msg = malloc(sizeof(Ctcp_Pckt));
 
   do{
-    clilen = sizeof cli_addr; // TODO: this is not necessary -> remove
+    srvlen = sizeof srv_addr; // TODO: this is not necessary -> remove
     // TODO: should be reading only a packet or multiple packets at a time, need to know the packet size in advance...
     if((numbytes = recvfrom(sockfd, buff, MSS, 0, 
-                            &cli_addr, &clilen)) == -1){
+                            &srv_addr, &srvlen)) == -1){
       err_sys("recvfrom");
     }
     
@@ -200,8 +205,8 @@ bldack(Ctcp_Pckt *msg){
   
   // Marshall the ack into buff
   int size = marshall(ack, buff);
-  clilen = sizeof(cli_addr);
-  if(sendto(sockfd,buff, size, 0, &cli_addr, clilen) == -1){
+  srvlen = sizeof(srv_addr);
+  if(sendto(sockfd,buff, size, 0, &srv_addr, srvlen) == -1){
     err_sys("bldack: sendto");
   }
   acks++;

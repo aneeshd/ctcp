@@ -110,15 +110,15 @@ main (int argc, char** argv){
 
   freeaddrinfo(servinfo);
 
-  int req;
+  char *file_name;
   while(1){
     fprintf(stdout, "\nWaiting for requests...\n");
-    if((numbytes = recvfrom(sockfd, &req, sizeof(int), 0,
+    if((numbytes = recvfrom(sockfd, file_name, 1024, 0,
                             &cli_addr, &clilen)) == -1){
       err_sys("recvfrom: Failed to receive the request\n");
     }
 
-    snd_file = fopen("Avatar.mov", "rb");
+    snd_file = fopen(file_name, "rb");
     doit(sockfd);
     //    restart();
     done();

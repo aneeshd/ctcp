@@ -17,7 +17,7 @@ int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;
 int  hocnt, holes[MAXHO];
 /*implementing sack & delack */
 int sack=0;
-socklen_t clilen;
+socklen_t srvlen;
 int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;
 int  settime=0;
 int start[3], endd[3];
