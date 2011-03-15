@@ -94,7 +94,10 @@ main(int argc, char** argv){
 	}
   
   // Open the file where the contents of the file transfer will be stored
-  rcv_file = fopen(file_name,  "wb");
+  char dst_file_name[100] = "Rcv_";
+  strcat(dst_file_name, file_name);
+  printf("dest %s", dst_file_name);
+  rcv_file = fopen(dst_file_name,  "wb");
   
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC; // This works for buth IPv4 and IPv6
@@ -197,6 +200,8 @@ bldack(Ctcp_Pckt *msg){
   if(msg->msgno == expect){
     // If so then write the payload to the file
     fwrite(msg->payload, 1, msg->payload_size, rcv_file);
+    //if (msg->payload_size == 0)printf("msg no %d\n", msg->msgno);
+
 
     // And increase expect
     expect++;

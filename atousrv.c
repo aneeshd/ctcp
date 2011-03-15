@@ -323,7 +323,16 @@ send_one(socket_t sockfd, unsigned int n){
     fseek(snd_file, (n-1)*payload_size, SEEK_SET);
   }
   
+
+  clearerr(snd_file);
   msg->payload_size = fread(msg->payload, 1, payload_size, snd_file);
+
+
+  if (feof(snd_file)){ 
+    printf("%d End of file\n",file_position );
+    printf("payload %d msg-payload sizee %d\n",payload_size,msg->payload_size );
+    maxpkts = 1;
+  }
 
   assert(msg->payload_size + sizeof(double) + 2*sizeof(int) <= mss);
 
