@@ -128,6 +128,7 @@ main (int argc, char** argv){
     //    restart();
     done();
     fclose(snd_file);
+    restart();
   }
   return 0;
 }
@@ -160,7 +161,7 @@ doit(socket_t sockfd){
 	snd_fack = snd_una = snd_nxt = file_position = 1;
 
 	if (bwe_on) bwe_pkt = snd_nxt;
-	if (maxpkts == 0 && maxtime) maxpkts = 1000000000; // Default time is 10 seconds
+	if (maxpkts == 0) maxpkts = 1000000000; // Default time is 10 seconds
 
 	due = getTime() + timeout;  /* when una is due */
 
@@ -322,16 +323,14 @@ send_one(socket_t sockfd, unsigned int n){
   if(n != file_position){
     // Reposition the file position indicator appropriately
     fseek(snd_file, (n-1)*payload_size, SEEK_SET);
+    file_position =n;
   }
   
 
   
   msg->payload_size = fread(msg->payload, 1, payload_size, snd_file);
 
-
-  if (feof(snd_file)){ 
-    printf("%d End of file  - snd_una %d\n",file_position, snd_una );
-    printf("payload %d msg-payload size %d\n\n",payload_size,msg->payload_size );
+  if(feof(snd_file)){
     maxpkts = file_position;
   }
 
@@ -920,7 +919,7 @@ restart(void){
   dupacks = 0;			/* consecutive dup acks recd */
   snd_max = 0; 		/* biggest send */
   snd_recover = 0;	/* One RTT beyond last good data, newreno */
-  
+  maxpkts = 0;
   ackno = 0;
   
   //--------------- vegas working variables ------------//
