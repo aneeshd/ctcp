@@ -12,3 +12,4 @@
 * [DONE] Minor cleanup on the client side (renaming cli_addr to srv_addr etc)
 * [DONE] Changing the client request to ask for a particular file to be transmitted
 * Add checksum
+* Use "Packet" function (in Ctcp_Pkts) to create packets, instead of malloc
