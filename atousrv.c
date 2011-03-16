@@ -169,7 +169,7 @@ doit(socket_t sockfd){
   
   Ctcp_Pckt *ack = malloc(sizeof(Ctcp_Pckt));
 
-	while(snd_una < maxpkts){
+	while(snd_una <= maxpkts){
 
 		r = timedread(sockfd, tick);
 
@@ -225,6 +225,7 @@ doit(socket_t sockfd){
 			due = t + 2*timeout;  /* fancy exp. backoff? */
 		}
 	}  /* while more pkts */
+
 	et = getTime()-et;
   free(ack);
   return 0;
@@ -324,14 +325,14 @@ send_one(socket_t sockfd, unsigned int n){
   }
   
 
-  clearerr(snd_file);
+  
   msg->payload_size = fread(msg->payload, 1, payload_size, snd_file);
 
 
   if (feof(snd_file)){ 
-    printf("%d End of file\n",file_position );
-    printf("payload %d msg-payload sizee %d\n",payload_size,msg->payload_size );
-    maxpkts = 1;
+    printf("%d End of file  - snd_una %d\n",file_position, snd_una );
+    printf("payload %d msg-payload size %d\n\n",payload_size,msg->payload_size );
+    maxpkts = file_position;
   }
 
   assert(msg->payload_size + sizeof(double) + 2*sizeof(int) <= mss);
