@@ -100,6 +100,8 @@ void ctrlc();
  */
 void done(void);
 
+void terminate(socket_t fd);
+
 /*
  * print the program's usage and exit
  */

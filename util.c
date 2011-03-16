@@ -38,6 +38,7 @@ Ctcp_Pckt*
 Packet(unsigned int msgno, char* payload){
   Ctcp_Pckt* packet = malloc(sizeof(Ctcp_Pckt));
   packet->tstamp = getTime();
+  packet->flag = NORMAL;
   packet->msgno = msgno;
   packet->payload = payload;
   return packet;
@@ -57,6 +58,8 @@ marshall(Ctcp_Pckt msg, char* buf){
   htonp(&msg);
   memcpy(buf + index, &msg.tstamp, (part = sizeof(msg.tstamp)));
   index += part;
+  memcpy(buf + index, &msg.flag, (part = sizeof(msg.flag)));
+  index += part;
   memcpy(buf + index, &msg.msgno, (part = sizeof(msg.msgno)));
   index += part;
   memcpy(buf + index, &msg.payload_size, (part = sizeof(msg.payload_size)));
@@ -73,6 +76,8 @@ unmarshall(Ctcp_Pckt* msg, char* buf){
 
   memcpy(&msg->tstamp, buf+index, (part = sizeof(msg->tstamp)));
   index += part;
+  memcpy(&msg->flag, buf+index, (part = sizeof(msg->flag)));
+  index += part;
   memcpy(&msg->msgno, buf+index, (part = sizeof(msg->msgno)));
   index += part;
   memcpy(&msg->payload_size, buf+index, (part = sizeof(msg->payload_size)));
@@ -86,12 +91,14 @@ unmarshall(Ctcp_Pckt* msg, char* buf){
 
 void
 htonp(Ctcp_Pckt* msg){
+  msg->flag = htonl(msg->flag);
   msg->msgno = htonl(msg->msgno);
   msg->payload_size = htonl(msg->payload_size);
 }
 
 void
 ntohp(Ctcp_Pckt* msg){
+  msg->flag = ntohl(msg->flag);
   msg->msgno = ntohl(msg->msgno);
   msg->payload_size = ntohl(msg->payload_size);
 }
