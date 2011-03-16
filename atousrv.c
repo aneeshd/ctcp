@@ -125,12 +125,38 @@ main (int argc, char** argv){
       err_sys("Error");
     }
     doit(sockfd);
-    //    restart();
+    terminate(sockfd); // terminate 
     done();
     fclose(snd_file);
     restart();
   }
   return 0;
+}
+
+void 
+terminate(socket_t sockfd){
+  Ctcp_Pckt *msg = malloc(sizeof(Ctcp_Pckt));
+  int payload_size = 0;
+  // FIN_CLI
+  msg->flag = FIN_CLI;
+  msg->payload = malloc(payload_size);
+	msg->msgno = maxpkts+1;
+	msg->tstamp = getTime();
+
+  marshall(*msg, buff);
+
+  do{
+    if((numbytes = sendto(sockfd, buff, mss, 0, &cli_addr, clilen)) == -1){
+      perror("atousrv: sendto");
+      exit(1);
+  }  
+  } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
+
+  if(numbytes != mss){
+    err_sys("write");
+  }
+  free(msg->payload);
+  free(msg);
 }
 
 /*
@@ -316,8 +342,9 @@ send_one(socket_t sockfd, unsigned int n){
 	/* send msg number n */
   Ctcp_Pckt *msg = malloc(sizeof(Ctcp_Pckt));
 	int i;
-  int payload_size = mss - sizeof(double) - 2*sizeof(int);
+  int payload_size = mss - HDR_SIZE;
   msg->payload = malloc(payload_size);
+  msg->flag = NORMAL;
 
   if(n != file_position){
     // Reposition the file position indicator appropriately
@@ -333,7 +360,7 @@ send_one(socket_t sockfd, unsigned int n){
     maxpkts = file_position;
   }
 
-  assert(msg->payload_size + sizeof(double) + 2*sizeof(int) <= mss);
+  assert(msg->payload_size + HDR_SIZE <= mss);
 
 	if (snd_nxt >= snd_max) snd_max = snd_nxt+1;
 	msg->msgno = n;

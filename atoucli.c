@@ -167,6 +167,9 @@ main(int argc, char** argv){
 
     // Unmarshall the packet 
     unmarshall(msg, buff);
+    if(msg->flag == FIN_CLI){
+      break;
+    }
 
 	  if (msg->msgno > hi) hi = msg->msgno ;  /* high water mark */
 
@@ -179,6 +182,7 @@ main(int argc, char** argv){
   }while(numbytes > 0);
 
   fclose(rcv_file);
+  ctrlc();
 
   return 0;
 }
