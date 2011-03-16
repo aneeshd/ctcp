@@ -6,5 +6,5 @@ rcvrwin 60
 #thresh_init 0.5
 increment 1
 #maxpkts 2000
-maxtime 10
+maxtime 0
 debug 4
