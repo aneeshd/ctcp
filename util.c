@@ -35,12 +35,13 @@ getTime(void){
 }
 
 Ctcp_Pckt*
-Packet(unsigned int msgno, char* payload){
+Packet(unsigned int msgno, int payload_size){
   Ctcp_Pckt* packet = malloc(sizeof(Ctcp_Pckt));
   packet->tstamp = getTime();
   packet->flag = NORMAL;
   packet->msgno = msgno;
-  packet->payload = payload;
+  packet->payload = malloc(payload_size);
+  packet->payload_size = payload_size;
   return packet;
 }
 

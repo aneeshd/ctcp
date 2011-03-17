@@ -33,6 +33,7 @@ typedef struct{
 void vntohl(int *p, double cnt);
 void vhtonl(int *p, double cnt);
 double getTime(void);
+Ctcp_Pckt* Packet(unsigned int msgno, int payload_size);
 int marshall(Ctcp_Pckt msg, char* buf);
 int unmarshall(Ctcp_Pckt* msg, char* buf);
 void htonp(Ctcp_Pckt *msg);

@@ -135,13 +135,10 @@ main (int argc, char** argv){
 
 void 
 terminate(socket_t sockfd){
-  Ctcp_Pckt *msg = malloc(sizeof(Ctcp_Pckt));
-  int payload_size = 0;
+  Ctcp_Pckt *msg = Packet(maxpkts+1, 0);
+  
   // FIN_CLI
   msg->flag = FIN_CLI;
-  msg->payload = malloc(payload_size);
-	msg->msgno = maxpkts+1;
-	msg->tstamp = getTime();
 
   marshall(*msg, buff);
 
@@ -341,19 +338,15 @@ send_segs(socket_t sockfd){
 void
 send_one(socket_t sockfd, unsigned int n){
 	/* send msg number n */
-  Ctcp_Pckt *msg = malloc(sizeof(Ctcp_Pckt));
 	int i;
   int payload_size = mss - HDR_SIZE;
-  msg->payload = malloc(payload_size);
-  msg->flag = NORMAL;
+  Ctcp_Pckt *msg = Packet(n, payload_size);
 
   if(n != file_position){
     // Reposition the file position indicator appropriately
     fseek(snd_file, (n-1)*payload_size, SEEK_SET);
     file_position =n;
   }
-  
-
   
   msg->payload_size = fread(msg->payload, 1, payload_size, snd_file);
 
@@ -364,8 +357,6 @@ send_one(socket_t sockfd, unsigned int n){
   assert(msg->payload_size + HDR_SIZE <= mss);
 
 	if (snd_nxt >= snd_max) snd_max = snd_nxt+1;
-	msg->msgno = n;
-	msg->tstamp = getTime();
 
 	if (debug > 3) 
     {
