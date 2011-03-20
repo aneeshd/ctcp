@@ -2,18 +2,23 @@ CXX := gcc
 CFLAGS := -g -Wall
 LDFLAGS :=
 
+# Put here the name of all the binaries
 TARGETS := util \
+	md5 \
 	atoucli \
 	atousrv \
-	test \
 
-HEADERS := scoreboard.h \
+# Common libraries to be built and included to the products
+UTILS := util \
+	md5 \
 
 SRCS := $(TARGETS:%=%.c)
 
 OBJS := $(TARGETS:%=%.o)
 
-PRODUCTS := $(filter-out util, $(TARGETS))
+PRODUCTS := $(filter-out $(UTILS) , $(TARGETS))
+
+UTILS_PRODS := $(UTILS:%=%.o)
 
 # We start our mode with "mode" so we avoud the leading whitespace from the +=.
 NEWMODE := mode
@@ -38,23 +43,25 @@ endif
 all: $(PRODUCTS)
 
 # Rule for linking the .o binaries
-$(PRODUCTS): $(OBJS) .buildmode
-	$(CXX) -o $@ $< $@.o $(LDFLAGS)
+$(PRODUCTS): $(OBJS) .buildmode Makefile
+	$(CXX) -o $@ $(UTILS_PRODS) $@.o $(LDFLAGS)
 
 # Rule for compiling c files.
-$(OBJS) : %.o :  %.c $(HEADERS) .buildmode Makefile
+%.o :  %.c .buildmode Makefile
 	$(CXX) $(CFLAGS) -c $< -o $@
 
 tags: $(SRCS)
 	ctags -eR
 
-tests: test.c util.c util.h Makefile
-	$(CXX) $(CFLAGS) -o test test.c util.c $(LDFLAGS)
+tests: test.c util.o .buildmode Makefile
+	$(CXX) $(CFLAGS) $< util.o -o test $(LDFLAGS)
+
+md5: md5driver.c md5.o
+	$(CXX) $(CFLAGS) $< md5.o -o $@ $(LDFLAGS)
 
 clean:
 	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS test\
 	*.o *.d *.tmp
-
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)
