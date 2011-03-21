@@ -62,8 +62,6 @@ main (int argc, char** argv){
 	signal(SIGINT,ctrlc);
 	readConfig();
 
-	if (debug > 3) db = fopen("db.tmp","w");
-
 	if (thresh_init) {
     snd_ssthresh = thresh_init*rcvrwin;
   } else {
@@ -122,12 +120,16 @@ main (int argc, char** argv){
     printf("sending %s\n", file_name);
 
     if ((snd_file = fopen(file_name, "rb"))== NULL){
-      err_sys("Error");
+      err_sys("Error while trying to create/open a file");
     }
+
+
+    if (debug > 3) openLog();
     doit(sockfd);
     terminate(sockfd); // terminate 
     done();
     fclose(snd_file);
+    fclose(db);
     restart();
   }
   return 0;
@@ -146,7 +148,7 @@ terminate(socket_t sockfd){
     if((numbytes = sendto(sockfd, buff, mss, 0, &cli_addr, clilen)) == -1){
       perror("atousrv: sendto");
       exit(1);
-  }  
+    }  
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
 
   if(numbytes != mss){
@@ -866,7 +868,6 @@ bwe_calc(double rtt){
 }
 
 
-//TODO: Look at the vegas calculations 
 void
 advance_cwnd(void){
 	/* advance cwnd according to slow-start of congestion avoidance */
@@ -925,6 +926,32 @@ advance_cwnd(void){
     else snd_cwnd = snd_cwnd + incr/snd_cwnd; /* ca */
     if (snd_cwnd < initsegs) snd_cwnd = initsegs;
     vinss = 0; /* no vegas ss now */
+  }
+}
+
+void
+openLog(void){
+  time_t rawtime;
+  struct tm* ptm;
+  time(&rawtime);
+  ptm = localtime(&rawtime);
+  
+  log_name = malloc(5*sizeof(int) + 9); // This is the size of the formatted string + 1
+  
+  sprintf(log_name, "%d-%02d-%d %02d:%02d.%02d.log", 
+          ptm->tm_year + 1900, 
+          ptm->tm_mon + 1, 
+          ptm->tm_mday,
+          ptm->tm_hour,
+          ptm->tm_min,
+          ptm->tm_sec);
+  
+  printf("Size %Zd\n", strlen(log_name));
+  printf("The log name is %s\n", log_name);
+
+	db = fopen(log_name, "w+");
+  if(!db){
+    perror("An error ocurred while trying to open the log file");
   }
 }
 

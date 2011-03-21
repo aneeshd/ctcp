@@ -61,7 +61,10 @@ md5: md5driver.c md5.o
 
 clean:
 	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS test\
-	*.o *.d *.tmp
+	*.o *.d
+
+clean_logs:
+	$(RM) *.log
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)

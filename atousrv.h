@@ -9,6 +9,7 @@
 #define RTT_DECAY 4 // This is used as the factor to approximate the rto
 
 FILE *db;     /* debug trace file */
+char* log_name; // Name of the log
 FILE *snd_file; // The file to be sent
 char *version = "$Revision: 1.38 $";
 
@@ -168,5 +169,7 @@ void advance_cwnd(void);
 void duplicate(socket_t fd, int sackno);
 
 void restart(void);
+
+void openLog(void);
 
 #endif // ATOUCLI_H_
