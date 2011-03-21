@@ -43,7 +43,7 @@ void err_sys(char *s);
 
 /*
  */
-void bldack(Ctcp_Pckt *msg);
+void bldack(Ctcp_Pckt *msg, bool match);
 
 /*
  */

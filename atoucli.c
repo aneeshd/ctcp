@@ -166,7 +166,7 @@ main(int argc, char** argv){
 	  if (st == 0) st = et;  /* first pkt time */
 
     // Unmarshall the packet 
-    unmarshall(msg, buff);
+    bool match = unmarshall(msg, buff);
     if(msg->flag == FIN_CLI){
       break;
     }
@@ -175,7 +175,7 @@ main(int argc, char** argv){
 
     if (debug && msg->msgno != expect ) printf("exp %d got %d dups %d sacks %d hocnt %d\n",expect, msg->msgno,dups,sackcnt,hocnt); 
     
-    bldack(msg);
+    bldack(msg, match);
 
 	  inlth = numbytes;
 
@@ -195,17 +195,17 @@ err_sys(char *s){
 }
 
 void
-bldack(Ctcp_Pckt *msg){
+bldack(Ctcp_Pckt *msg, bool match){
   Ctcp_Pckt ack;
   ack.tstamp = getTime();
   ack.payload_size = 0;
   
-  // check whether the packet we got has the packet number we expected
-  if(msg->msgno == expect){
+  // If the packet we got has the packet number we expected and the checksum is correct
+  // then write the contents of the payload to the file
+  if(msg->msgno == expect && match == TRUE){
     // If so then write the payload to the file
     fwrite(msg->payload, 1, msg->payload_size, rcv_file);
     //if (msg->payload_size == 0)printf("msg no %d\n", msg->msgno);
-
 
     // And increase expect
     expect++;
