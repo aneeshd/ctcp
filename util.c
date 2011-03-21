@@ -7,8 +7,7 @@
 #include <assert.h>
 #include <math.h>
 #include "util.h"
-
-
+#include "md5.h"
 
 void
 vntohl(int *p, double cnt){
@@ -55,7 +54,12 @@ marshall(Ctcp_Pckt msg, char* buf){
   int index = 0;
   int part = 0;  
   int payload_size = msg.payload_size;
+  int size = payload_size + HDR_SIZE;
 
+  //Set to zeroes before starting
+  memset(buf, 0, size);
+
+  // Marshall the fields of the packet into the buffer
   htonp(&msg);
   memcpy(buf + index, &msg.tstamp, (part = sizeof(msg.tstamp)));
   index += part;
@@ -67,10 +71,24 @@ marshall(Ctcp_Pckt msg, char* buf){
   index += part;
   memcpy(buf + index, msg.payload, (part = payload_size));
   index += part;
+  
+  //----------- MD5 Checksum calculation ---------//
+  MD5_CTX mdContext;
+  MD5Init(&mdContext);
+  MD5Update(&mdContext, buf, size);
+  MD5Final(&mdContext);
+
+  // Put the checksum in the marshalled buffer
+  int i;
+  for(i = 0; i < CHECKSUM_SIZE; i++){
+    memcpy(buf + index, &mdContext.digest[i], (part = sizeof(mdContext.digest[i])));
+    index += part;
+  }
+
   return index;
 }
 
-int
+bool
 unmarshall(Ctcp_Pckt* msg, char* buf){
   int index = 0;
   int part = 0;
@@ -87,7 +105,32 @@ unmarshall(Ctcp_Pckt* msg, char* buf){
   msg->payload = malloc(msg->payload_size);
   memcpy(msg->payload, buf+index, (part = msg->payload_size));
   index += part;
-  return index;
+  
+  int begin_checksum = index;
+ 
+  // -------------------- Extract the MD5 Checksum --------------------//
+  int i;
+  for(i=0; i < CHECKSUM_SIZE; i++){
+    memcpy(&msg->checksum[i], buf+index, (part = sizeof(msg->checksum[i])));
+    index += part;
+  }
+
+  // Before computing the checksum, fill zeroes where the checksum was
+  memset(buf+begin_checksum, 0, CHECKSUM_SIZE);
+
+  //-------------------- MD5 Checksum Calculation  -------------------//
+  MD5_CTX mdContext;
+  MD5Init(&mdContext);
+  MD5Update(&mdContext, buf, msg->payload_size + HDR_SIZE);
+  MD5Final(&mdContext);
+
+  bool match = TRUE;
+  for(i = 0; i < CHECKSUM_SIZE; i++){
+    if(msg->checksum[i] != mdContext.digest[i]){
+      match = FALSE;
+    }
+  }
+  return match;
 }
 
 void

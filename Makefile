@@ -53,8 +53,8 @@ $(PRODUCTS): $(OBJS) .buildmode Makefile
 tags: $(SRCS)
 	ctags -eR
 
-tests: test.c util.o .buildmode Makefile
-	$(CXX) $(CFLAGS) $< util.o -o test $(LDFLAGS)
+tests: test.c util.o md5.o .buildmode Makefile
+	$(CXX) $(CFLAGS) $< util.o md5.o -o test $(LDFLAGS)
 
 md5: md5driver.c md5.o
 	$(CXX) $(CFLAGS) $< md5.o -o $@ $(LDFLAGS)

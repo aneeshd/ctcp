@@ -5,6 +5,7 @@
 #include <assert.h>
 
 #include "util.h"
+#include "md5.h"
 
 #define UNIT 10
 
@@ -90,16 +91,23 @@ void
 marshall_test(){
   Ctcp_Pckt rcv_packet;
   Ctcp_Pckt test_packet;
+  bool checksum_match;
   test_packet.tstamp = getTime();
   test_packet.msgno = random();
   test_packet.payload = "this is a test message";
   test_packet.payload_size = strlen(test_packet.payload);
 
-  char* buf = malloc(sizeof(double) + sizeof(int) + test_packet.payload_size);
+  char* buf = malloc(sizeof(double) + 3*sizeof(int) + test_packet.payload_size + 16);
 
   marshall(test_packet, buf);
-  unmarshall(&rcv_packet, buf);
 
+  checksum_match = unmarshall(&rcv_packet, buf);
+  
+  printf("The value of the match is %d\n", checksum_match);
+
+  if(checksum_match) printf("The checksum is correct");
+
+  assert(checksum_match == TRUE);
   assert(test_packet.tstamp == rcv_packet.tstamp);
   assert(test_packet.msgno == rcv_packet.msgno);
   assert(strcmp(test_packet.payload, rcv_packet.payload) == 0);
