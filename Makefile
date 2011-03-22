@@ -5,8 +5,8 @@ LDFLAGS :=
 # Put here the name of all the binaries
 TARGETS := util \
 	md5 \
-	atoucli \
-	atousrv \
+	clictcp \
+	srvctcp \
 
 # Common libraries to be built and included to the products
 UTILS := util \

@@ -19,7 +19,7 @@
 
 #include "scoreboard.h"
 #include "util.h"
-#include "atousrv.h"
+#include "srvctcp.h"
 
 
 int sndbuf = 32768;		/* udp send buff, bigger than mss */

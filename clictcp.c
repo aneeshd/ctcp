@@ -14,7 +14,7 @@
 #include	<errno.h>
 
 #include "util.h"
-#include "atoucli.h"
+#include "clictcp.h"
 
 #define PORT "7890"
 #define HOST "127.0.0.1"
