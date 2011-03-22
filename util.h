@@ -6,8 +6,7 @@ typedef int bool;
 #define FALSE 0
 
 // flags for Ctcp_Pckt
-#define NORMAL 0
-#define FIN_CLI 1
+typedef enum {NORMAL=0, FIN_CLI} flag_t;
 
 #define MSS 1472
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
@@ -21,7 +20,7 @@ typedef struct{
    * Assumes that tstamp and msgno are already in network byte older
    */
   double tstamp;
-  unsigned int flag;
+  flag_t flag;
   /*
    * 0 = normal
    * 1 = terminate_client
