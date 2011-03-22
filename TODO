@@ -1,15 +1,10 @@
-///////////////////////////
-////February 7th, 2011/////
-///////////////////////////
+///////////////////////////////////////
+//// March 22nd, 2011/////
+//////////////////////////////////////
 
-* [DONE] Swap names atoucli and atousrv
-* [DONE] Server listens to the socket and waits for the client to request for a transmission -> back to listen.
-* [DONE] Running the atoucli sends a requests and receives everything
-* [DONE] Update the usage of atoucli and atousrv 
-* [IGNORED] Client can send more than one request at a time -> Involves annoying multithreading that is not needed right now.
-* [DONE] Rename db.tmp to be receiver and time dependent
-* [Seems to be working] Clean the state of the server after the client is done. STILL NEED TO TEST RESET
-* [DONE] Minor cleanup on the client side (renaming cli_addr to srv_addr etc)
-* [DONE] Changing the client request to ask for a particular file to be transmitted
-* [DONE] Add MD5 checksum
-* [DONE] Use "Packet" function (in Ctcp_Pkts) to create packets, instead of malloc
+
+* Erase the scoreboard dependencies in srvctcp.c
+* Implement network coding
+
+
+

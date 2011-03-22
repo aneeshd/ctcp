@@ -17,10 +17,9 @@
 
 #include <assert.h>
 
-#include "scoreboard.h"
+#include "scoreboard.h" //TODO: remove this 
 #include "util.h"
 #include "srvctcp.h"
-
 
 int sndbuf = 32768;		/* udp send buff, bigger than mss */
 int rcvbuf = 32768;		/* udp recv buff for ACKs*/
@@ -157,6 +156,8 @@ terminate(socket_t sockfd){
   free(msg->payload);
   free(msg);
 }
+
+
 
 /*
  * This is contains the main functionality and flow of the client program
@@ -360,7 +361,7 @@ send_one(socket_t sockfd, unsigned int n){
 
 	if (snd_nxt >= snd_max) snd_max = snd_nxt+1;
 
-	if (debug > 3) 
+	if (debu1g > 3) 
     {
       fprintf(db,"%f %d xmt\n",
               msg->tstamp-et,n);
@@ -926,6 +927,38 @@ advance_cwnd(void){
     else snd_cwnd = snd_cwnd + incr/snd_cwnd; /* ca */
     if (snd_cwnd < initsegs) snd_cwnd = initsegs;
     vinss = 0; /* no vegas ss now */
+  }
+}
+
+
+void
+readBlock(uint32_t blockno){
+
+  // TODO: Make sure that the memory in the block is released before calling this function
+  blocks[blockno%2].len = 0;
+
+  while(blocks[blockno%2].len < BLOCK_SIZE && !feof(snd_file)){
+    char* tmp = malloc(PAYLOAD_SIZE + 2);
+    memset(tmp, 0, PAYLOAD_SIZE + 2); // This is done to pad with 0's 
+    uint16_t bytes_read = (uint16_t) fread(tmp + 2, 1, PAYLOAD_SIZE, snd_file);
+    bytes_read = htons(bytes_read);
+    memcpy(tmp, &bytes_read, sizeof(uint16_t));
+    
+    // Insert this pointer into the blocks datastructure
+    blocks[blockno%2].len++;
+    blocks[blockno%2].content[counter] = tmp;
+  }
+}
+
+
+/*
+ * Frees a block from memory
+ */
+void
+freeBlock(uint32_t blockno){
+  int i;
+  for(i = 0; i < blocks[blockno%2].len; i++){
+    free(blocks[blockno%2].content[i]);
   }
 }
 

@@ -20,6 +20,7 @@ socklen_t clilen = sizeof cli_addr;
 double dbuff[BUFFSIZE/8];
 char *buff = (char *)dbuff;
 
+Block_t blocks[2];
 
 /* TCP pcb like stuff */
 int dupacks;			/* consecutive dup acks recd */

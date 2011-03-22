@@ -13,6 +13,7 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI} flag_t;
 #define MSS 1472
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 #define PAYLOAD_SIZE 1400
+#define BLOCK_SIZE 64 // Maximum # of packets in a block
 
 typedef int socket_t;
 typedef struct timeval timeval_t;
@@ -46,6 +47,12 @@ typedef struct{
   uint16_t payload_size;
   char* payload;
 } Bare_Pckt; // This is the datastructure for holding packets before encoding
+
+typedef struct{ // TODO: this datastructure can store the dof's and other state related to the blocks
+  uint32_t len; // Number of bare packets inside the block
+  char* content; // Array of bare content (packets)
+} Block_t;
+
 
 void vntohl(int *p, double cnt);
 void vhtonl(int *p, double cnt);
