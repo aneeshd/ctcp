@@ -89,28 +89,93 @@ copy_file(char* file_name){
 
 void
 marshall_test(){
-  Ctcp_Pckt rcv_packet;
-  Ctcp_Pckt test_packet;
-  bool checksum_match;
-  test_packet.tstamp = getTime();
-  test_packet.msgno = random();
-  test_packet.payload = "this is a test message";
-  test_packet.payload_size = strlen(test_packet.payload);
-
-  char* buf = malloc(sizeof(double) + 3*sizeof(int) + test_packet.payload_size + 16);
-
-  marshall(test_packet, buf);
-
-  checksum_match = unmarshall(&rcv_packet, buf);
+  Data_Pckt* data_packet = dataPacket(1, 2, 3);
+  Data_Pckt data_packet_rcv;
+  char* buf = malloc(1500);
   
-  printf("The value of the match is %d\n", checksum_match);
+  coding_info_t p1;
+  coding_info_t p2;
+  coding_info_t p3;
+  
+  p1.packet_id = 1;
+  p2.packet_id = 2;
+  p3.packet_id = 3;
 
-  if(checksum_match) printf("The checksum is correct");
+  p1.packet_coeff = random()%256;
+  p2.packet_coeff = random()%256;
+  p3.packet_coeff = random()%256;
+  
+  data_packet->coding_info[0] = p1;
+  data_packet->coding_info[1] = p2;
+  data_packet->coding_info[2] = p3;
+  
+  memset(data_packet->payload, 0, PAYLOAD_SIZE);
 
-  assert(checksum_match == TRUE);
-  assert(test_packet.tstamp == rcv_packet.tstamp);
-  assert(test_packet.msgno == rcv_packet.msgno);
-  assert(strcmp(test_packet.payload, rcv_packet.payload) == 0);
+  data_packet->payload = "This is a test\n";
+
+  marshallData(*data_packet, buf);
+
+  unmarshallData(&data_packet_rcv, buf);
+  printf("*** Data Marshalling ***\n");
+
+  printf("tstamp: %f\n", data_packet->tstamp);
+  printf("flag: %d\n", data_packet->flag);
+  printf("seqno: %d\n", data_packet->seqno);
+  printf("blockno: %d\n", data_packet->blockno);
+  printf("numpackets: %d\n", data_packet->num_packets);
+    
+  int i;
+  for(i = 0; i < data_packet->num_packets; i++){
+    printf("packet id: %d\n", data_packet->coding_info[i].packet_id);
+    printf("coding coeff %d: %d\n", i, data_packet->coding_info[i].packet_coeff);
+  } 
+  
+  printf("payload: %s\n", data_packet->payload);
+
+
+  assert(data_packet->tstamp == data_packet_rcv.tstamp);
+  assert(data_packet->flag == data_packet_rcv.flag);
+  assert(data_packet->seqno == data_packet_rcv.seqno);
+  assert(data_packet->blockno == data_packet_rcv.blockno);
+  assert(data_packet->num_packets == data_packet_rcv.num_packets);
+  
+
+  for(i = 0; i < data_packet->num_packets; i++){
+    assert(data_packet->coding_info[i].packet_id == data_packet_rcv.coding_info[i].packet_id);
+    assert(data_packet->coding_info[i].packet_coeff == data_packet_rcv.coding_info[i].packet_coeff);
+  }
+
+  assert(strcmp(data_packet->payload, data_packet_rcv.payload) == 0);
+
+  // Print out the unmarshalled data
+  printf("***Received Data***\n");
+  printf("tstamp: %f\n", data_packet_rcv.tstamp);
+  printf("flag: %d\n", data_packet_rcv.flag);
+  printf("seqno: %d\n", data_packet_rcv.seqno);
+  printf("blockno: %d\n", data_packet_rcv.blockno);
+  printf("numpackets: %d\n", data_packet_rcv.num_packets);
+    
+  for(i = 0; i < data_packet_rcv.num_packets; i++){
+    printf("packet id: %d\n", data_packet_rcv.coding_info[i].packet_id);
+    printf("coding coeff %d: %d\n", i, data_packet_rcv.coding_info[i].packet_coeff);
+  } 
+  
+  printf("payload: %s\n", data_packet_rcv.payload);
+
+
+  Ack_Pckt* ack_packet = ackPacket(4, 5);
+  Ack_Pckt ack_packet_rcv;
+  
+  memset(buf, 0, 1500);
+
+  marshallAck(*ack_packet, buf);
+  unmarshallAck(&ack_packet_rcv, buf);
+
+  assert(ack_packet->tstamp == ack_packet_rcv.tstamp);
+  assert(ack_packet->flag == ack_packet_rcv.flag);
+  assert(ack_packet->ackno == ack_packet_rcv.ackno);
+  assert(ack_packet->blockno == ack_packet_rcv.blockno);
+
   fprintf(stdout, "Passed all marshalling tests!\n");
 }
 

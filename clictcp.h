@@ -24,7 +24,7 @@ int start[3], endd[3];
 
 /* stats */
 double et,minrtt=999999., maxrtt=0, avrgrtt;
-double due,rcvt,st,et,secs();
+double due,rcvt,st,et;
 
 unsigned int rtt_base=0; // Used to keep track of the rtt
 unsigned int tempno;
