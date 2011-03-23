@@ -20,11 +20,16 @@ socklen_t clilen = sizeof cli_addr;
 double dbuff[BUFFSIZE/8];
 char *buff = (char *)dbuff;
 
+uint32_t curr_block; // Current block number
 Block_t blocks[2];
+
+//---------- CTCP specific variables --------------//
+uint8_t coding_wnd;
+
 
 /* TCP pcb like stuff */
 int dupacks;			/* consecutive dup acks recd */
-unsigned int snd_nxt; 		/* send next */
+uint16_t snd_nxt; 		/* send next */
 unsigned int snd_max; 		/* biggest send */
 unsigned int snd_una; 		/* last unacked */
 unsigned int snd_fack;		/* Forward (right) most ACK */

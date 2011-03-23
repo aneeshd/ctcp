@@ -93,21 +93,9 @@ marshall_test(){
   Data_Pckt data_packet_rcv;
   char* buf = malloc(1500);
   
-  coding_info_t p1;
-  coding_info_t p2;
-  coding_info_t p3;
-  
-  p1.packet_id = 1;
-  p2.packet_id = 2;
-  p3.packet_id = 3;
-
-  p1.packet_coeff = random()%256;
-  p2.packet_coeff = random()%256;
-  p3.packet_coeff = random()%256;
-  
-  data_packet->coding_info[0] = p1;
-  data_packet->coding_info[1] = p2;
-  data_packet->coding_info[2] = p3;
+  data_packet->packet_coeff[0] = random()%256;
+  data_packet->packet_coeff[1] = random()%256;
+  data_packet->packet_coeff[2] = random()%256;
 
   data_packet->flag = PARTIAL_BLK;
   data_packet->blk_len = 23;
@@ -130,12 +118,10 @@ marshall_test(){
     
   int i;
   for(i = 0; i < data_packet->num_packets; i++){
-    printf("packet id: %d\n", data_packet->coding_info[i].packet_id);
-    printf("coding coeff %d: %d\n", i, data_packet->coding_info[i].packet_coeff);
+    printf("coding coeff %d: %d\n", i, data_packet->packet_coeff[i]);
   } 
   
   printf("payload: %s\n", data_packet->payload);
-
 
   assert(data_packet->tstamp == data_packet_rcv.tstamp);
   assert(data_packet->flag == data_packet_rcv.flag);
@@ -146,8 +132,7 @@ marshall_test(){
   
 
   for(i = 0; i < data_packet->num_packets; i++){
-    assert(data_packet->coding_info[i].packet_id == data_packet_rcv.coding_info[i].packet_id);
-    assert(data_packet->coding_info[i].packet_coeff == data_packet_rcv.coding_info[i].packet_coeff);
+    assert(data_packet->packet_coeff[i] == data_packet_rcv.packet_coeff[i]);
   }
 
   assert(strcmp(data_packet->payload, data_packet_rcv.payload) == 0);
@@ -162,8 +147,7 @@ marshall_test(){
   printf("numpackets: %d\n", data_packet_rcv.num_packets);
     
   for(i = 0; i < data_packet_rcv.num_packets; i++){
-    printf("packet id: %d\n", data_packet_rcv.coding_info[i].packet_id);
-    printf("coding coeff %d: %d\n", i, data_packet_rcv.coding_info[i].packet_coeff);
+    printf("coding coeff %d: %d\n", i, data_packet_rcv.packet_coeff[i]);
   } 
   
   printf("payload: %s\n", data_packet_rcv.payload);

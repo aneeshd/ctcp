@@ -18,11 +18,6 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK} flag_t;
 typedef int socket_t;
 typedef struct timeval timeval_t;
 
-typedef  struct{
-  uint8_t packet_id; // The id of the packet that is mixed wrt blockno
-  uint8_t packet_coeff; // The coefficient of the packet that is mixed
-} coding_info_t;
-
 typedef struct{
 
   double tstamp;
@@ -30,8 +25,10 @@ typedef struct{
   uint16_t  seqno; // Sequence # of the coded packet sent
   uint32_t  blockno; // Base of the current block
   uint8_t blk_len; // The number of packets in the block
+  uint8_t start_packet; // The # of the first packet that is mixed
   uint8_t  num_packets; // The number of packets that are mixed
-  coding_info_t* coding_info;
+  uint8_t* packet_coeff; // The coefficients of the mixed packets
+
   //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
   char *payload;  // The payload size is negotiated at the beginning of the transaction
 } Data_Pckt;

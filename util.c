@@ -38,11 +38,11 @@ dataPacket(uint16_t seqno, uint32_t blockno, uint8_t num_packets){
   Data_Pckt* packet = malloc(sizeof(Data_Pckt));
   packet->tstamp = getTime();
   packet->flag = NORMAL;
-  packet->blk_len = BLOCK_SIZE;
   packet->seqno = seqno;
   packet->blockno = blockno;
+  packet->blk_len = BLOCK_SIZE;
   packet->num_packets = num_packets;
-  packet->coding_info = malloc(num_packets*sizeof(coding_info_t));
+  packet->packet_coeff = malloc(num_packets*sizeof(uint8_t));
   packet->payload = malloc(PAYLOAD_SIZE);
   return packet;
 }
@@ -68,9 +68,9 @@ marshallData(Data_Pckt msg, char* buf){
   int part = 0;  
   
   int partial_blk_flg = 0;
-  if (msg.flag == PARTIAL_BLK) partial_blk_flg = 1;
+  if (msg.flag == PARTIAL_BLK) partial_blk_flg = sizeof(msg.blk_len);
   
-  int size = PAYLOAD_SIZE + sizeof(double) + (partial_blk_flg) + 2 + 4 + 1 + msg.num_packets*2; // the total size in bytes of the current packet
+  int size = PAYLOAD_SIZE + sizeof(double) + sizeof(flag_t) + sizeof(msg.seqno) + sizeof(msg.blockno) + (partial_blk_flg) + sizeof(msg.start_packet) + sizeof(msg.num_packets) + msg.num_packets*sizeof(msg.packet_coeff); // the total size in bytes of the current packet
 
   //Set to zeroes before starting
   memset(buf, 0, size);
@@ -87,23 +87,23 @@ marshallData(Data_Pckt msg, char* buf){
   memcpy(buf + index, &msg.blockno, (part = sizeof(msg.blockno)));
   index += part;
 
-  if (partial_blk_flg == 1){
+  if (partial_blk_flg > 0){
     memcpy(buf + index, &msg.blk_len, (part = sizeof(msg.blk_len)));
     index += part;
   }
+  memcpy(buf + index, &msg.start_packet, (part = sizeof(msg.start_packet)));
+  index += part;
+
   memcpy(buf + index, &msg.num_packets, (part = sizeof(msg.num_packets)));
   index += part;
 
   int i;
   for(i = 0; i < msg.num_packets; i ++){
-    memcpy(buf + index, &msg.coding_info[i].packet_id, (part = sizeof(msg.coding_info[i].packet_id)));
-    index += part;
-
-    memcpy(buf + index, &msg.coding_info[i].packet_coeff, (part = sizeof(msg.coding_info[i].packet_coeff)));
+    memcpy(buf + index, &msg.packet_coeff[i], (part = sizeof(msg.packet_coeff[i])));
     index += part;
   }
 
-  memcpy(buf + index, msg.payload, part = PAYLOAD_SIZE);
+  memcpy(buf + index, msg.payload, (part = PAYLOAD_SIZE));
   index += part;
   
   /*
@@ -178,19 +178,21 @@ unmarshallData(Data_Pckt* msg, char* buf){
   if (msg->flag == PARTIAL_BLK){
     memcpy(&msg->blk_len, buf+index, (part = sizeof(msg->blk_len)));
     index += part;    
-  }  else msg->blk_len = BLOCK_SIZE;
+  } else {
+    msg->blk_len = BLOCK_SIZE;
+  }
+
+  memcpy(&msg->start_packet, buf+index, (part = sizeof(msg->start_packet)));
+  index += part;
  
   memcpy(&msg->num_packets, buf+index, (part = sizeof(msg->num_packets)));
   index += part;
 
-
-  msg->coding_info = malloc(msg->num_packets*sizeof(coding_info_t));
+  msg->packet_coeff = malloc(msg->num_packets*sizeof(uint8_t));
 
   int i;
   for(i = 0; i < msg->num_packets; i++){
-    memcpy(&msg->coding_info[i].packet_id, buf+index, (part = sizeof(msg->coding_info[i].packet_id)));
-    index += part;
-    memcpy(&msg->coding_info[i].packet_coeff, buf+index, (part = sizeof(msg->coding_info[i].packet_coeff)));
+    memcpy(&msg->packet_coeff[i], buf+index, (part = sizeof(msg->packet_coeff[i])));
     index += part;
   }
 

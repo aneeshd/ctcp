@@ -21,6 +21,9 @@
 #include "util.h"
 #include "srvctcp.h"
 
+#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
+#define MAX(x,y) (y)^((x) ^ (y) & - ((x) > (y)))
+
 int sndbuf = 32768;		/* udp send buff, bigger than mss */
 int rcvbuf = 32768;		/* udp recv buff for ACKs*/
 int mss=1472;			/* user payload, can be > MTU for UDP */
@@ -55,6 +58,8 @@ main (int argc, char** argv){
   struct addrinfo hints, *servinfo;
   socket_t	sockfd;			/* network file descriptor */
   int rv;
+
+  srandom(getpit());
   
 	if (argc > 1) configfile = argv[1];
 
@@ -339,47 +344,38 @@ send_segs(socket_t sockfd){
 
 
 void
-send_one(socket_t sockfd, unsigned int n){
-	/* send msg number n */
-	int i;
-  int payload_size = mss - HDR_SIZE;
-  Ctcp_Pckt *msg = Packet(n, payload_size);
+send_one(socket_t sockfd, uint32_t blockno){
+  // Send coded packet from block number blockno
 
-  if(n != file_position){
-    // Reposition the file position indicator appropriately
-    fseek(snd_file, (n-1)*payload_size, SEEK_SET);
-    file_position =n;
+	int i, j;
+  uint8_t block_len = blocks[blockno%2].len;
+  uint8_t num_packets = MIN(coding_wnd, block_len);
+  Data_Pckt *msg = dataPacket(snd_nxt, blockno, num_packets);
+
+  if(block_len < BLOCK_SIZE){
+    msg->flag = PARTIAL_BLK;
+    msg->blk_len = block_len;
   }
+
+  msg->start_packet = MIN(MAX(random()%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd + 1, 0));
   
-  msg->payload_size = fread(msg->payload, 1, payload_size, snd_file);
+	if (debu1g > 3) fprintf(db,"%f %d xmt\n", msg->tstamp-et,n);
+  
+  memset(msg->payload, 0, PAYLOAD_SIZE);
 
-  if(feof(snd_file)){
-    maxpkts = file_position;
+  for(i = 0; i < num_packets; i++){
+    msg->packet_coeff[i] = (uint8_t)random()%256;
+    for(j = 0; j < PAYLOAD_SIZE; j++){
+      msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%2].content[(msg->start_packet+i)*PAYLOAD_SIZE+j]);
+    }
   }
-
-  assert(msg->payload_size + HDR_SIZE <= mss);
-
-	if (snd_nxt >= snd_max) snd_max = snd_nxt+1;
-
-	if (debu1g > 3) 
-    {
-      fprintf(db,"%f %d xmt\n",
-              msg->tstamp-et,n);
-    }
-
-  /*fmf-check to see if this pkt should be dropped*/
-	/* could add a drop_rate too with rand() */
-	for (i=0; droplist[i]; i++) if (droplist[i] == n) {
-      droplist[i]=-1;  /* do it once */
-      return; 
-    }
 
   // Marshall msg into buf
-  marshall(*msg, buff);
+  int message_size = marshallData(*msg, buff);
 
   do{
 
-    if((numbytes = sendto(sockfd, buff, mss, 0, 
+    if((numbytes = sendto(sockfd, buff, message_size, 0, 
                           &cli_addr, clilen)) == -1){
       perror("atousrv: sendto");
       exit(1);
@@ -387,13 +383,14 @@ send_one(socket_t sockfd, unsigned int n){
   
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
 
-  if(numbytes != mss){
+  if(numbytes != message_size){
     err_sys("write");
   }
 
-	if (debug > 8)printf("send %d snd_nxt %d snd_max %d\n", n,snd_nxt,snd_max);
+	if (debug > 8)printf("blockno %d snd_nxt %d \n", blockno, snd_nxt);
+
 	opkts++;
-  file_position++;
+  free(msg->packet_coeff);
   free(msg->payload);
   free(msg);
 }
@@ -938,15 +935,15 @@ readBlock(uint32_t blockno){
   blocks[blockno%2].len = 0;
 
   while(blocks[blockno%2].len < BLOCK_SIZE && !feof(snd_file)){
-    char* tmp = malloc(PAYLOAD_SIZE + 2);
-    memset(tmp, 0, PAYLOAD_SIZE + 2); // This is done to pad with 0's 
-    uint16_t bytes_read = (uint16_t) fread(tmp + 2, 1, PAYLOAD_SIZE, snd_file);
+    char* tmp = malloc(PAYLOAD_SIZE);
+    memset(tmp, 0, PAYLOAD_SIZE); // This is done to pad with 0's 
+    uint16_t bytes_read = (uint16_t) fread(tmp + 2, 1, PAYLOAD_SIZE-2, snd_file);
     bytes_read = htons(bytes_read);
     memcpy(tmp, &bytes_read, sizeof(uint16_t));
     
     // Insert this pointer into the blocks datastructure
+    blocks[blockno%2].content[blocks[blockno%2].len] = tmp;
     blocks[blockno%2].len++;
-    blocks[blockno%2].content[counter] = tmp;
   }
 }
 
