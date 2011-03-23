@@ -21,15 +21,16 @@ double dbuff[BUFFSIZE/8];
 char *buff = (char *)dbuff;
 
 uint32_t curr_block; // Current block number
+bool done;
 Block_t blocks[2];
 
 //---------- CTCP specific variables --------------//
-uint8_t coding_wnd;
-
+int coding_wnd;
+uint32_t maxblockno = 0; // 0 denoting infty, whenever we reach the maximum block of the file, we set it
 
 /* TCP pcb like stuff */
 int dupacks;			/* consecutive dup acks recd */
-uint16_t snd_nxt; 		/* send next */
+//uint16_t snd_nxt; 		/* send next */
 unsigned int snd_max; 		/* biggest send */
 unsigned int snd_una; 		/* last unacked */
 unsigned int snd_fack;		/* Forward (right) most ACK */
@@ -105,7 +106,7 @@ void ctrlc();
 /*
  * 
  */
-void done(void);
+void endSession(void);
 
 void terminate(socket_t fd);
 

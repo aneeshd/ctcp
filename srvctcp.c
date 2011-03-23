@@ -24,6 +24,8 @@
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
 #define MAX(x,y) (y)^((x) ^ (y) & - ((x) > (y)))
 
+#define SND_CWND 5
+
 int sndbuf = 32768;		/* udp send buff, bigger than mss */
 int rcvbuf = 32768;		/* udp recv buff for ACKs*/
 int mss=1472;			/* user payload, can be > MTU for UDP */
@@ -48,7 +50,7 @@ void
 ctrlc(){
 	et = getTime()-et;
 	maxpkts=snd_max;
-	done();
+	endSession();
 	exit(1);
 }
 
@@ -71,8 +73,6 @@ main (int argc, char** argv){
   } else {
     snd_ssthresh = 2147483647;  /* normal TCP, infinite */
   }
-
-	snd_cwnd = initsegs;
 
   // Setup the hints struct
   memset(&hints, 0, sizeof hints);
@@ -129,40 +129,16 @@ main (int argc, char** argv){
 
 
     if (debug > 3) openLog();
+
     doit(sockfd);
     terminate(sockfd); // terminate 
-    done();
+    endSession();
     fclose(snd_file);
     fclose(db);
     restart();
   }
   return 0;
 }
-
-void 
-terminate(socket_t sockfd){
-  Ctcp_Pckt *msg = Packet(maxpkts+1, 0);
-  
-  // FIN_CLI
-  msg->flag = FIN_CLI;
-
-  marshall(*msg, buff);
-
-  do{
-    if((numbytes = sendto(sockfd, buff, mss, 0, &cli_addr, clilen)) == -1){
-      perror("atousrv: sendto");
-      exit(1);
-    }  
-  } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
-
-  if(numbytes != mss){
-    err_sys("write");
-  }
-  free(msg->payload);
-  free(msg);
-}
-
-
 
 /*
  * This is contains the main functionality and flow of the client program
@@ -189,29 +165,33 @@ doit(socket_t sockfd){
 	/* send out initial segments, then go for it */
 	et = getTime(); 
 
-	snd_fack = snd_una = snd_nxt = file_position = 1;
+  done = FALSE;
+  curr_block = 1; 
+  readBlock(curr_block);
 
-	if (bwe_on) bwe_pkt = snd_nxt;
-	if (maxpkts == 0) maxpkts = 1000000000; // Default time is 10 seconds
+  snd_cwnd = SND_CWND;
+
+  //	if (bwe_on) bwe_pkt = snd_nxt;
+  //	if (maxpkts == 0) maxpkts = 1000000000; // Default time is 10 seconds
 
 	due = getTime() + timeout;  /* when una is due */
 
   // This is where the segments are sent
 	send_segs(sockfd);
   
-  Ctcp_Pckt *ack = malloc(sizeof(Ctcp_Pckt));
+  Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
 
-	while(snd_una <= maxpkts){
+	while(!done){
 
 		r = timedread(sockfd, tick);
 
 		if (r > 0) {  /* ack ready */
       
       // The recvfrom should be done to a separate buffer (not buff)
-			r= recvfrom(sockfd, buff, mss, 0, &cli_addr, &clilen); // TODO maybe we can set flags so that recvfrom has a timeout of tick seconds
+			r= recvfrom(sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen); // TODO maybe we can set flags so that recvfrom has a timeout of tick seconds
 
       // Unmarshall the ack from the buff
-      unmarshall(ack, buff);
+      unmarshallAck(ack, buff);
       
 			if (r <= 0) err_sys("read");
 			rcvt = getTime();
@@ -234,27 +214,31 @@ doit(socket_t sockfd){
 				break;
 			}
 			if (debug > 1)fprintf(stderr,
-                            "timerxmit %6.2f pkt %d snd_nxt %d snd_max %d  snd_cwnd %d  thresh %d\n",
-                            t-et,snd_una,snd_nxt, snd_max, (int)snd_cwnd,snd_ssthresh);
+                            "timerxmit %6.2f blockno %d pkt %d  snd_nxt %d  snd_cwnd %d  thresh %d\n",
+                            t-et,curr_block, 
+                            blocks[curr_block%2].snd_una, 
+                            blocks[curr_block%2].snd_nxt, 
+                            (int)snd_cwnd,
+                            snd_ssthresh);
 			timeouts++;
 			rxmts++;
 			bwe_pkt=0;
 			idle++;
 			dupacks=0; dup_acks=0;
-      /* See: http://www.icir.org/floyd/papers/draft-floyd-tcp-highspeed-00c.txt */
-			if (floyd) floyd_aimd(1);  /* adjust increment*/
-			snd_ssthresh = snd_cwnd*multiplier; /* shrink */
+
+			//snd_ssthresh = snd_cwnd*multiplier; /* shrink */
 
 			if (snd_ssthresh < initsegs) {
 			  snd_ssthresh = initsegs;
       }
 
-			snd_cwnd = initsegs;  /* drop window */
+			//snd_cwnd = initsegs;  /* drop window */
       /*newreno is implemented*/
-      snd_nxt = snd_una;
+      blocks[curr_block%2].snd_una = blocks[curr_block%2].snd_nxt;
+      //      snd_nxt = snd_una; XXX: this is the old version
       send_segs(sockfd);  /* resend */
 
-			due = t + 2*timeout;  /* fancy exp. backoff? */
+			due = t + timeout;  
 		}
 	}  /* while more pkts */
 
@@ -263,83 +247,40 @@ doit(socket_t sockfd){
   return 0;
 }
 
+void 
+terminate(socket_t sockfd){
+  Data_Pckt *msg = dataPacket(blocks[curr_block%2].snd_nxt, curr_block, 0);
+  
+  // FIN_CLI
+  msg->flag = FIN_CLI;
+
+  int size = marshallData(*msg, buff);
+
+  do{
+    if((numbytes = sendto(sockfd, buff, size, 0, &cli_addr, clilen)) == -1){
+      perror("atousrv: sendto");
+      exit(1);
+    }  
+  } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
+
+  if(numbytes != mss){
+    err_sys("write");
+  }
+  free(msg->payload);
+  free(msg);
+}
 
 void
 send_segs(socket_t sockfd){
-	int win=0, trimwin=0, retran=0;
-  
-	if (snd_cwnd > rcvrwin) { 
-	  snd_cwnd = rcvrwin; /* contain growth */
+  int win = 0;
+
+  win = snd_cwnd - (blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una);
+  if (win <= 0) return;  /* no available window => done */
+
+	while (win--) {
+    send_one(sockfd, curr_block);
+    blocks[curr_block%2].snd_nxt++;
   }
-  /*Compute #pkts that can be sent in the present window*/
-	if(rampdown && FastRecovery) {
-	  trimwin = (int)((snd_cwnd < rcvrwin ? (double) snd_cwnd : (double) rcvrwin) + wintrim);
-	  if(fack) {
-	    awnd = snd_nxt - snd_fack + retran_data;
-	    win = trimwin - awnd;
-      if(debug > 5)
-        fprintf(db, "  win: %d = %d - %d when %d = %d - %d + %d\n", 
-                win, trimwin, awnd, awnd, snd_nxt, snd_fack, retran_data);
-	  }
-	  else {
-	    win = trimwin - Pipe;
-      if(debug > 5)
-        fprintf(db, "  win: %d = %d - %d\n", win, trimwin, Pipe);
-	  }
-	}
-	else if(FastRecovery) {
-	  if(fack) {
-	    awnd = snd_nxt - snd_fack + retran_data;
-	    win = (int)snd_cwnd - awnd;
-      if(debug > 5)
-        fprintf(db, "  win: %d = %d - %d when %d = %d - %d + %d\n", 
-                win, (int)snd_cwnd, awnd, awnd, snd_nxt, snd_fack, retran_data);
-	  }
-    else 
-	    if(sack) {
-	      win = (int)snd_cwnd - Pipe;
-        if(debug > 5)
-          fprintf(db, "  win: %d = %d - %d\n", win, (int)snd_cwnd, Pipe);
-	    }
-  }
-	else {
-	  win = snd_cwnd - (snd_nxt - snd_una);
-    if(debug > 5 && !newreno)
-      fprintf(db, "  win: %d = %d - (%d - %d)\n", win, (int)snd_cwnd, snd_nxt, snd_una);
-	}
-  
-	if (win <= 0 || snd_nxt >= maxpkts) return;  /* no avail window |done */
-	if (win > maxburst) maxburst=win; //
-  /*Can't send more than a specified burst_limit at a time*/
-	if (burst_limit && (win > burst_limit)) // setting burst_limit = 0 is the same as infc
-	  win = burst_limit;
-	if(FastRecovery) 
-    retran = GetNextRetran();
-	while (win-- && ((snd_nxt < maxpkts) || (retran>0))) {
-	  if(FastRecovery) {
-      if(retran>0) {
-        send_one(sockfd, retran);
-        MarkRetran(retran, snd_nxt-1);
-        rxmts++; 
-        packs++;
-        retran_data++;
-        
-        if ( debug > 1)fprintf(stderr,
-                               "packrxmit pkt %d nxt %d max %d cwnd %d  thresh %d recover %d una %d\n",
-                               retran,snd_nxt, snd_max, (int)snd_cwnd, snd_ssthresh,snd_recover,snd_una);
-      }
-      else {
-        send_one(sockfd, snd_nxt);
-        snd_nxt++;
-      }
-      Pipe++;
-      retran = GetNextRetran();
-	  }
-    else {
-      send_one(sockfd, snd_nxt);
-      snd_nxt++;
-	  }
-	}
 }
 
 
@@ -350,7 +291,7 @@ send_one(socket_t sockfd, uint32_t blockno){
 	int i, j;
   uint8_t block_len = blocks[blockno%2].len;
   uint8_t num_packets = MIN(coding_wnd, block_len);
-  Data_Pckt *msg = dataPacket(snd_nxt, blockno, num_packets);
+  Data_Pckt *msg = dataPacket(blocks[curr_block%2].snd_nxt, blockno, num_packets);
 
   if(block_len < BLOCK_SIZE){
     msg->flag = PARTIAL_BLK;
@@ -359,14 +300,14 @@ send_one(socket_t sockfd, uint32_t blockno){
 
   msg->start_packet = MIN(MAX(random()%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd + 1, 0));
   
-	if (debu1g > 3) fprintf(db,"%f %d xmt\n", msg->tstamp-et,n);
+	if (debug > 3) fprintf(db,"%f %d xmt\n", msg->tstamp-et,n);
   
   memset(msg->payload, 0, PAYLOAD_SIZE);
 
   for(i = 0; i < num_packets; i++){
     msg->packet_coeff[i] = (uint8_t)random()%256;
     for(j = 0; j < PAYLOAD_SIZE; j++){
-      msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%2].content[(msg->start_packet+i)*PAYLOAD_SIZE+j]);
+      msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%2].content[msg->start_packet+i][j]);
     }
   }
 
@@ -387,7 +328,7 @@ send_one(socket_t sockfd, uint32_t blockno){
     err_sys("write");
   }
 
-	if (debug > 8)printf("blockno %d snd_nxt %d \n", blockno, snd_nxt);
+	if (debug > 8)printf("blockno %d snd_nxt %d \n", blockno, blocks[curr_block%2].snd_nxt);
 
 	opkts++;
   free(msg->packet_coeff);
@@ -397,7 +338,7 @@ send_one(socket_t sockfd, uint32_t blockno){
 
 
 void
-done(void){
+endSession(void){
 	char myname[128];
   char* host = "Host"; // TODO: extract this from the packet
 
@@ -424,7 +365,7 @@ done(void){
   if (vegas) printf("vsscnt %d vdecr %d v0 %d vrtt %f vdelta %f\n",
                     vsscnt,vdecr, v0,vrtt,vdelta);
   printf("snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d snd_max %d\n",
-         snd_nxt,(int)snd_cwnd,snd_una,snd_ssthresh,snd_max);
+         blocks[curr_block%2].snd_nxt,(int)snd_cwnd, blocks[curr_block%2].snd_una,snd_ssthresh,snd_max);
   
   printf("goodacks %d cumacks %d ooacks %d\n", goodacks, cumacks, ooacks);
 }
@@ -432,10 +373,10 @@ done(void){
 void
 handle_ack(socket_t sockfd, Ctcp_Pckt *ack){
 	double rtt;
-	int ackd;	/* ack advance */
   
-	ackno = ack->msgno;
-  
+	ackno = ack->ackno;
+ 
+  //------------- RTT calculations --------------------------// 
 	if (debug > 8 )printf("ack rcvd %d\n",ackno);
   /*fmf-rtt & rto calculations*/
 	rtt = rcvt - ack->tstamp;
@@ -459,98 +400,40 @@ handle_ack(socket_t sockfd, Ctcp_Pckt *ack){
   }
 	/* rtt bw estimation, vegas like */
   if (bwe_on && bwe_pkt && ackno > bwe_pkt) bwe_calc(rtt);
-  
-	if (ackno > snd_max || ackno < snd_una ) {
+  //----------------------------------------------------------------------------//
+
+  if (ack->blockno > curr_block){
+
+    if(maxblockno && ack->blockno > maxblockno){
+      done = TRUE;
+      return;
+    }
+
+    freeBlock(curr_block);
+    curr_block++;
+    readBlock(curr_block);
+  }
+
+  if (ackno > blocks[curr_block%2].snd_nxt 
+      || ackno <= blocks[curr_block%2].snd_una 
+      || ack->blockno < curr_block 
+      || ack->blockno > curr_block) {
 		/* bad ack */
 		if (debug > 5) fprintf(stderr,
-                           "badack %d snd_max %d snd_nxt %d snd_una %d\n",
-                           ackno, snd_max, snd_nxt, snd_una);
+                           "badack %d snd_nxt %d snd_una %d\n",
+                           ackno, blocks[curr_block%2].snd_nxt, blocks[curr_block%2].snd_una);
 		badacks++;
-		if ( ackno < snd_una ) dupacks=0; /* out of order */
 	} else  {
     goodacks++;
+    blocks[curr_block%2].snd_una = ackno;
 
-    if (ackno == snd_una ){ // This probably should be ackno == snd_una-1 (unless snd_una is defined differently)
-      /* dup acks */
-      dups++;
-      if (++dupacks == dup_thresh) { 
-        /* rexmit threshold */
-        if (debug > 1){
-          fprintf(stderr,
-                  "3duprxmit %6.2f pkt %d nxt %d max %d cwnd %d thresh %d recover %d %d\n",
-                  rcvt-et,
-                  snd_una,snd_nxt,snd_max,(int)snd_cwnd,
-                  snd_ssthresh,snd_recover,(int)vdelta);
-        }
-        dup3s++;
-        rxmts++;
-        bwe_pkt=0;
-        if (newreno && ackno < snd_recover ){
-          /* false retransmit, dont shrink */
-          dupacks=0;
-          snd_cwnd++;  /* why not advance by dupacks? */
-          /* ? freebsd doesn't rexmit una ? */
-        } else {
-          if (floyd) floyd_aimd(1);  /* adjust increment*/
-          snd_cwnd = snd_cwnd*multiplier;  /* shrink */
-          if (snd_cwnd < initsegs) snd_cwnd = initsegs;
-          snd_recover = snd_max;   /* newreno */
-          snd_ssthresh = snd_cwnd;
-          snd_cwnd += dupacks;  /* inflate */
-        }
-        due = rcvt + timeout;   /*restart timer */
-        send_one(sockfd,snd_una);   /* retransmit */
-        return;
-      } else if (dupacks > dup_thresh) {
-        /* if dupacks < 3 worry about linear incr. ? */
-        snd_cwnd++;  /* dup, but stuff still leaving net*/
-        send_segs(sockfd);   /* right edge recovery */
-      } else {
-        /* dupacks < dup_thresh */
-        if(snd_nxt < maxpkts) {
-          send_one(sockfd, snd_nxt);  /* rfc 3042 */
-          snd_nxt++;
-        }
-      }
-      
-    } else {
-      /* advancing ack */
-      if (newreno == 0){
-        if (dupacks > dup_thresh && snd_cwnd > snd_ssthresh)
-          snd_cwnd = snd_ssthresh; /* deflate */
-        dupacks=0;  /* clear */
-      } else if (dupacks > dup_thresh && !tcp_newreno(sockfd) ){
-        /* in newreno but not a partial ack,
-         *inflation left us with ssthresh outstanding
-         * rather than send a burst, use slow start
-         */
-        int inflight = snd_max - ackno + 4; /* init win 4 */
-        if (burst_limit && inflight < snd_ssthresh &&
-            (snd_cwnd-snd_ssthresh)>burst_limit)
-          snd_cwnd = inflight;
-        else snd_cwnd = snd_ssthresh; /* deflate */
-        dupacks=0;  /* clear */
-      }
-      if (dupacks < dup_thresh) dupacks=0;  /* clear */
-      ackd = ackno-snd_una;
-      if (ackd > maxack) maxack = ackd;
-      snd_una = ackno;
-      if (snd_nxt < ackno) snd_nxt = ackno; 
-      if (bwe_on && ackno > snd_recover && bwe_pkt == 0){
-        bwe_prev = bwe_pkt = snd_nxt; /* out of recovery */
-        vrttmin = 999999;  /* restart vegas collecting */
-        vrttsum=vcnt = vrttmax = 0;
-        initial_ss = 0;
-        if (debug > 3 ) fprintf(stderr, "CAexit %6.2f ack %d\n",
-                                rcvt-et, ackno);
-      }
-      idle=0;
-      due = rcvt + timeout;   /*restart timer */
-      advance_cwnd();
-      send_segs(sockfd);  /* send some if we can */
-    }
+    idle=0;
+    due = rcvt + timeout;   /*restart timer */
+    //advance_cwnd();
+    send_segs(sockfd);  /* send some if we can */
   }
 }
+
 
 /*
  * Checks for partial ack.  If partial ack arrives, force the retransmission
@@ -558,7 +441,7 @@ handle_ack(socket_t sockfd, Ctcp_Pckt *ack){
  * 1.  By setting snd_nxt to ackno, this forces retransmission timer to
  * be started again.  If the ack advances at least to snd_recover, return 0.
  */
-
+/*
 int
 tcp_newreno(socket_t sockfd){
 	if (ackno < snd_recover){
@@ -571,19 +454,19 @@ tcp_newreno(socket_t sockfd){
                            snd_ssthresh,snd_recover,snd_una);
 		rxmts++;
 		packs++;
-		due = rcvt + timeout;   /*restart timer */
+		due = rcvt + timeout;   restart timer 
 		snd_cwnd = 1 + ackno - snd_una;
 		snd_nxt = ackno;
 		send_segs(sockfd); 
 		snd_cwnd = ocwnd;
 		if (onxt > snd_nxt) snd_nxt = onxt;
-		/* partial deflation, una not updated yet */
+//partial deflation, una not updated yet
 		snd_cwnd -= (ackno - snd_una -1);
 		if (snd_cwnd < initsegs) snd_cwnd = initsegs;
-		return TRUE;  /* yes was a partial ack */
+return TRUE;  //yes was a partial ack 
 	}
 	return FALSE;
-}
+}*/
 
 
 // Perhaps this is unnecesary.... No need to use select -> maybe use libevent (maybe does not have timeou?)
@@ -853,14 +736,14 @@ bwe_calc(double rtt){
     else if (vegas== 3) vrtt = vrttsum/vcnt;
     else if (vegas== 4) vrtt = vrttmax;
     else vrtt = rtt;  /* last rtt */
-    vdelta = minrtt * ((snd_nxt - snd_una)/minrtt - (snd_nxt - bwe_pkt)/vrtt);
+    vdelta = minrtt * ((blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una)/minrtt - (blocks[curr_block%2].snd_nxt - bwe_pkt)/vrtt);
     if (vdelta > max_delta) max_delta=vdelta;  /* vegas delta */
   } else vdelta=0;  /* no samples */
   bwertt = 8.e-6 * mss * (ackno-bwe_prev-1)/rtt; // shift by 20 to the left to convert to Mbits
   if (bwertt > bwertt_max) bwertt_max = bwertt;
   if (debug > 4 ) fprintf(stderr,"bwertt %f %f %f %d %f\n",rcvt-et,bwertt,rtt,ackno-bwe_prev-1,vdelta);
   bwe_prev = bwe_pkt;
-  bwe_pkt = snd_nxt;
+  bwe_pkt = blocks[curr_block%2].snd_nxt;
   vrttmin=999999;
   vrttsum=vcnt=vrttmax=0;
 }
@@ -881,7 +764,7 @@ advance_cwnd(void){
         vsscnt++;   /* count vegas ss adjusts*/
         if ( debug > 2) fprintf(stderr,
                                 "vss %6.2f pkt %d nxt %d max %d  cwnd %d  thresh %d recover %d %f %f\n",
-                                rcvt-et, snd_una,snd_nxt, snd_max, (int)snd_cwnd,
+                                rcvt-et, blocks[curr_block%2].snd_una, blocks[curr_block%2].snd_nxt, snd_max, (int)snd_cwnd,
                                 snd_ssthresh,snd_recover,vdelta,vrtt);
       }
       vinss = 1;
@@ -933,7 +816,9 @@ readBlock(uint32_t blockno){
 
   // TODO: Make sure that the memory in the block is released before calling this function
   blocks[blockno%2].len = 0;
-
+  blocks[blockno%2].snd_nxt = 1;
+  blocks[blockno%2].snd_una = 1;
+  
   while(blocks[blockno%2].len < BLOCK_SIZE && !feof(snd_file)){
     char* tmp = malloc(PAYLOAD_SIZE);
     memset(tmp, 0, PAYLOAD_SIZE); // This is done to pad with 0's 
@@ -944,6 +829,10 @@ readBlock(uint32_t blockno){
     // Insert this pointer into the blocks datastructure
     blocks[blockno%2].content[blocks[blockno%2].len] = tmp;
     blocks[blockno%2].len++;
+  }
+
+  if(feof(snd_file)){
+    maxblockno = blockno;
   }
 }
 
@@ -989,6 +878,7 @@ void
 restart(void){
   // Print to the db file to differentiate traces
   fprintf(stdout, "\n\n*************************************\n****** Starting New Connection ******\n*************************************\n");
+  done = FALSE;
 
   /* TCP pcb like stuff */
   dupacks = 0;			/* consecutive dup acks recd */

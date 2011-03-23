@@ -14,6 +14,7 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK} flag_t;
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 #define PAYLOAD_SIZE 1400
 #define BLOCK_SIZE 64 // Maximum # of packets in a block (Default block length)
+#define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint16_t) + sizeof(uint32_t)
 
 typedef int socket_t;
 typedef struct timeval timeval_t;
@@ -47,13 +48,12 @@ typedef struct{
 } Bare_Pckt; // This is the datastructure for holding packets before encoding
 
 typedef struct{ // TODO: this datastructure can store the dof's and other state related to the blocks
+  int snd_nxt; // The sequence number of the next packet to be sent from this block
+  int snd_una; // The last requested sequence number from this block
   uint32_t len; // Number of bare packets inside the block
-  char* content; // Array of bare content (packets)
+  char** content; // Array of pointers that point to the marshalled data of the bare packets
 } Block_t;
 
-
-void vntohl(int *p, double cnt);
-void vhtonl(int *p, double cnt);
 double getTime(void);
 Data_Pckt* dataPacket(uint16_t seqno, uint32_t blockno, uint8_t num_packets);
 Ack_Pckt* ackPacket(uint16_t ackno, uint32_t blockno);
