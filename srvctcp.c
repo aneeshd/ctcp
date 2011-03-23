@@ -22,7 +22,7 @@
 #include "srvctcp.h"
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
-#define MAX(x,y) (y)^((x) ^ (y) & - ((x) > (y)))
+#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
 #define SND_CWND 5
 
@@ -61,7 +61,7 @@ main (int argc, char** argv){
   socket_t	sockfd;			/* network file descriptor */
   int rv;
 
-  srandom(getpit());
+  srandom(getpid());
   
 	if (argc > 1) configfile = argv[1];
 
@@ -300,7 +300,7 @@ send_one(socket_t sockfd, uint32_t blockno){
 
   msg->start_packet = MIN(MAX(random()%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd + 1, 0));
   
-	if (debug > 3) fprintf(db,"%f %d xmt\n", msg->tstamp-et,n);
+	if (debug > 3) fprintf(db,"%f %d xmt\n", msg->tstamp-et, blockno);
   
   memset(msg->payload, 0, PAYLOAD_SIZE);
 
@@ -371,7 +371,7 @@ endSession(void){
 }
 
 void
-handle_ack(socket_t sockfd, Ctcp_Pckt *ack){
+handle_ack(socket_t sockfd, Ack_Pckt *ack){
 	double rtt;
   
 	ackno = ack->ackno;
@@ -485,7 +485,7 @@ timedread(socket_t sockfd, double t){
 void
 err_sys(char* s){
   perror(s);
-  done();
+  endSession();
   exit(1);
 }
 

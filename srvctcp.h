@@ -143,7 +143,12 @@ socket_t timedread(socket_t fd, double t);
 /*
  *
  */
-void handle_ack(socket_t fd, Ctcp_Pckt* ack);
+void handle_ack(socket_t fd, Ack_Pckt* ack);
+
+  
+void readBlock(uint32_t blockno);
+
+void freeBlock(uint32_t blockno);
 
 /*
  *
