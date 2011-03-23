@@ -108,6 +108,9 @@ marshall_test(){
   data_packet->coding_info[0] = p1;
   data_packet->coding_info[1] = p2;
   data_packet->coding_info[2] = p3;
+
+  data_packet->flag = PARTIAL_BLK;
+  data_packet->blk_len = 23;
   
   memset(data_packet->payload, 0, PAYLOAD_SIZE);
 
@@ -120,6 +123,7 @@ marshall_test(){
 
   printf("tstamp: %f\n", data_packet->tstamp);
   printf("flag: %d\n", data_packet->flag);
+  printf("block length: %d\n", data_packet->blk_len);
   printf("seqno: %d\n", data_packet->seqno);
   printf("blockno: %d\n", data_packet->blockno);
   printf("numpackets: %d\n", data_packet->num_packets);
@@ -135,6 +139,7 @@ marshall_test(){
 
   assert(data_packet->tstamp == data_packet_rcv.tstamp);
   assert(data_packet->flag == data_packet_rcv.flag);
+  assert(data_packet->blk_len == data_packet_rcv.blk_len);
   assert(data_packet->seqno == data_packet_rcv.seqno);
   assert(data_packet->blockno == data_packet_rcv.blockno);
   assert(data_packet->num_packets == data_packet_rcv.num_packets);
@@ -151,6 +156,7 @@ marshall_test(){
   printf("***Received Data***\n");
   printf("tstamp: %f\n", data_packet_rcv.tstamp);
   printf("flag: %d\n", data_packet_rcv.flag);
+  printf("block length: %d\n", data_packet_rcv.blk_len);
   printf("seqno: %d\n", data_packet_rcv.seqno);
   printf("blockno: %d\n", data_packet_rcv.blockno);
   printf("numpackets: %d\n", data_packet_rcv.num_packets);
@@ -179,10 +185,17 @@ marshall_test(){
   fprintf(stdout, "Passed all marshalling tests!\n");
 }
 
+void 
+mult_test(uint8_t x, uint8_t y){
+  printf("mult result = %d", FFmult(x,y));
+}
+
+
 int
 main(void){
   srandom(getpid());
   marshall_test();
+  //mult_test(255,1);
   return 0;
 }
 

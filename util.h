@@ -8,12 +8,12 @@ typedef int bool;
 #define FALSE 0
 
 // flags for Data_Pckt
-typedef enum {NORMAL=0, EXT_MOD, FIN_CLI} flag_t;
+typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK} flag_t;
 
 #define MSS 1472
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 #define PAYLOAD_SIZE 1400
-#define BLOCK_SIZE 64 // Maximum # of packets in a block
+#define BLOCK_SIZE 64 // Maximum # of packets in a block (Default block length)
 
 typedef int socket_t;
 typedef struct timeval timeval_t;
@@ -29,6 +29,7 @@ typedef struct{
   flag_t flag;
   uint16_t  seqno; // Sequence # of the coded packet sent
   uint32_t  blockno; // Base of the current block
+  uint8_t blk_len; // The number of packets in the block
   uint8_t  num_packets; // The number of packets that are mixed
   coding_info_t* coding_info;
   //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
@@ -67,4 +68,8 @@ void htonpData(Data_Pckt *msg);
 void htonpAck(Ack_Pckt *msg);
 void ntohpData(Data_Pckt *msg);
 void ntohpAck(Ack_Pckt *msg);
+uint8_t FFmult(uint8_t x, uint8_t y);
+uint8_t FFinv(uint8_t x);
+
+
 #endif // UTIL_H_
