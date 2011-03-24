@@ -1,9 +1,6 @@
 #port 2000
 rcvbuf 200000
 newreno 0
-fack 1
-sack 1
-rampdown 1
 rcvrwin 1000
 #thresh_init 0.5
 #increment 1
