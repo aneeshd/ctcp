@@ -4,6 +4,7 @@
 
 
 * Erase the scoreboard dependencies in srvctcp.c
+* Make sure that the memory in clictcp for blocks content and rows is freed in terminate
 * Implement network coding
 
 

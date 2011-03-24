@@ -6,7 +6,13 @@
 
 FILE *rcv_file;
 
-char *version = "$Revision: 1.8 $";
+//---------------- CTCP related variables ------------------//
+#define NUM_BLOCKS 2
+Coded_Block_t blocks[NUM_BLOCKS];
+uint8_t coding_wnd;
+uint32_t curr_block;
+
+//char *version = "$Revision: 1.8 $";
 double dbuff[BUFFSIZE/8];
 char *buff = (char *)dbuff;
 int sockfd, rcvspace;
@@ -36,38 +42,20 @@ unsigned int millisecs();
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
 void  ctrlc(void);
-
-/*
- */
 void err_sys(char *s);
+void bldack(Data_Pckt *msg, bool match);
 
-/*
- */
-void bldack(Ctcp_Pckt *msg, bool match);
+void normalize(uint8_t* coefficients, char*  payload, uint8_t size);
+int shift_row(uint8_t* buf, int len);
+bool isEmpty(uint8_t* coefficients, uint8_t size);
+void initCodedBlock(uint32_t blockno);
+void unwrap(uint32_t blockno);
+void writeAndFreeBlock(uint32_t blockno);
 
-/*
- */
-int check_order(int newpkt);
+bool unmarshallData(Data_Pckt* msg, char* buf);
+int marshallAck(Ack_Pckt msg, char* buf);
 
-/*
- */
-void addho(int n);
-
-/*
- */
-void fixho(int n);
-
-/*
- * Returns the current time. Sets the rtt_base global parameter to the current time.
- */
 double secs();
-  
-/*
- */
 unsigned int millisecs();
-
-/*
- */
-int acktimer(socket_t fd, int t);
 
 #endif // ATOUSRV_H_

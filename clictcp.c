@@ -50,6 +50,7 @@ ctrlc(void){
 	printf("dups %d drop|oo %d sacks %d inlth %d bytes maxseg %d maxooo %d acktouts %d\n",
          dups,drops,sackcnt,inlth,hi,maxooo,acktimeouts);
 	for(i=0;i<hocnt;i++) printf("lost pkt %d\n",holes[i]);
+  fclose(rcv_file);
 	exit(0);
 }
 
@@ -130,8 +131,6 @@ main(int argc, char** argv){
 
   // Send request to the server.
   fprintf(stdout, "Sending request\n");
-  //int req = 1861;
-  //printf("%s  %d\n", file_name, strlen(file_name));
   if((numbytes = sendto(sockfd, file_name, (strlen(file_name)+1)*sizeof(char), 0,
                         result->ai_addr, result->ai_addrlen)) == -1){
     err_sys("sendto: Request failed");
@@ -144,12 +143,22 @@ main(int argc, char** argv){
 	}
 	getsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (char *) &rlth, (socklen_t*)&optlen);
 
-	printf("atoucli %s using port %s rcvspace %d sack %d ackdelay %d ms\n",
-         version,port,rlth,sack,ackdelay);
+	printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
   
 	memset(buff,0,BUFFSIZE);        /* pretouch */
 
-  Ctcp_Pckt *msg = malloc(sizeof(Ctcp_Pckt));
+  curr_block = 1;
+
+
+  // Initialize the blocks
+  int k;
+  for(k = 0; k < NUM_BLOCKS; k++){
+    blocks[k].rows = malloc(BLOCK_SIZE*sizeof(char*));
+    blocks[k].content = malloc(BLOCK_SIZE*sizeof(char*));
+    initCodedBlock(k);
+  }
+
+  Data_Pckt *msg = malloc(sizeof(Data_Pckt));
 
   do{
     srvlen = sizeof srv_addr; // TODO: this is not necessary -> remove
@@ -166,14 +175,12 @@ main(int argc, char** argv){
 	  if (st == 0) st = et;  /* first pkt time */
 
     // Unmarshall the packet 
-    bool match = unmarshall(msg, buff);
+    bool match = unmarshallData(msg, buff);
     if(msg->flag == FIN_CLI){
       break;
     }
 
-	  if (msg->msgno > hi) hi = msg->msgno ;  /* high water mark */
-
-    if (debug && msg->msgno != expect ) printf("exp %d got %d dups %d sacks %d hocnt %d\n",expect, msg->msgno,dups,sackcnt,hocnt); 
+    if (debug && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno); 
     
     bldack(msg, match);
 
@@ -181,7 +188,6 @@ main(int argc, char** argv){
 
   }while(numbytes > 0);
 
-  fclose(rcv_file);
   ctrlc();
 
   return 0;
@@ -195,32 +201,300 @@ err_sys(char *s){
 }
 
 void
-bldack(Ctcp_Pckt *msg, bool match){
-  Ctcp_Pckt ack;
-  ack.tstamp = getTime();
-  ack.payload_size = 0;
-  
-  // If the packet we got has the packet number we expected and the checksum is correct
-  // then write the contents of the payload to the file
-  if(msg->msgno == expect && match == TRUE){
-    // If so then write the payload to the file
-    fwrite(msg->payload, 1, msg->payload_size, rcv_file);
-    //if (msg->payload_size == 0)printf("msg no %d\n", msg->msgno);
+bldack(Data_Pckt *msg, bool match){
+  Ack_Pckt* ack = ackPacket(msg->seqno, msg->blockno);
+  ack->tstamp = msg->tstamp;
 
-    // And increase expect
-    expect++;
+  blocks[curr_block%NUM_BLOCKS].len = msg->blk_len;
+  
+  uint8_t start = msg->start_packet;
+
+  if(msg->blockno == curr_block){
+    while(!isEmpty(msg->packet_coeff, coding_wnd)){
+      if(blocks[curr_block%NUM_BLOCKS].rows[start] == NULL){
+        // Allocate the memory for the coefficients in the matrix for this block
+        blocks[curr_block%NUM_BLOCKS].rows[start] = malloc(coding_wnd);
+
+        // Allocate the memory for the content of the packet
+        blocks[curr_block%NUM_BLOCKS].content[start] = malloc(PAYLOAD_SIZE);
+
+        // Set the coefficients to be all zeroes (for padding if necessary)
+        memset(blocks[curr_block%NUM_BLOCKS].rows[start], 0, coding_wnd);
+
+        // Normalize the coefficients and the packet contents
+        normalize(msg->packet_coeff, msg->payload, coding_wnd);
+
+        // Put the coefficients into the matrix
+        memcpy(blocks[curr_block%NUM_BLOCKS].rows[start], msg->packet_coeff, coding_wnd);
+        
+        // Put the payload into the corresponding place
+        memcpy(blocks[curr_block%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
+        
+        // We got an innovative eqn
+        blocks[curr_block%NUM_BLOCKS].dofs++;
+        break;
+      }else{
+        uint8_t pivot = msg->packet_coeff[0];
+        int i;
+
+        // Subtract row with index strat with the row at hand (coffecients)
+        for(i = 0; i < coding_wnd; i++){
+          msg->packet_coeff[i] ^= FFmult(blocks[curr_block%NUM_BLOCKS].rows[start][i], pivot);
+        }
+        
+        // Subtract row with index strat with the row at hand (content)
+        for(i = 0; i < PAYLOAD_SIZE; i++){
+          msg->payload[i] ^= FFmult(blocks[curr_block%NUM_BLOCKS].content[start][i], pivot);
+        }
+
+        // Shift the row 
+        int shift = shift_row(msg->packet_coeff, coding_wnd);
+        start += shift;
+      }
+    }
+    
+    if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
+      // We have enough dofs to decode
+      // Decode!
+      unwrap(curr_block);
+
+      // Write the decoded packets into the file 
+      writeAndFreeBlock(curr_block);
+
+      // Initialize the block for next time
+      initCodedBlock(curr_block);
+
+      // Increment the current block number
+      curr_block++;
+    }
+  
+  /*
+   * If the block got decoded advance curr_block
+   */
   }
 
-  ack.msgno = expect;
+  ack->blockno = curr_block;
   
   // Marshall the ack into buff
-  int size = marshall(ack, buff);
+  int size = marshallAck(*ack, buff);
   srvlen = sizeof(srv_addr);
   if(sendto(sockfd,buff, size, 0, &srv_addr, srvlen) == -1){
     err_sys("bldack: sendto");
   }
   acks++;
 }
+
+
+// TODO: TEST!
+void
+normalize(uint8_t* coefficients, char*  payload, uint8_t size){
+  uint8_t pivot = FFinv(coefficients[0]);
+  int i;
+
+  for(i = 0; i < size; i++){
+     coefficients[i] = FFmult(pivot,  coefficients[i]);
+  }
+
+  for(i = 0; i < PAYLOAD_SIZE; i++){
+     payload[i] = FFmult(pivot,  payload[i]);
+  }
+}
+
+
+int
+shift_row(uint8_t* buf, int len){
+  if(len == 0) return 0;
+
+  int shift;
+  for(shift=0; !buf[shift]; shift++); // Get to the first nonzero element
+
+  if(shift == 0) return shift;
+
+  int i;
+  for(i = 0; i < len-shift; i++){
+    buf[i] = buf[shift+i];
+  }
+
+  memset(buf+len-shift, 0, shift); 
+  return shift;
+}
+
+bool
+isEmpty(uint8_t* coefficients, uint8_t size){
+  uint8_t result;
+  int i;
+  for(i = 0; i < size; i++) result |= coefficients[i];
+  return result;
+}
+
+/*
+ * Initialize a new block struct
+ */
+void
+initCodedBlock(uint32_t blockno){
+  blocks[blockno%NUM_BLOCKS].dofs = 0;
+  blocks[blockno%NUM_BLOCKS].len = BLOCK_SIZE; // this may change once we get packets  
+  
+  int i;
+  for(i = 0; i < BLOCK_SIZE; i++){
+    blocks[blockno%NUM_BLOCKS].rows[i] = NULL;
+    blocks[blockno%NUM_BLOCKS].content[i] = NULL;
+  }
+}
+
+void
+unwrap(uint32_t blockno){
+  int row;
+  int offset;
+  int byte;
+  for(row = blocks[blockno%NUM_BLOCKS].len-2; row >= 0; row--){
+    for(offset = 1; offset < coding_wnd; offset++){
+      if(blocks[blockno%NUM_BLOCKS].rows[row][offset] == 0) 
+        continue;
+      for(byte = 0; byte < PAYLOAD_SIZE; byte++){
+        blocks[blockno%NUM_BLOCKS].content[row][byte] 
+          ^= FFmult(blocks[blockno%NUM_BLOCKS].rows[row][offset], 
+                    blocks[blockno%NUM_BLOCKS].content[row+offset][byte] );
+      }
+    }
+  }
+}
+
+void 
+writeAndFreeBlock(uint32_t blockno){
+  uint16_t len;
+  int i;
+  for(i=0; i < blocks[blockno%NUM_BLOCKS].len; i++){
+    // Read the first two bytes containing the length of the useful data 
+    memcpy(&len, blocks[blockno%NUM_BLOCKS].content[i], 2);
+
+    // Convert to host order
+    len = ntohs(len);
+
+    // Write the contents of the decode block into the file
+    fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
+
+    // Free the content
+    free(blocks[blockno%NUM_BLOCKS].content[i]);
+
+    // Free the matrix
+    free(blocks[blockno%NUM_BLOCKS].rows[i]);
+  }
+}
+
+bool
+unmarshallData(Data_Pckt* msg, char* buf){
+  int index = 0;
+  int part = 0;
+
+  memcpy(&msg->tstamp, buf+index, (part = sizeof(msg->tstamp)));
+  index += part;
+  memcpy(&msg->flag, buf+index, (part = sizeof(msg->flag)));
+  index += part;
+  memcpy(&msg->seqno, buf+index, (part = sizeof(msg->seqno)));
+  index += part;
+  memcpy(&msg->blockno, buf+index, (part = sizeof(msg->blockno)));
+  index += part;
+
+  ntohpData(msg);
+
+  if (msg->flag == PARTIAL_BLK){
+    memcpy(&msg->blk_len, buf+index, (part = sizeof(msg->blk_len)));
+    index += part;    
+  } else {
+    msg->blk_len = BLOCK_SIZE;
+  }
+
+  memcpy(&msg->start_packet, buf+index, (part = sizeof(msg->start_packet)));
+  index += part;
+ 
+  memcpy(&msg->num_packets, buf+index, (part = sizeof(msg->num_packets)));
+  index += part;
+
+  //  msg->packet_coeff = malloc(MIN(coding_wnd, blocks[msg->blockno%NUM_BLOCKS].len - msg->start_packet));
+
+  msg->packet_coeff = malloc(coding_wnd);
+
+  // Padding with zeroes
+  memset(msg->packet_coeff, 0, coding_wnd);
+
+  int i;
+  for(i = 0; i < msg->num_packets; i++){
+    memcpy(&msg->packet_coeff[i], buf+index, (part = sizeof(msg->packet_coeff[i])));
+    index += part;
+  }
+
+
+  msg->payload = malloc(PAYLOAD_SIZE);
+  memcpy(msg->payload, buf+index, (part = PAYLOAD_SIZE));
+  index += part;
+
+  bool match = TRUE;  
+  /*
+  int begin_checksum = index;
+ 
+  // -------------------- Extract the MD5 Checksum --------------------//
+  int i;
+  for(i=0; i < CHECKSUM_SIZE; i++){
+    memcpy(&msg->checksum[i], buf+index, (part = sizeof(msg->checksum[i])));
+    index += part;
+  }
+
+  // Before computing the checksum, fill zeroes where the checksum was
+  memset(buf+begin_checksum, 0, CHECKSUM_SIZE);
+
+  //-------------------- MD5 Checksum Calculation  -------------------//
+  MD5_CTX mdContext;
+  MD5Init(&mdContext);
+  MD5Update(&mdContext, buf, msg->payload_size + HDR_SIZE);
+  MD5Final(&mdContext);
+
+
+  for(i = 0; i < CHECKSUM_SIZE; i++){
+    if(msg->checksum[i] != mdContext.digest[i]){
+      match = FALSE;
+    }
+    }*/
+  return match;
+}
+
+
+int
+marshallAck(Ack_Pckt msg, char* buf){
+  int index = 0;
+  int part = 0;  
+  int ack_size = sizeof(double) + sizeof(int) + 2 + 4;
+
+  //Set to zeroes before starting
+  memset(buf, 0, ack_size);
+
+  // Marshall the fields of the packet into the buffer
+  htonpAck(&msg);
+  memcpy(buf + index, &msg.tstamp, (part = sizeof(msg.tstamp)));
+  index += part;
+  memcpy(buf + index, &msg.flag, (part = sizeof(msg.flag)));
+  index += part;
+  memcpy(buf + index, &msg.ackno, (part = sizeof(msg.ackno)));
+  index += part;
+  memcpy(buf + index, &msg.blockno, (part = sizeof(msg.blockno)));
+  index += part;
+  /*
+  //----------- MD5 Checksum calculation ---------//
+  MD5_CTX mdContext;
+  MD5Init(&mdContext);
+  MD5Update(&mdContext, buf, size);
+  MD5Final(&mdContext);
+
+  // Put the checksum in the marshalled buffer
+  int i;
+  for(i = 0; i < CHECKSUM_SIZE; i++){
+    memcpy(buf + index, &mdContext.digest[i], (part = sizeof(mdContext.digest[i])));
+    index += part;
+    }*/
+
+  return index;
+}
+
 
 double
 secs(){
@@ -245,38 +519,4 @@ millisecs(){
 	ts = ((tv.tv_sec-rtt_base) * 1000) + (tv.tv_usec / 1000);
   /*fprintf(stderr, "%ld=%u + %u\n", ts, (tv.tv_sec-rtt_base)*1000, tv.tv_usec/1000);*/
   return(ts);
-}
-
-int
-acktimer(socket_t fd, int t) {
-  struct timeval tv;
-  fd_set rset;
-  int n;
-  
-  FD_ZERO(&rset);
-  FD_SET(fd, &rset);
-  
-  tv.tv_sec = 0;
-  tv.tv_usec = (t * 1000);
-  
-  while(1) {
-    n = select(fd+1, &rset, NULL, NULL, &tv);
-    
-    if(n < 0) {
-      if(errno == EINTR) {
-        continue;
-      }
-      else
-        err_sys("select ERROR");
-    }
-    else
-      if(n==0) {
-        if(debug > 2)
-          fprintf(stderr, "acktimeout: %d\n", expected);
-        acktimeouts++;
-        sendack=1;
-      }
-    
-    return n;
-  }
 }
