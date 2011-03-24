@@ -102,86 +102,25 @@ char *configfile = "config";
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
 void ctrlc();
-
-/*
- * 
- */
 void endSession(void);
-
 void terminate(socket_t fd);
-
-/*
- * print the program's usage and exit
- */
 void usage(void);
-
-/*
- * 
- */
 void readConfig(void);
-
-/*
- *
- */
 int doit( socket_t fd);
-
-/*
- *
- */
 void send_segs(socket_t fd);
-
-/*
- *
- */
 void err_sys(char* s);
-
-/*
- *
- */
 socket_t timedread(socket_t fd, double t);
-
-/*
- *
- */
 void handle_ack(socket_t fd, Ack_Pckt* ack);
-
-  
 void readBlock(uint32_t blockno);
-
 void freeBlock(uint32_t blockno);
-
-/*
- *
- */
-void floyd_aimd(int cevent);
-
-/*
- *
- */
 void send_one(socket_t fd, unsigned int n);
-
-/*
- *
- */
 void bwe_calc(double rtt);
-
-/*
- *
- */
 int tcp_newreno(socket_t fd);
-
-/*
- *
- */
 void advance_cwnd(void);
-
-/*
- *
- */
+int marshallData(Data_Pckt msg, char* buf);
+bool unmarshallAck(Ack_Pckt* msg, char* buf);
 void duplicate(socket_t fd, int sackno);
-
 void restart(void);
-
 void openLog(void);
 
 #endif // ATOUCLI_H_

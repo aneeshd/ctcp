@@ -21,10 +21,11 @@
 #include "util.h"
 #include "srvctcp.h"
 
+#define SND_CWND 1
+
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
-#define SND_CWND 5
 
 int sndbuf = 32768;		/* udp send buff, bigger than mss */
 int rcvbuf = 32768;		/* udp recv buff for ACKs*/
@@ -51,6 +52,8 @@ ctrlc(){
 	et = getTime()-et;
 	maxpkts=snd_max;
 	endSession();
+  fclose(snd_file);
+  fclose(db);
 	exit(1);
 }
 
@@ -818,7 +821,9 @@ readBlock(uint32_t blockno){
   blocks[blockno%2].len = 0;
   blocks[blockno%2].snd_nxt = 1;
   blocks[blockno%2].snd_una = 1;
-  
+
+  blocks[blockno%2].content = malloc(BLOCK_SIZE*sizeof(char*));
+
   while(blocks[blockno%2].len < BLOCK_SIZE && !feof(snd_file)){
     char* tmp = malloc(PAYLOAD_SIZE);
     memset(tmp, 0, PAYLOAD_SIZE); // This is done to pad with 0's 
@@ -845,6 +850,7 @@ freeBlock(uint32_t blockno){
   int i;
   for(i = 0; i < blocks[blockno%2].len; i++){
     free(blocks[blockno%2].content[i]);
+    free(blocks[blockno%2].content + i);
   }
 }
 
@@ -872,6 +878,116 @@ openLog(void){
   if(!db){
     perror("An error ocurred while trying to open the log file");
   }
+}
+
+/*
+ * Takes a Data_Pckt struct and puts its raw contents into the buffer.
+ * This assumes that there is enough space in buf to store all of these.
+ * The return value is the number of bytes used for the marshalling
+ */
+int
+marshallData(Data_Pckt msg, char* buf){
+  int index = 0;
+  int part = 0;  
+  
+  int partial_blk_flg = 0;
+  if (msg.flag == PARTIAL_BLK) partial_blk_flg = sizeof(msg.blk_len);
+  
+  int size = PAYLOAD_SIZE + sizeof(double) + sizeof(flag_t) + sizeof(msg.seqno) + sizeof(msg.blockno) + (partial_blk_flg) + sizeof(msg.start_packet) + sizeof(msg.num_packets) + msg.num_packets*sizeof(msg.packet_coeff); // the total size in bytes of the current packet
+
+  //Set to zeroes before starting
+  memset(buf, 0, size);
+
+  // Marshall the fields of the packet into the buffer
+
+  htonpData(&msg);
+  memcpy(buf + index, &msg.tstamp, (part = sizeof(msg.tstamp)));
+  index += part;
+  memcpy(buf + index, &msg.flag, (part = sizeof(msg.flag)));
+  index += part;
+  memcpy(buf + index, &msg.seqno, (part = sizeof(msg.seqno)));
+  index += part;
+  memcpy(buf + index, &msg.blockno, (part = sizeof(msg.blockno)));
+  index += part;
+
+  if (partial_blk_flg > 0){
+    memcpy(buf + index, &msg.blk_len, (part = sizeof(msg.blk_len)));
+    index += part;
+  }
+  memcpy(buf + index, &msg.start_packet, (part = sizeof(msg.start_packet)));
+  index += part;
+
+  memcpy(buf + index, &msg.num_packets, (part = sizeof(msg.num_packets)));
+  index += part;
+
+  int i;
+  for(i = 0; i < msg.num_packets; i ++){
+    memcpy(buf + index, &msg.packet_coeff[i], (part = sizeof(msg.packet_coeff[i])));
+    index += part;
+  }
+
+  memcpy(buf + index, msg.payload, (part = PAYLOAD_SIZE));
+  index += part;
+  
+  /*
+  //----------- MD5 Checksum calculation ---------//
+  MD5_CTX mdContext;
+  MD5Init(&mdContext);
+  MD5Update(&mdContext, buf, size);
+  MD5Final(&mdContext);
+
+  // Put the checksum in the marshalled buffer
+  int i;
+  for(i = 0; i < CHECKSUM_SIZE; i++){
+    memcpy(buf + index, &mdContext.digest[i], (part = sizeof(mdContext.digest[i])));
+    index += part;
+    }*/
+
+  return index;
+}
+
+bool
+unmarshallAck(Ack_Pckt* msg, char* buf){
+  int index = 0;
+  int part = 0;
+
+  memcpy(&msg->tstamp, buf+index, (part = sizeof(msg->tstamp)));
+  index += part;
+  memcpy(&msg->flag, buf+index, (part = sizeof(msg->flag)));
+  index += part;
+  memcpy(&msg->ackno, buf+index, (part = sizeof(msg->ackno)));
+  index += part;
+  memcpy(&msg->blockno, buf+index, (part = sizeof(msg->blockno)));
+  index += part;
+  ntohpAck(msg);
+
+  bool match = TRUE;  
+  /*
+  int begin_checksum = index;
+ 
+  // -------------------- Extract the MD5 Checksum --------------------//
+  int i;
+  for(i=0; i < CHECKSUM_SIZE; i++){
+    memcpy(&msg->checksum[i], buf+index, (part = sizeof(msg->checksum[i])));
+    index += part;
+  }
+
+  // Before computing the checksum, fill zeroes where the checksum was
+  memset(buf+begin_checksum, 0, CHECKSUM_SIZE);
+
+  //-------------------- MD5 Checksum Calculation  -------------------//
+  MD5_CTX mdContext;
+  MD5Init(&mdContext);
+  MD5Update(&mdContext, buf, msg->payload_size + HDR_SIZE);
+  MD5Final(&mdContext);
+
+
+  for(i = 0; i < CHECKSUM_SIZE; i++){
+    if(msg->checksum[i] != mdContext.digest[i]){
+      match = FALSE;
+    }
+    }*/
+  return match;
 }
 
 void
