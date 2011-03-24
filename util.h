@@ -10,7 +10,7 @@ typedef int bool;
 // flags for Data_Pckt
 typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK} flag_t;
 
-#define MSS 1472
+#define MSS 1500 // XXX: make sure that this is fine...
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 #define PAYLOAD_SIZE 1400
 #define BLOCK_SIZE 64 // Maximum # of packets in a block (Default block length)
@@ -54,19 +54,22 @@ typedef struct{ // TODO: this datastructure can store the dof's and other state 
   char** content; // Array of pointers that point to the marshalled data of the bare packets
 } Block_t;
 
+typedef struct{
+  uint8_t dofs; // Number of degrees of freedom thus far
+  uint8_t len;
+  char** rows; // Matrix of the coefficients of the coded packets
+  char** content; // Contents of the coded packets
+} Coded_Block_t;
+
 double getTime(void);
 Data_Pckt* dataPacket(uint16_t seqno, uint32_t blockno, uint8_t num_packets);
 Ack_Pckt* ackPacket(uint16_t ackno, uint32_t blockno);
-int marshallData(Data_Pckt msg, char* buf);
-int marshallAck(Ack_Pckt msg, char* buf);
-bool unmarshallData(Data_Pckt* msg, char* buf);
-bool unmarshallAck(Ack_Pckt* msg, char* buf);
+
 void htonpData(Data_Pckt *msg);
 void htonpAck(Ack_Pckt *msg);
 void ntohpData(Data_Pckt *msg);
 void ntohpAck(Ack_Pckt *msg);
 uint8_t FFmult(uint8_t x, uint8_t y);
 uint8_t FFinv(uint8_t x);
-
 
 #endif // UTIL_H_
