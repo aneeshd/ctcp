@@ -9,7 +9,7 @@ FILE *rcv_file;
 //---------------- CTCP related variables ------------------//
 #define NUM_BLOCKS 2
 Coded_Block_t blocks[NUM_BLOCKS];
-uint8_t coding_wnd;
+uint8_t coding_wnd = 10;
 uint32_t curr_block;
 
 //char *version = "$Revision: 1.8 $";

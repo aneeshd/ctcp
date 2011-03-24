@@ -216,13 +216,19 @@ doit(socket_t sockfd){
 				maxpkts=snd_max;
 				break;
 			}
-			if (debug > 1)fprintf(stderr,
-                            "timerxmit %6.2f blockno %d pkt %d  snd_nxt %d  snd_cwnd %d  thresh %d\n",
-                            t-et,curr_block, 
-                            blocks[curr_block%2].snd_una, 
-                            blocks[curr_block%2].snd_nxt, 
-                            (int)snd_cwnd,
-                            snd_ssthresh);
+			
+      if (debug > 1){
+        fprintf(stderr,
+                "timerxmit %6.2f blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  coding wnd %d\n",
+                t-et,curr_block, 
+                blocks[curr_block%2].len,
+                blocks[curr_block%2].snd_una, 
+                blocks[curr_block%2].snd_nxt, 
+                (int)snd_cwnd,
+                coding_wnd);
+      }
+
+
 			timeouts++;
 			rxmts++;
 			bwe_pkt=0;

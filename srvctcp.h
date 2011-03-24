@@ -25,7 +25,7 @@ bool done;
 Block_t blocks[2];
 
 //---------- CTCP specific variables --------------//
-int coding_wnd;
+int coding_wnd = 10;
 uint32_t maxblockno = 0; // 0 denoting infty, whenever we reach the maximum block of the file, we set it
 
 /* TCP pcb like stuff */
