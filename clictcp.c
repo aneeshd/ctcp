@@ -205,7 +205,7 @@ err_sys(char *s){
 
 void
 bldack(Data_Pckt *msg, bool match){
-  Ack_Pckt* ack = ackPacket(msg->seqno, msg->blockno);
+  Ack_Pckt* ack = ackPacket(msg->seqno+1, msg->blockno); // request for next packet
   ack->tstamp = msg->tstamp;
 
   blocks[curr_block%NUM_BLOCKS].len = msg->blk_len;

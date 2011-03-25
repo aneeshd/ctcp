@@ -311,6 +311,14 @@ send_one(socket_t sockfd, uint32_t blockno){
 
   msg->start_packet = MIN(MAX(random()%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd + 1, 0));
   
+  printf("Sending.... blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  coding wnd %d\n",
+          curr_block, 
+          blocks[curr_block%2].len,
+          blocks[curr_block%2].snd_una, 
+          blocks[curr_block%2].snd_nxt, 
+          (int)snd_cwnd,
+          coding_wnd);
+
 	if (debug > 3) fprintf(db,"%f %d xmt\n", msg->tstamp-et, blockno);
   
   memset(msg->payload, 0, PAYLOAD_SIZE);
