@@ -21,7 +21,7 @@
 #include "util.h"
 #include "srvctcp.h"
 
-#define SND_CWND 1
+#define SND_CWND 2
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
@@ -195,6 +195,8 @@ doit(socket_t sockfd){
 
       // Unmarshall the ack from the buff
       unmarshallAck(ack, buff);
+
+      printf("Got an ACK: ackno %d -- RTT est %f \n", ack->ackno, getTime()-ack->tstamp);
       
 			if (r <= 0) err_sys("read");
 			rcvt = getTime();
@@ -206,7 +208,7 @@ doit(socket_t sockfd){
 			err_sys("select");
 		}
 
-		t=getTime();
+   	t=getTime();
 		if (maxtime && (t-et) > maxtime) maxpkts = snd_max; /*time up*/
 		/* see if a packet has timedout */
 		if (t > due) {   /* timeout */

@@ -180,6 +180,9 @@ main(int argc, char** argv){
       break;
     }
 
+    printf("seqno %d blockno %d blklen %d num pkts %d start pkt %d dofs %d\n",msg->seqno, msg->blockno, msg->blk_len, msg->num_packets, msg->start_packet, blocks[curr_block%NUM_BLOCKS].dofs);
+
+
     if (debug && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno); 
     
     bldack(msg, match);
@@ -253,6 +256,8 @@ bldack(Data_Pckt *msg, bool match){
       }
     }
     
+    printf("Just put a row in:  %d \n", start);
+    
     if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
       // We have enough dofs to decode
       // Decode!
@@ -282,6 +287,8 @@ bldack(Data_Pckt *msg, bool match){
     err_sys("bldack: sendto");
   }
   acks++;
+  printf("Sent an ACK: ackno %d\n", ack->ackno);
+
 }
 
 
@@ -324,7 +331,7 @@ isEmpty(uint8_t* coefficients, uint8_t size){
   uint8_t result;
   int i;
   for(i = 0; i < size; i++) result |= coefficients[i];
-  return result;
+  return (result == 0);
 }
 
 /*
