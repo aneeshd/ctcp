@@ -71,6 +71,21 @@ ntohpAck(Ack_Pckt* msg){
   msg->blockno = ntohl(msg->blockno);
 }
 
+void
+prettyPrint(char** coeffs, int window){
+  int i,j;
+  printf("\n\n**Matrix**\n");
+  for(i = 0; i < BLOCK_SIZE; i++){
+    for(j = 0; j < BLOCK_SIZE; j++){
+      if(j < i || j >= i + window){
+        printf("0 ");
+      }else{
+        printf("%d ", (uint8_t) coeffs[i][j-i]);
+      }
+    }
+    printf("\n");
+  }
+}
 
 uint8_t 
 FFmult(uint8_t x, uint8_t y)

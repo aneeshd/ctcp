@@ -374,6 +374,7 @@ unwrap(uint32_t blockno){
   int row;
   int offset;
   int byte;
+  prettyPrint(blocks[blockno%NUM_BLOCKS].rows, coding_wnd);
   for(row = blocks[blockno%NUM_BLOCKS].len-2; row >= 0; row--){
     for(offset = 1; offset < coding_wnd; offset++){
       if(blocks[blockno%NUM_BLOCKS].rows[row][offset] == 0) 
@@ -387,6 +388,7 @@ unwrap(uint32_t blockno){
   }
 }
 
+
 void 
 writeAndFreeBlock(uint32_t blockno){
   uint16_t len;
@@ -397,15 +399,17 @@ writeAndFreeBlock(uint32_t blockno){
 
     // Convert to host order
     len = ntohs(len);
+    len = PAYLOAD_SIZE - 2;
 
     // Write the contents of the decode block into the file
     fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
 
+    // XXX: Will have memory leaks
     // Free the content
-    free(blocks[blockno%NUM_BLOCKS].content[i]);
+    //    free(blocks[blockno%NUM_BLOCKS].content[i]);
 
     // Free the matrix
-    free(blocks[blockno%NUM_BLOCKS].rows[i]);
+    //    free(blocks[blockno%NUM_BLOCKS].rows[i]);
   }
 }
 

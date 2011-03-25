@@ -69,6 +69,7 @@ void htonpData(Data_Pckt *msg);
 void htonpAck(Ack_Pckt *msg);
 void ntohpData(Data_Pckt *msg);
 void ntohpAck(Ack_Pckt *msg);
+void prettyPrint(char** coeffs, int window);
 uint8_t FFmult(uint8_t x, uint8_t y);
 uint8_t FFinv(uint8_t x);
 

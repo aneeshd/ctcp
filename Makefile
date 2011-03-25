@@ -53,7 +53,7 @@ $(PRODUCTS): $(OBJS) .buildmode Makefile
 tags: $(SRCS)
 	ctags -eR
 
-tests: test.c util.o md5.o .buildmode Makefile
+tests: test.c util.o clictcp.o srvctcp.o md5.o .buildmode Makefile
 	$(CXX) $(CFLAGS) $< util.o md5.o -o test $(LDFLAGS)
 
 md5: md5driver.c md5.o
@@ -65,6 +65,9 @@ clean:
 
 clean_logs:
 	$(RM) *.log
+
+clean_rcv:
+	$(RM) Rcv_*
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)
