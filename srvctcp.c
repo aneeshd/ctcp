@@ -446,7 +446,11 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 		badacks++;
 	} else  {
     goodacks++;
-    blocks[curr_block%2].snd_una = ackno;
+    if (ackno > blocks[curr_block%2].snd_nxt){
+      blocks[curr_block%2].snd_una = blocks[curr_block%2].snd_nxt;
+    } else{
+      blocks[curr_block%2].snd_una = ackno;
+    }
 
     idle=0;
     due = rcvt + timeout;   /*restart timer */
