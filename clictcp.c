@@ -180,7 +180,7 @@ main(int argc, char** argv){
       break;
     }
 
-    printf("seqno %d blockno %d blklen %d num pkts %d start pkt %d dofs %d\n",msg->seqno, msg->blockno, msg->blk_len, msg->num_packets, msg->start_packet, blocks[curr_block%NUM_BLOCKS].dofs);
+    //printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
 
 
     if (debug && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno); 
@@ -239,9 +239,17 @@ bldack(Data_Pckt *msg, bool match){
       }else{
         uint8_t pivot = msg->packet_coeff[0];
         int i;
+       
+        /* int ix;
+        for (ix = 0; ix < coding_wnd; ix++){
+          printf(" %d ", msg->packet_coeff[ix]);
+        }
+        printf("seqno %d start%d isEmpty %d \n", msg->seqno, start, isEmpty(msg->packet_coeff, coding_wnd)==1);
+        */
 
+        msg->packet_coeff[0] = 0; // TODO; check again
         // Subtract row with index strat with the row at hand (coffecients)
-        for(i = 0; i < coding_wnd; i++){
+        for(i = 1; i < coding_wnd; i++){
           msg->packet_coeff[i] ^= FFmult(blocks[curr_block%NUM_BLOCKS].rows[start][i], pivot);
         }
         
@@ -256,11 +264,13 @@ bldack(Data_Pckt *msg, bool match){
       }
     }
     
-    printf("Just put a row in:  %d \n", start);
-    
     if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
       // We have enough dofs to decode
       // Decode!
+      
+      //double dec_time = getTime();
+      //printf("Starting to decode  ... ");
+    
       unwrap(curr_block);
 
       // Write the decoded packets into the file 
@@ -271,11 +281,17 @@ bldack(Data_Pckt *msg, bool match){
 
       // Increment the current block number
       curr_block++;
+
+      // Reset the ack number
+      ack->ackno = 1;
+      last_ackno = 1;
+
+      //printf("Done within %f secs\n", getTime()-dec_time);
     }
   
-  /*
-   * If the block got decoded advance curr_block
-   */
+  } else if(msg->blockno < curr_block){
+    last_ackno++;
+    ack->ackno = last_ackno;
   }
 
   ack->blockno = curr_block;
@@ -287,7 +303,7 @@ bldack(Data_Pckt *msg, bool match){
     err_sys("bldack: sendto");
   }
   acks++;
-  printf("Sent an ACK: ackno %d\n", ack->ackno);
+  //printf("Sent an ACK: ackno %d blockno %d\n", ack->ackno, ack->blockno);
 
 }
 
@@ -328,7 +344,7 @@ shift_row(uint8_t* buf, int len){
 
 bool
 isEmpty(uint8_t* coefficients, uint8_t size){
-  uint8_t result;
+  uint8_t result = 0;
   int i;
   for(i = 0; i < size; i++) result |= coefficients[i];
   return (result == 0);

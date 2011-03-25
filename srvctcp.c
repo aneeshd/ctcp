@@ -196,7 +196,7 @@ doit(socket_t sockfd){
       // Unmarshall the ack from the buff
       unmarshallAck(ack, buff);
 
-      printf("Got an ACK: ackno %d -- RTT est %f \n", ack->ackno, getTime()-ack->tstamp);
+      printf("Got an ACK: ackno %d blockno %d -- RTT est %f \n", ack->ackno, ack->blockno, getTime()-ack->tstamp);
       
 			if (r <= 0) err_sys("read");
 			rcvt = getTime();
@@ -309,15 +309,18 @@ send_one(socket_t sockfd, uint32_t blockno){
     msg->blk_len = block_len;
   }
 
-  msg->start_packet = MIN(MAX(random()%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd + 1, 0));
   
-  printf("Sending.... blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  coding wnd %d\n",
-          curr_block, 
-          blocks[curr_block%2].len,
-          blocks[curr_block%2].snd_una, 
-          blocks[curr_block%2].snd_nxt, 
-          (int)snd_cwnd,
-          coding_wnd);
+  int rnd = random();
+  msg->start_packet = MIN(MAX(rnd%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
+  
+  printf("Sending.... blockno %d blocklen %d pkt %d  snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
+         curr_block, 
+         blocks[curr_block%2].len,
+         blocks[curr_block%2].snd_una, 
+         blocks[curr_block%2].snd_nxt, 
+         msg->start_packet,
+         (int)snd_cwnd,
+        coding_wnd);
 
 	if (debug > 3) fprintf(db,"%f %d xmt\n", msg->tstamp-et, blockno);
   
@@ -434,13 +437,12 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
   }
 
   if (ackno > blocks[curr_block%2].snd_nxt 
-      || ackno <= blocks[curr_block%2].snd_una 
-      || ack->blockno < curr_block 
-      || ack->blockno > curr_block) {
+      || ackno < blocks[curr_block%2].snd_una 
+      || ack->blockno != curr_block) {
 		/* bad ack */
 		if (debug > 5) fprintf(stderr,
-                           "badack %d snd_nxt %d snd_una %d\n",
-                           ackno, blocks[curr_block%2].snd_nxt, blocks[curr_block%2].snd_una);
+                           "curr block %d badack no %d snd_nxt %d snd_una %d\n",
+                           curr_block, ackno, blocks[curr_block%2].snd_nxt, blocks[curr_block%2].snd_una);
 		badacks++;
 	} else  {
     goodacks++;
@@ -866,8 +868,8 @@ freeBlock(uint32_t blockno){
   int i;
   for(i = 0; i < blocks[blockno%2].len; i++){
     free(blocks[blockno%2].content[i]);
-    free(blocks[blockno%2].content + i);
   }
+    free(blocks[blockno%2].content);
 }
 
 void

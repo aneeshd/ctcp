@@ -7,4 +7,4 @@ rcvrwin 60
 increment 1
 #maxpkts 2000
 maxtime 0
-debug 4
+debug 6
