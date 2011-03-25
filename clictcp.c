@@ -240,12 +240,16 @@ bldack(Data_Pckt *msg, bool match){
         uint8_t pivot = msg->packet_coeff[0];
         int i;
        
-        /* int ix;
+        int ix;
         for (ix = 0; ix < coding_wnd; ix++){
           printf(" %d ", msg->packet_coeff[ix]);
         }
-        printf("seqno %d start%d isEmpty %d \n", msg->seqno, start, isEmpty(msg->packet_coeff, coding_wnd)==1);
-        */
+        printf("seqno %d start%d isEmpty %d \n Row coeff", msg->seqno, start, isEmpty(msg->packet_coeff, coding_wnd)==1);
+        
+        for (ix = 0; ix < coding_wnd; ix++){
+          printf(" %d ",blocks[curr_block%NUM_BLOCKS].rows[start][ix]);
+        }
+        printf("\n");
 
         msg->packet_coeff[0] = 0; // TODO; check again
         // Subtract row with index strat with the row at hand (coffecients)
@@ -268,8 +272,8 @@ bldack(Data_Pckt *msg, bool match){
       // We have enough dofs to decode
       // Decode!
       
-      //double dec_time = getTime();
-      //printf("Starting to decode  ... ");
+      double dec_time = getTime();
+      printf("Starting to decode  ... ");
     
       unwrap(curr_block);
 
@@ -286,7 +290,7 @@ bldack(Data_Pckt *msg, bool match){
       ack->ackno = 1;
       last_ackno = 1;
 
-      //printf("Done within %f secs\n", getTime()-dec_time);
+      printf("Done within %f secs\n", getTime()-dec_time);
     }
   
   } else if(msg->blockno < curr_block){

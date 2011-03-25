@@ -21,7 +21,7 @@
 #include "util.h"
 #include "srvctcp.h"
 
-#define SND_CWND 2
+#define SND_CWND 5
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
@@ -313,10 +313,11 @@ send_one(socket_t sockfd, uint32_t blockno){
   int rnd = random();
   msg->start_packet = MIN(MAX(rnd%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
   
-  printf("Sending.... blockno %d blocklen %d pkt %d  snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
+  printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
          curr_block, 
          blocks[curr_block%2].len,
-         blocks[curr_block%2].snd_una, 
+         msg->seqno, 
+         blocks[curr_block%2].snd_una,       
          blocks[curr_block%2].snd_nxt, 
          msg->start_packet,
          (int)snd_cwnd,
@@ -430,10 +431,13 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       done = TRUE;
       return;
     }
-
+    
+    int window = blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una; 
     freeBlock(curr_block);
     curr_block++;
     readBlock(curr_block);
+    blocks[curr_block%2].snd_una = 0;
+    blocks[curr_block%2].snd_nxt = blocks[curr_block%2].snd_una + window;
   }
 
   if (ackno > blocks[curr_block%2].snd_nxt 
@@ -455,6 +459,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     idle=0;
     due = rcvt + timeout;   /*restart timer */
     //advance_cwnd();
+
+    //printf("Calling send segs ... \n");
     send_segs(sockfd);  /* send some if we can */
   }
 }
