@@ -328,7 +328,7 @@ send_one(socket_t sockfd, uint32_t blockno){
   memset(msg->payload, 0, PAYLOAD_SIZE);
 
   for(i = 0; i < num_packets; i++){
-    msg->packet_coeff[i] = (uint8_t)random()%256;
+    msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
     for(j = 0; j < PAYLOAD_SIZE; j++){
       msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%2].content[msg->start_packet+i][j]);
     }

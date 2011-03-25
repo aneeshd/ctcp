@@ -18,7 +18,7 @@ Coded_Block_t codedBlock;
 int coding_wnd = 10;
 FILE *src;
 FILE *dst;
-int maxblockno;
+int maxblock = 0;
 
 // --------------------- SERVER SIDE ------------------------------//
 
@@ -45,7 +45,7 @@ readBlock(uint32_t blockno){
   }
 
   if(feof(src)){
-    maxblockno = blockno;
+    maxblock = blockno;
   }
 }
 
@@ -125,7 +125,7 @@ unwrap(uint32_t blockno){
   int row;
   int offset;
   int byte;
-  prettyPrint(codedBlock.rows, coding_wnd);
+  //prettyPrint(codedBlock.rows, coding_wnd);
   for(row = codedBlock.len-2; row >= 0; row--){
     for(offset = 1; offset < coding_wnd; offset++){
       if(codedBlock.rows[row][offset] == 0) 
@@ -157,11 +157,25 @@ writeAndFreeBlock(uint32_t blockno){
 
     // XXX: Will have memory leaks
     // Free the content
-    //    free(blocks[blockno%NUM_BLOCKS].content[i]);
+    //free(codedBlock.content[i]);
 
     // Free the matrix
-    //    free(blocks[blockno%NUM_BLOCKS].rows[i]);
+    //free(codedBlock.rows[i]);
   }
+}
+
+bool
+compareBlocks(void){
+  bool result = TRUE;
+  int i,j;
+  for(i = 0; i < BLOCK_SIZE; i++){
+    for(j = 0; j < PAYLOAD_SIZE; j++){
+      if(block.content[i][j] != codedBlock.content[i][j]){
+        result = FALSE;
+      }
+    }
+  }
+  return result;
 }
 
 void codingTest(char* file_name) {
@@ -169,6 +183,10 @@ void codingTest(char* file_name) {
   
   char *copy = "copy";
   char *new_name = malloc(sizeof(file_name) + sizeof(copy));
+
+  int i, j;
+  uint8_t start;
+
 
   sprintf(new_name, "%s%s", file_name, copy);
 
@@ -187,118 +205,136 @@ void codingTest(char* file_name) {
     exit(1);
   }
   
-  printf("reading a new block...\n");
-  readBlock(0);
-
   printf("Initializing destination block...\n");
   codedBlock.rows = malloc(BLOCK_SIZE*sizeof(char*));
   codedBlock.content = malloc(BLOCK_SIZE*sizeof(char*));
   initCodedBlock(0);
   
-  uint8_t block_len = block.len;
-  uint8_t num_packets = MIN(coding_wnd, block.len);
+  while(maxblock == 0){
+    printf("reading a new block...\n");
+    readBlock(0);
 
-  Data_Pckt* msg = dataPacket(1, 2, num_packets);
-    int rnd = random();
-    int i, j;
-    uint8_t start;
+    uint8_t block_len = block.len;
+    uint8_t num_packets = MIN(coding_wnd, block.len);
+    Data_Pckt* msg = dataPacket(1, 2, num_packets);
 
-  while(codedBlock.dofs < block_len){
+    while(codedBlock.dofs < block_len){
 
-    printf("Total DOFs %d \n",codedBlock.dofs);
+      //printf("Total DOFs %d \n",codedBlock.dofs);
     
-    msg->start_packet = MIN(MAX(rnd%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
+      int rnd = random();
+      msg->start_packet = MIN(MAX(rnd%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
     
-    memset(msg->payload, 0, PAYLOAD_SIZE);
+      memset(msg->payload, 0, PAYLOAD_SIZE);
 
-    for(i = 0; i < num_packets; i++){
-      msg->packet_coeff[i] = (uint8_t)random()%256;
-      for(j = 0; j < PAYLOAD_SIZE; j++){
-        msg->payload[j] ^= FFmult(msg->packet_coeff[i], block.content[msg->start_packet+i][j]);
+      for(i = 0; i < num_packets; i++){
+        msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
+        for(j = 0; j < PAYLOAD_SIZE; j++){
+          msg->payload[j] ^= FFmult(msg->packet_coeff[i], block.content[msg->start_packet+i][j]);
+        }
+      }
+    
+      start = msg->start_packet;
+      //printf("start %d\n", start);
+
+      // Shift the row to make sure the lead coefficient is not zero!
+      int shift = shift_row(msg->packet_coeff, coding_wnd);
+      start += shift;
+
+      while(!isEmpty(msg->packet_coeff, coding_wnd)){
+        if(codedBlock.rows[start] == NULL){
+          // Allocate the memory for the coefficients in the matrix for this block
+          codedBlock.rows[start] = malloc(coding_wnd);
+        
+          // Allocate the memory for the content of the packet
+          codedBlock.content[start] = malloc(PAYLOAD_SIZE);
+        
+          // Set the coefficients to be all zeroes (for padding if necessary)
+          memset(codedBlock.rows[start], 0, coding_wnd);
+        
+
+          if(msg->packet_coeff[0] == 0){
+            printf("                         BAD shift\n");
+            int ix;
+            for (ix = 0; ix < coding_wnd; ix++){
+              printf(" %d ", msg->packet_coeff[ix]);
+            }
+            printf("\n");
+          }
+
+          // Normalize the coefficients and the packet contents
+          normalize(msg->packet_coeff, msg->payload, coding_wnd);
+        
+          // Put the coefficients into the matrix
+          memcpy(codedBlock.rows[start], msg->packet_coeff, coding_wnd);
+        
+          // Put the payload into the corresponding place
+          memcpy(codedBlock.content[start], msg->payload, PAYLOAD_SIZE);
+        
+          // We got an innovative eqn
+          codedBlock.dofs++;
+          break;
+        }else{
+          uint8_t pivot = msg->packet_coeff[0];
+          int i;
+        
+          /*
+            int ix;
+            for (ix = 0; ix < coding_wnd; ix++){
+            printf(" %d ", msg->packet_coeff[ix]);
+            }*/
+        
+          //printf("start%d isEmpty %d \n", start, isEmpty(msg->packet_coeff, coding_wnd)==1);
+        
+        
+          /* for (ix = 0; ix < coding_wnd; ix++){
+             printf(" %d ", codedBlock.rows[start][ix]);
+             }
+             printf("\n");
+          */
+        
+          msg->packet_coeff[0] = 0; // TODO; check again
+          // Subtract row with index strat with the row at hand (coffecients)
+          for(i = 1; i < coding_wnd; i++){
+            msg->packet_coeff[i] ^= FFmult(codedBlock.rows[start][i], pivot);
+          }
+        
+          // Subtract row with index strat with the row at hand (content)
+          for(i = 0; i < PAYLOAD_SIZE; i++){
+            msg->payload[i] ^= FFmult(codedBlock.content[start][i], pivot);
+          }
+        
+          // Shift the row 
+          int shift = shift_row(msg->packet_coeff, coding_wnd);
+          start += shift;
+        }
       }
     }
-    
-    start = msg->start_packet;
 
-    while(!isEmpty(msg->packet_coeff, coding_wnd)){
-      if(codedBlock.rows[start] == NULL){
-        // Allocate the memory for the coefficients in the matrix for this block
-        codedBlock.rows[start] = malloc(coding_wnd);
-        
-        // Allocate the memory for the content of the packet
-        codedBlock.content[start] = malloc(PAYLOAD_SIZE);
-        
-        // Set the coefficients to be all zeroes (for padding if necessary)
-        memset(codedBlock.rows[start], 0, coding_wnd);
-        
-        // Normalize the coefficients and the packet contents
-        normalize(msg->packet_coeff, msg->payload, coding_wnd);
-        
-        // Put the coefficients into the matrix
-        memcpy(codedBlock.rows[start], msg->packet_coeff, coding_wnd);
-        
-        // Put the payload into the corresponding place
-        memcpy(codedBlock.content[start], msg->payload, PAYLOAD_SIZE);
-        
-        // We got an innovative eqn
-        codedBlock.dofs++;
-        break;
-      }else{
-        uint8_t pivot = msg->packet_coeff[0];
-        int i;
-        
-        int ix;
-        for (ix = 0; ix < coding_wnd; ix++){
-          printf(" %d ", msg->packet_coeff[ix]);
-        }
-        printf("seqno %d start%d isEmpty %d \n Row coeff", msg->seqno, start, isEmpty(msg->packet_coeff, coding_wnd)==1);
-        
-        /* for (ix = 0; ix < coding_wnd; ix++){
-          printf(" %d ", codedBlock.rows[start][ix]);
-        }
-        printf("\n");*/
-        
-        msg->packet_coeff[0] = 0; // TODO; check again
-        // Subtract row with index strat with the row at hand (coffecients)
-        for(i = 1; i < coding_wnd; i++){
-          msg->packet_coeff[i] ^= FFmult(codedBlock.rows[start][i], pivot);
-        }
-        
-        // Subtract row with index strat with the row at hand (content)
-        for(i = 0; i < PAYLOAD_SIZE; i++){
-          msg->payload[i] ^= FFmult(codedBlock.content[start][i], pivot);
-        }
-        
-        // Shift the row 
-        int shift = shift_row(msg->packet_coeff, coding_wnd);
-        start += shift;
-      }
-    }
+    printf("Starting to decode  ... ");
+    
+    unwrap(0);
+
+    // Write the decoded packets into the file 
+    writeAndFreeBlock(0);
+    
+    bool result = compareBlocks();
+    printf("Blocks matched?: %d\n", result);
+
+    initCodedBlock(0);
+    freeBlock(0);
   }
 }  
 
 
-bool
-compareBlocks(void){
-  bool result = TRUE;
-  int i,j;
-  for(i = 0; i < BLOCK_SIZE; i++){
-    for(j = 0; j < PAYLOAD_SIZE; j++){
-      if(block.content[i][j] != codedBlock.content[i][j]){
-        result = FALSE;
-      }
-    }
-  }
-  return result;
-}
 
 int
 main(void){
   srandom(getpid());
   //marshall_test();
   //mult_test(255,1);
-  codingTest("Foto.jpg");
-  printf("Blocks matched?: %d", compareBlocks());
+  codingTest("Honda");
+
   return 0;
 }
 

@@ -212,6 +212,10 @@ bldack(Data_Pckt *msg, bool match){
   
   uint8_t start = msg->start_packet;
 
+  // Shift the row to make shure the leading coefficient is not zero
+  int shift = shift_row(msg->packet_coeff, coding_wnd);
+  start += shift;
+
   if(msg->blockno == curr_block){
     while(!isEmpty(msg->packet_coeff, coding_wnd)){
       if(blocks[curr_block%NUM_BLOCKS].rows[start] == NULL){
@@ -240,6 +244,7 @@ bldack(Data_Pckt *msg, bool match){
         uint8_t pivot = msg->packet_coeff[0];
         int i;
        
+        /*
         int ix;
         for (ix = 0; ix < coding_wnd; ix++){
           printf(" %d ", msg->packet_coeff[ix]);
@@ -250,6 +255,7 @@ bldack(Data_Pckt *msg, bool match){
           printf(" %d ",blocks[curr_block%NUM_BLOCKS].rows[start][ix]);
         }
         printf("\n");
+        */
 
         msg->packet_coeff[0] = 0; // TODO; check again
         // Subtract row with index strat with the row at hand (coffecients)
@@ -263,7 +269,7 @@ bldack(Data_Pckt *msg, bool match){
         }
 
         // Shift the row 
-        int shift = shift_row(msg->packet_coeff, coding_wnd);
+        shift = shift_row(msg->packet_coeff, coding_wnd);
         start += shift;
       }
     }
@@ -374,7 +380,7 @@ unwrap(uint32_t blockno){
   int row;
   int offset;
   int byte;
-  prettyPrint(blocks[blockno%NUM_BLOCKS].rows, coding_wnd);
+  //prettyPrint(blocks[blockno%NUM_BLOCKS].rows, coding_wnd);
   for(row = blocks[blockno%NUM_BLOCKS].len-2; row >= 0; row--){
     for(offset = 1; offset < coding_wnd; offset++){
       if(blocks[blockno%NUM_BLOCKS].rows[row][offset] == 0) 
@@ -399,17 +405,17 @@ writeAndFreeBlock(uint32_t blockno){
 
     // Convert to host order
     len = ntohs(len);
-    len = PAYLOAD_SIZE - 2;
+    //len = PAYLOAD_SIZE - 2;
 
     // Write the contents of the decode block into the file
     fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
 
     // XXX: Will have memory leaks
     // Free the content
-    //    free(blocks[blockno%NUM_BLOCKS].content[i]);
+        free(blocks[blockno%NUM_BLOCKS].content[i]);
 
     // Free the matrix
-    //    free(blocks[blockno%NUM_BLOCKS].rows[i]);
+        free(blocks[blockno%NUM_BLOCKS].rows[i]);
   }
 }
 
