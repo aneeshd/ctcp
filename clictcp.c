@@ -27,6 +27,9 @@ int sockfd, rcvspace;
 int ndofs = 0;
 int old_blk_pkts = 0;
 double idle_total = 0; // The total time the client has spent waiting for a packet
+double decoding_delay = 0;
+double elimination_delay = 0;
+
 
 
 void
@@ -57,7 +60,7 @@ ctrlc(void){
 	for(i=0;i<hocnt;i++) printf("lost pkt %d\n",holes[i]);
   printf("Ndofs %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);  
   printf("Old packet count %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
-  printf("Total idle time %f\n", idle_total);  
+  printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", idle_total, elimination_delay, decoding_delay);  
   fclose(rcv_file);
 	exit(0);
 }
@@ -227,6 +230,8 @@ bldack(Data_Pckt *msg, bool match){
   
   uint8_t start = msg->start_packet;
 
+  double elimination_timer = getTime();
+
   // Shift the row to make shure the leading coefficient is not zero
   int shift = shift_row(msg->packet_coeff, coding_wnd);
   start += shift;
@@ -284,6 +289,7 @@ bldack(Data_Pckt *msg, bool match){
         for(i = 0; i < PAYLOAD_SIZE; i++){
           msg->payload[i] ^= FFmult(blocks[curr_block%NUM_BLOCKS].content[start][i], pivot);
         }
+       
 
 
         // Shift the row 
@@ -296,12 +302,14 @@ bldack(Data_Pckt *msg, bool match){
       ndofs++;
     }
     
-
+    elimination_delay += getTime() - elimination_timer;
+    
     if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
       // We have enough dofs to decode
       // Decode!
       
-      double dec_time = getTime();
+
+      double decoding_timer = getTime();
 
       if (debug > 6){
         printf("Starting to decode  ... ");
@@ -311,10 +319,11 @@ bldack(Data_Pckt *msg, bool match){
 
       // Write the decoded packets into the file 
       writeAndFreeBlock(curr_block);
-
+      
       // Initialize the block for next time
       initCodedBlock(curr_block);
 
+      
       // Increment the current block number
       curr_block++;
 
@@ -322,8 +331,10 @@ bldack(Data_Pckt *msg, bool match){
       ack->ackno = 1;
       last_ackno = 1;
 
+      decoding_delay += getTime() - decoding_timer;
+
       if (debug > 6){
-        printf("Done within %f secs\n", getTime()-dec_time);
+        printf("Done within %f secs\n", getTime()-decoding_timer);
       }
     }
   

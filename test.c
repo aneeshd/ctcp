@@ -45,7 +45,8 @@ readBlock(uint32_t blockno){
   }
 
   if(feof(src)){
-    maxblock = blockno;
+    maxblock = 1;
+    //printf("Length of last block %d\n", block.len);
   }
 }
 
@@ -151,16 +152,17 @@ writeAndFreeBlock(uint32_t blockno){
     // Convert to host order
     len = ntohs(len);
     len = PAYLOAD_SIZE - 2;
+    //printf("Payload length %d\n", len);
 
     // Write the contents of the decode block into the file
     fwrite(codedBlock.content[i]+2, 1, len, dst);
 
     // XXX: Will have memory leaks
     // Free the content
-    //free(codedBlock.content[i]);
+    free(codedBlock.content[i]);
 
     // Free the matrix
-    //free(codedBlock.rows[i]);
+    free(codedBlock.rows[i]);
   }
 }
 
@@ -210,24 +212,37 @@ void codingTest(char* file_name) {
   codedBlock.content = malloc(BLOCK_SIZE*sizeof(char*));
   initCodedBlock(0);
   
+
+  int total_blocks = 0;
+  double total_delay = 0;
+
   while(maxblock == 0){
-    printf("reading a new block...\n");
+    //printf("reading a new block...\n");
+    double timer = getTime();
     readBlock(0);
 
     uint8_t block_len = block.len;
+    codedBlock.len = block_len;
+
     uint8_t num_packets = MIN(coding_wnd, block.len);
     Data_Pckt* msg = dataPacket(1, 2, num_packets);
 
     while(codedBlock.dofs < block_len){
 
-      //printf("Total DOFs %d \n",codedBlock.dofs);
+      printf("Total DOFs %d \n",codedBlock.dofs);
     
       int rnd = random();
-      msg->start_packet = MIN(MAX(rnd%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
-    
+      msg->start_packet = MIN(MAX(rnd%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));     
+      
+      /* For testing 
+         msg->start_packet = MAX(rnd%block_len - coding_wnd/2, 0);
+         num_packets = MIN(coding_wnd, block_len - msg->start_packet);
+         printf("start packet %d, \t num packets %d\n", msg->start_packet, num_packets);
+      */
+
       memset(msg->payload, 0, PAYLOAD_SIZE);
 
-      for(i = 0; i < num_packets; i++){
+      for(i = 0; (i < num_packets) && (i+msg->start_packet < block_len); i++){
         msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
         for(j = 0; j < PAYLOAD_SIZE; j++){
           msg->payload[j] ^= FFmult(msg->packet_coeff[i], block.content[msg->start_packet+i][j]);
@@ -300,9 +315,9 @@ void codingTest(char* file_name) {
           }
         
           // Subtract row with index strat with the row at hand (content)
-          for(i = 0; i < PAYLOAD_SIZE; i++){
+            for(i = 0; i < PAYLOAD_SIZE; i++){
             msg->payload[i] ^= FFmult(codedBlock.content[start][i], pivot);
-          }
+            }
         
           // Shift the row 
           int shift = shift_row(msg->packet_coeff, coding_wnd);
@@ -311,19 +326,28 @@ void codingTest(char* file_name) {
       }
     }
 
-    printf("Starting to decode  ... ");
+    //printf("Starting to decode  ... ");
     
+    //printf("Unwrap\n");
     unwrap(0);
 
     // Write the decoded packets into the file 
+    //printf("Write and Free Block\n");
     writeAndFreeBlock(0);
     
-    bool result = compareBlocks();
-    printf("Blocks matched?: %d\n", result);
+    //bool result = compareBlocks();
+    //printf("Blocks matched?: %d\n", result);
 
+    //printf("Initialize coded block...\n");
     initCodedBlock(0);
     freeBlock(0);
+    
+    total_delay += getTime() - timer;
+    printf("decoding delay %f\n", total_delay);
+
+    total_blocks++;
   }
+  printf("Total number of blocks processed: %d\n", total_blocks);
 }  
 
 
@@ -333,7 +357,9 @@ main(void){
   srandom(getpid());
   //marshall_test();
   //mult_test(255,1);
+  double timer = getTime();
   codingTest("Honda");
+  printf("Total encoding/decoding delay %f\n", getTime() - timer);
 
   return 0;
 }

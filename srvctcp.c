@@ -33,6 +33,7 @@ int mss=1472;			/* user payload, can be > MTU for UDP */
 int numbytes;
 
 double idle_total = 0; // The total time the server has spent waiting for the acks 
+double coding_delay = 0; // Total time spent on encoding
 
 // Should make sure that 50 bytes is enough to store the port string
 char *port = PORT;
@@ -317,7 +318,8 @@ send_one(socket_t sockfd, uint32_t blockno){
     msg->blk_len = block_len;
   }
 
-  
+  double coding_timer = getTime();
+
   int rnd = random();
   msg->start_packet = MIN(MAX(rnd%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
   
@@ -345,8 +347,9 @@ send_one(socket_t sockfd, uint32_t blockno){
     for(j = 0; j < PAYLOAD_SIZE; j++){
       msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%2].content[msg->start_packet+i][j]);
     }
-   
   }
+
+  coding_delay += getTime() - coding_timer;
 
   // Marshall msg into buf
   int message_size = marshallData(*msg, buff);
@@ -406,7 +409,7 @@ endSession(void){
   
   printf("goodacks %d cumacks %d ooacks %d\n", goodacks, cumacks, ooacks);
   
-  printf("Total idle time %f\n", idle_total);  
+  printf("Total idle time %f, Total coding delay %f\n", idle_total, coding_delay);  
 }
 
 void
