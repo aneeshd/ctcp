@@ -14,7 +14,7 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK} flag_t;
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 #define PAYLOAD_SIZE 1400
 #define BLOCK_SIZE 64 // Maximum # of packets in a block (Default block length)
-#define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint16_t) + sizeof(uint32_t)
+#define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint8_t)
 
 typedef int socket_t;
 typedef struct timeval timeval_t;
@@ -39,6 +39,8 @@ typedef struct{
   flag_t flag;
   uint16_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
   uint32_t  blockno; // Base of the current block
+  uint8_t dof_req;  // Number of dofs left from the block
+  
   //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
 } Ack_Pckt;
 
@@ -63,7 +65,7 @@ typedef struct{
 
 double getTime(void);
 Data_Pckt* dataPacket(uint16_t seqno, uint32_t blockno, uint8_t num_packets);
-Ack_Pckt* ackPacket(uint16_t ackno, uint32_t blockno);
+Ack_Pckt* ackPacket(uint16_t ackno, uint32_t blockno, uint8_t dofs_left);
 
 void htonpData(Data_Pckt *msg);
 void htonpAck(Ack_Pckt *msg);

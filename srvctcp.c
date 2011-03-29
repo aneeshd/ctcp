@@ -473,6 +473,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 		badacks++;
 	} else  {
     goodacks++;
+
     if (ackno > blocks[curr_block%2].snd_nxt){
       blocks[curr_block%2].snd_una = blocks[curr_block%2].snd_nxt;
     } else{
@@ -1009,6 +1010,8 @@ unmarshallAck(Ack_Pckt* msg, char* buf){
   memcpy(&msg->ackno, buf+index, (part = sizeof(msg->ackno)));
   index += part;
   memcpy(&msg->blockno, buf+index, (part = sizeof(msg->blockno)));
+  index += part;
+  memcpy(&msg->dof_req, buf+index, (part = sizeof(msg->dof_req)));
   index += part;
   ntohpAck(msg);
 

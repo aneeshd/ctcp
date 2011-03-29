@@ -35,11 +35,12 @@ dataPacket(uint16_t seqno, uint32_t blockno, uint8_t num_packets){
 }
 
 Ack_Pckt*
-ackPacket(uint16_t ackno, uint32_t blockno){
+ackPacket(uint16_t ackno, uint32_t blockno, uint8_t dofs_left){
   Ack_Pckt* ack = malloc(sizeof(Ack_Pckt));
   ack->flag = NORMAL;
   ack->ackno = ackno;
   ack->blockno = blockno;
+  ack->dof_req = dofs_left;
   return ack;
 }
 

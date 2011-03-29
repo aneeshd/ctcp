@@ -223,10 +223,13 @@ err_sys(char *s){
 
 void
 bldack(Data_Pckt *msg, bool match){
-  Ack_Pckt* ack = ackPacket(msg->seqno+1, msg->blockno); // request for next packet
-  ack->tstamp = msg->tstamp;
-
+  // Update the incoming block lenght
   blocks[curr_block%NUM_BLOCKS].len = msg->blk_len;
+
+  // Build the ack packet according to the new information
+  Ack_Pckt* ack = ackPacket(msg->seqno+1, msg->blockno, 
+                            blocks[curr_block%NUM_BLOCKS].len - blocks[curr_block%NUM_BLOCKS].dofs);
+  ack->tstamp = msg->tstamp;
   
   uint8_t start = msg->start_packet;
 
@@ -303,7 +306,8 @@ bldack(Data_Pckt *msg, bool match){
     }
     
     elimination_delay += getTime() - elimination_timer;
-    
+
+
     if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
       // We have enough dofs to decode
       // Decode!
@@ -544,7 +548,7 @@ int
 marshallAck(Ack_Pckt msg, char* buf){
   int index = 0;
   int part = 0;  
-  int ack_size = sizeof(double) + sizeof(int) + 2 + 4;
+  int ack_size = ACK_SIZE;
 
   //Set to zeroes before starting
   memset(buf, 0, ack_size);
@@ -559,6 +563,9 @@ marshallAck(Ack_Pckt msg, char* buf){
   index += part;
   memcpy(buf + index, &msg.blockno, (part = sizeof(msg.blockno)));
   index += part;
+  memcpy(buf + index, &msg.dof_req, (part = sizeof(msg.dof_req)));
+  index += part;
+
   /*
   //----------- MD5 Checksum calculation ---------//
   MD5_CTX mdContext;
