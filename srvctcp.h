@@ -107,7 +107,7 @@ void terminate(socket_t fd);
 void usage(void);
 void readConfig(void);
 int doit( socket_t fd);
-void send_segs(socket_t fd);
+void send_segs(socket_t fd, uint32_t blockno);
 void err_sys(char* s);
 socket_t timedread(socket_t fd, double t);
 void handle_ack(socket_t fd, Ack_Pckt* ack);

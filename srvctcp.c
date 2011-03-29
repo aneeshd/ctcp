@@ -21,7 +21,7 @@
 #include "util.h"
 #include "srvctcp.h"
 
-#define SND_CWND 30
+#define SND_CWND 10
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
@@ -173,7 +173,9 @@ doit(socket_t sockfd){
 
   done = FALSE;
   curr_block = 1; 
-  readBlock(curr_block);
+  // read the first two blocks
+  readBlock(curr_block);  
+  readBlock(curr_block+1);
 
   snd_cwnd = SND_CWND;
 
@@ -183,7 +185,7 @@ doit(socket_t sockfd){
 	due = getTime() + timeout;  /* when una is due */
 
   // This is where the segments are sent
-	send_segs(sockfd);
+	send_segs(sockfd, curr_block);
   
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
   double idle_timer;
@@ -256,7 +258,7 @@ doit(socket_t sockfd){
       /*newreno is implemented*/
       blocks[curr_block%2].snd_una = blocks[curr_block%2].snd_nxt;
       //      snd_nxt = snd_una; XXX: this is the old version
-      send_segs(sockfd);  /* resend */
+      send_segs(sockfd, curr_block);  /* resend */
 
 			due = t + timeout;  
 		}
@@ -291,15 +293,15 @@ terminate(socket_t sockfd){
 }
 
 void
-send_segs(socket_t sockfd){
+send_segs(socket_t sockfd, uint32_t blockno){
   int win = 0;
 
   win = snd_cwnd - (blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una);
   if (win <= 0) return;  /* no available window => done */
 
 	while (win--) {
-    send_one(sockfd, curr_block);
-    blocks[curr_block%2].snd_nxt++;
+    send_one(sockfd, blockno);
+    blocks[blockno%2].snd_nxt++;
   }
 }
 
@@ -448,15 +450,15 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
     if(maxblockno && ack->blockno > maxblockno){
       done = TRUE;
-      return;
+      return; // goes back to the beginning of the while loop in main() and exits
     }
     
-    int window = blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una; 
+    //int window = blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una; 
     freeBlock(curr_block);
+    readBlock(curr_block+2);
     curr_block++;
-    readBlock(curr_block);
     blocks[curr_block%2].snd_una = 0;
-    blocks[curr_block%2].snd_nxt = blocks[curr_block%2].snd_una + window;
+    //blocks[curr_block%2].snd_nxt = blocks[curr_block%2].snd_una + window;
     
     if (debug > 5 && curr_block%10==0){
       printf("Now sending block %d \n", curr_block);
@@ -468,7 +470,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       || ack->blockno != curr_block) {
 		/* bad ack */
 		if (debug > 5) fprintf(stderr,
-                           "curr block %d badack no %d snd_nxt %d snd_una %d\n",
+                           "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d\n",
                            curr_block, ackno, blocks[curr_block%2].snd_nxt, blocks[curr_block%2].snd_una);
 		badacks++;
 	} else  {
@@ -484,9 +486,19 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     due = rcvt + timeout;   /*restart timer */
     //advance_cwnd();
 
-    //printf("Calling send segs ... \n");
-    send_segs(sockfd);  /* send some if we can */
-  }
+
+    if (blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una >= ack->dof_req){
+      // send from curr_block + 1
+
+      //printf("Calling send segs from block %d \n", curr_block+1);
+      send_segs(sockfd, curr_block+1);  /* send some if we can */      
+    }else{
+
+    //printf("Calling send segs from block %d \n", curr_block);
+      send_segs(sockfd, curr_block);  /* send some if we can */
+    }
+
+  } // end else goodack
 }
 
 
