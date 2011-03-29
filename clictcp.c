@@ -26,6 +26,9 @@ int sockfd, rcvspace;
 
 int ndofs = 0;
 int old_blk_pkts = 0;
+double idle_total = 0; // The total time the client has spent waiting for a packet
+
+
 void
 usage(void) {
   fprintf(stderr, "Usage: atoucli [-options]\n\
@@ -54,6 +57,7 @@ ctrlc(void){
 	for(i=0;i<hocnt;i++) printf("lost pkt %d\n",holes[i]);
   printf("Ndofs %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);  
   printf("Old packet count %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
+  printf("Total idle time %f\n", idle_total);  
   fclose(rcv_file);
 	exit(0);
 }
@@ -163,16 +167,22 @@ main(int argc, char** argv){
   }
 
   Data_Pckt *msg = malloc(sizeof(Data_Pckt));
+  double idle_timer;
 
+  
   do{
     srvlen = sizeof srv_addr; // TODO: this is not necessary -> remove
     // TODO: should be reading only a packet or multiple packets at a time, need to know the packet size in advance...
+
+    idle_timer = getTime();
     if((numbytes = recvfrom(sockfd, buff, MSS, 0, 
                             &srv_addr, &srvlen)) == -1){
       err_sys("recvfrom");
     }
     
     if(numbytes <= 0) break;
+
+    idle_total += getTime() - idle_timer;
 
 	  pkts++;
 	  et = secs();  /* last read */

@@ -32,6 +32,8 @@ int rcvbuf = 32768;		/* udp recv buff for ACKs*/
 int mss=1472;			/* user payload, can be > MTU for UDP */
 int numbytes;
 
+double idle_total = 0; // The total time the server has spent waiting for the acks 
+
 // Should make sure that 50 bytes is enough to store the port string
 char *port = PORT;
 
@@ -183,10 +185,14 @@ doit(socket_t sockfd){
 	send_segs(sockfd);
   
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
+  double idle_timer;
 
 	while(!done){
 
+    idle_timer = getTime();
 		r = timedread(sockfd, tick);
+
+    idle_total += getTime() - idle_timer;
 
 		if (r > 0) {  /* ack ready */
       
@@ -399,6 +405,8 @@ endSession(void){
          blocks[curr_block%2].snd_nxt,(int)snd_cwnd, blocks[curr_block%2].snd_una,snd_ssthresh,snd_max);
   
   printf("goodacks %d cumacks %d ooacks %d\n", goodacks, cumacks, ooacks);
+  
+  printf("Total idle time %f\n", idle_total);  
 }
 
 void
