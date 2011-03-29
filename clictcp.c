@@ -24,6 +24,8 @@ struct sockaddr srv_addr;
 struct addrinfo *result;
 int sockfd, rcvspace;
 
+int ndofs = 0;
+int old_blk_pkts = 0;
 void
 usage(void) {
   fprintf(stderr, "Usage: atoucli [-options]\n\
@@ -50,6 +52,8 @@ ctrlc(void){
 	printf("dups %d drop|oo %d sacks %d inlth %d bytes maxseg %d maxooo %d acktouts %d\n",
          dups,drops,sackcnt,inlth,hi,maxooo,acktimeouts);
 	for(i=0;i<hocnt;i++) printf("lost pkt %d\n",holes[i]);
+  printf("Ndofs %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);  
+  printf("Old packet count %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
   fclose(rcv_file);
 	exit(0);
 }
@@ -97,7 +101,7 @@ main(int argc, char** argv){
   // Open the file where the contents of the file transfer will be stored
   char dst_file_name[100] = "Rcv_";
   strcat(dst_file_name, file_name);
-  printf("dest %s", dst_file_name);
+  printf("dest %s\n", dst_file_name);
   rcv_file = fopen(dst_file_name,  "wb");
   
   memset(&hints, 0, sizeof hints);
@@ -180,8 +184,9 @@ main(int argc, char** argv){
       break;
     }
 
-    //printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
-
+    if (debug > 6){
+      printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
+    }
 
     if (debug && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno); 
     
@@ -215,6 +220,8 @@ bldack(Data_Pckt *msg, bool match){
   // Shift the row to make shure the leading coefficient is not zero
   int shift = shift_row(msg->packet_coeff, coding_wnd);
   start += shift;
+  
+  int prev_dofs = blocks[curr_block%NUM_BLOCKS].dofs;
 
   if(msg->blockno == curr_block){
     while(!isEmpty(msg->packet_coeff, coding_wnd)){
@@ -244,18 +251,18 @@ bldack(Data_Pckt *msg, bool match){
         uint8_t pivot = msg->packet_coeff[0];
         int i;
        
-        /*
-        int ix;
-        for (ix = 0; ix < coding_wnd; ix++){
-          printf(" %d ", msg->packet_coeff[ix]);
-        }
-        printf("seqno %d start%d isEmpty %d \n Row coeff", msg->seqno, start, isEmpty(msg->packet_coeff, coding_wnd)==1);
+        if (debug > 8){
+          int ix;
+          for (ix = 0; ix < coding_wnd; ix++){
+            printf(" %d ", msg->packet_coeff[ix]);
+          }
+          printf("seqno %d start%d isEmpty %d \n Row coeff", msg->seqno, start, isEmpty(msg->packet_coeff, coding_wnd)==1);
         
-        for (ix = 0; ix < coding_wnd; ix++){
-          printf(" %d ",blocks[curr_block%NUM_BLOCKS].rows[start][ix]);
+          for (ix = 0; ix < coding_wnd; ix++){
+            printf(" %d ",blocks[curr_block%NUM_BLOCKS].rows[start][ix]);
+          }
+          printf("\n");
         }
-        printf("\n");
-        */
 
         msg->packet_coeff[0] = 0; // TODO; check again
         // Subtract row with index strat with the row at hand (coffecients)
@@ -268,19 +275,28 @@ bldack(Data_Pckt *msg, bool match){
           msg->payload[i] ^= FFmult(blocks[curr_block%NUM_BLOCKS].content[start][i], pivot);
         }
 
+
         // Shift the row 
         shift = shift_row(msg->packet_coeff, coding_wnd);
         start += shift;
       }
     }
     
+    if(blocks[curr_block%NUM_BLOCKS].dofs == prev_dofs){
+      ndofs++;
+    }
+    
+
     if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
       // We have enough dofs to decode
       // Decode!
       
       double dec_time = getTime();
-      printf("Starting to decode  ... ");
-    
+
+      if (debug > 6){
+        printf("Starting to decode  ... ");
+      }
+
       unwrap(curr_block);
 
       // Write the decoded packets into the file 
@@ -296,12 +312,16 @@ bldack(Data_Pckt *msg, bool match){
       ack->ackno = 1;
       last_ackno = 1;
 
-      printf("Done within %f secs\n", getTime()-dec_time);
+      if (debug > 6){
+        printf("Done within %f secs\n", getTime()-dec_time);
+      }
     }
   
   } else if(msg->blockno < curr_block){
     last_ackno++;
     ack->ackno = last_ackno;
+
+    old_blk_pkts++;
   }
 
   ack->blockno = curr_block;
@@ -313,7 +333,10 @@ bldack(Data_Pckt *msg, bool match){
     err_sys("bldack: sendto");
   }
   acks++;
-  //printf("Sent an ACK: ackno %d blockno %d\n", ack->ackno, ack->blockno);
+  
+  if (debug > 6){
+    printf("Sent an ACK: ackno %d blockno %d\n", ack->ackno, ack->blockno);
+  }
 
 }
 
@@ -331,6 +354,7 @@ normalize(uint8_t* coefficients, char*  payload, uint8_t size){
   for(i = 0; i < PAYLOAD_SIZE; i++){
      payload[i] = FFmult(pivot,  payload[i]);
   }
+
 }
 
 
@@ -410,12 +434,11 @@ writeAndFreeBlock(uint32_t blockno){
     // Write the contents of the decode block into the file
     fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
 
-    // XXX: Will have memory leaks
     // Free the content
-        free(blocks[blockno%NUM_BLOCKS].content[i]);
+    free(blocks[blockno%NUM_BLOCKS].content[i]);
 
     // Free the matrix
-        free(blocks[blockno%NUM_BLOCKS].rows[i]);
+    free(blocks[blockno%NUM_BLOCKS].rows[i]);
   }
 }
 

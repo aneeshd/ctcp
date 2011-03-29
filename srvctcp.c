@@ -21,7 +21,7 @@
 #include "util.h"
 #include "srvctcp.h"
 
-#define SND_CWND 5
+#define SND_CWND 30
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
@@ -196,8 +196,10 @@ doit(socket_t sockfd){
       // Unmarshall the ack from the buff
       unmarshallAck(ack, buff);
 
-      printf("Got an ACK: ackno %d blockno %d -- RTT est %f \n", ack->ackno, ack->blockno, getTime()-ack->tstamp);
-      
+      if (debug > 6){
+        printf("Got an ACK: ackno %d blockno %d -- RTT est %f \n", ack->ackno, ack->blockno, getTime()-ack->tstamp);
+      }
+
 			if (r <= 0) err_sys("read");
 			rcvt = getTime();
 			ipkts++; 
@@ -313,25 +315,31 @@ send_one(socket_t sockfd, uint32_t blockno){
   int rnd = random();
   msg->start_packet = MIN(MAX(rnd%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
   
-  printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
-         curr_block, 
-         blocks[curr_block%2].len,
-         msg->seqno, 
-         blocks[curr_block%2].snd_una,       
-         blocks[curr_block%2].snd_nxt, 
-         msg->start_packet,
-         (int)snd_cwnd,
-        coding_wnd);
+  if (debug > 6){
+    printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
+           curr_block, 
+           blocks[curr_block%2].len,
+           msg->seqno, 
+           blocks[curr_block%2].snd_una,       
+           blocks[curr_block%2].snd_nxt, 
+           msg->start_packet,
+           (int)snd_cwnd,
+           coding_wnd);
+  }
 
-	if (debug > 3) fprintf(db,"%f %d xmt\n", msg->tstamp-et, blockno);
+	if (debug > 6) fprintf(db,"%f %d xmt\n", msg->tstamp-et, blockno);
   
   memset(msg->payload, 0, PAYLOAD_SIZE);
 
+
+
   for(i = 0; i < num_packets; i++){
     msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
+   
     for(j = 0; j < PAYLOAD_SIZE; j++){
       msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%2].content[msg->start_packet+i][j]);
     }
+   
   }
 
   // Marshall msg into buf
@@ -417,7 +425,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 	rttvar = (1-h)*rttvar + h * (delta - rttvar);
 	rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
   
-	if (debug > 3) {
+	if (debug > 6) {
     fprintf(db,"%f %d %f  %d %d ack\n",
             rcvt-et,ackno,rtt,(int)snd_cwnd,snd_ssthresh);
   }
@@ -438,6 +446,10 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     readBlock(curr_block);
     blocks[curr_block%2].snd_una = 0;
     blocks[curr_block%2].snd_nxt = blocks[curr_block%2].snd_una + window;
+    
+    if (debug > 5 && curr_block%10==0){
+      printf("Now sending block %d \n", curr_block);
+    }
   }
 
   if (ackno > blocks[curr_block%2].snd_nxt 
