@@ -51,7 +51,7 @@ typedef struct{
 
 typedef struct{ // TODO: this datastructure can store the dof's and other state related to the blocks
   int snd_nxt; // The sequence number of the next packet to be sent from this block
-  int snd_una; // The last requested sequence number from this block
+  uint8_t* order;  // The order according to which the rows are picked
   uint32_t len; // Number of bare packets inside the block
   char** content; // Array of pointers that point to the marshalled data of the bare packets
 } Block_t;

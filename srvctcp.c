@@ -21,7 +21,7 @@
 #include "util.h"
 #include "srvctcp.h"
 
-#define SND_CWND 20
+#define SND_CWND 50
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
@@ -31,7 +31,6 @@ int sndbuf = 32768;		/* udp send buff, bigger than mss */
 int rcvbuf = 32768;		/* udp recv buff for ACKs*/
 int mss=1472;			/* user payload, can be > MTU for UDP */
 int numbytes;
-int NextBlockOnFly = 0;
 
 
 double idle_total = 0; // The total time the server has spent waiting for the acks 
@@ -179,6 +178,7 @@ doit(socket_t sockfd){
   readBlock(curr_block);  
   readBlock(curr_block+1);
 
+  snd_nxt = snd_una = 1;
   snd_cwnd = SND_CWND;
 
   //	if (bwe_on) bwe_pkt = snd_nxt;
@@ -237,8 +237,8 @@ doit(socket_t sockfd){
                 "timerxmit %6.2f blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  coding wnd %d\n",
                 t-et,curr_block, 
                 blocks[curr_block%2].len,
-                blocks[curr_block%2].snd_una, 
-                blocks[curr_block%2].snd_nxt, 
+                snd_una, 
+                snd_nxt, 
                 (int)snd_cwnd,
                 coding_wnd);
       }
@@ -258,7 +258,7 @@ doit(socket_t sockfd){
 
 			//snd_cwnd = initsegs;  /* drop window */
       /*newreno is implemented*/
-      blocks[curr_block%2].snd_una = blocks[curr_block%2].snd_nxt;
+      snd_una = snd_nxt;
       //      snd_nxt = snd_una; XXX: this is the old version
       send_segs(sockfd, curr_block);  /* resend */
 
@@ -273,7 +273,7 @@ doit(socket_t sockfd){
 
 void 
 terminate(socket_t sockfd){
-  Data_Pckt *msg = dataPacket(blocks[curr_block%2].snd_nxt, curr_block, 0);
+  Data_Pckt *msg = dataPacket(snd_nxt, curr_block, 0);
   
   // FIN_CLI
   msg->flag = FIN_CLI;
@@ -298,12 +298,12 @@ void
 send_segs(socket_t sockfd, uint32_t blockno){
   int win = 0;
 
-  win = snd_cwnd - (blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una);
+  win = snd_cwnd - (snd_nxt -snd_una);
   if (win <= 0) return;  /* no available window => done */
 
 	while (win--) {
     send_one(sockfd, blockno);
-    blocks[curr_block%2].snd_nxt++;
+    snd_nxt++;
     NextBlockOnFly += (blockno > curr_block); // TODO can do this a better way
   }
 }
@@ -316,7 +316,7 @@ send_one(socket_t sockfd, uint32_t blockno){
 	int i, j;
   uint8_t block_len = blocks[blockno%2].len;
   uint8_t num_packets = MIN(coding_wnd, block_len);
-  Data_Pckt *msg = dataPacket(blocks[curr_block%2].snd_nxt, blockno, num_packets);
+  Data_Pckt *msg = dataPacket(snd_nxt, blockno, num_packets);
 
   if(block_len < BLOCK_SIZE){
     msg->flag = PARTIAL_BLK;
@@ -325,16 +325,28 @@ send_one(socket_t sockfd, uint32_t blockno){
 
   double coding_timer = getTime();
 
-  int rnd = random();
-  msg->start_packet = MIN(MAX(rnd%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
+
   
+  if (blocks[blockno%2].snd_nxt >= BLOCK_SIZE){
+    blocks[blockno%2].snd_nxt = 0;
+  }
+
+  int row  = blocks[blockno%2].order[blocks[blockno%2].snd_nxt];
+  
+
+  //int row = random();
+
+  msg->start_packet = MIN(MAX(row%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
+  
+  blocks[blockno%2].snd_nxt++;
+
   if (debug > 6){
     printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
            blockno, 
            blocks[curr_block%2].len,
            msg->seqno, 
-           blocks[curr_block%2].snd_una,       
-           blocks[curr_block%2].snd_nxt, 
+           snd_una,       
+           snd_nxt, 
            msg->start_packet,
            (int)snd_cwnd,
            coding_wnd);
@@ -373,7 +385,7 @@ send_one(socket_t sockfd, uint32_t blockno){
     err_sys("write");
   }
 
-	if (debug > 8)printf("blockno %d snd_nxt %d \n", blockno, blocks[curr_block%2].snd_nxt);
+	if (debug > 8)printf("blockno %d snd_nxt %d \n", blockno, snd_nxt);
 
 	opkts++;
   free(msg->packet_coeff);
@@ -410,7 +422,7 @@ endSession(void){
   if (vegas) printf("vsscnt %d vdecr %d v0 %d vrtt %f vdelta %f\n",
                     vsscnt,vdecr, v0,vrtt,vdelta);
   printf("snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d snd_max %d\n",
-         blocks[curr_block%2].snd_nxt,(int)snd_cwnd, blocks[curr_block%2].snd_una,snd_ssthresh,snd_max);
+         snd_nxt,(int)snd_cwnd, snd_una,snd_ssthresh,snd_max);
   
   printf("goodacks %d cumacks %d ooacks %d\n", goodacks, cumacks, ooacks);
   
@@ -457,9 +469,6 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       return; // goes back to the beginning of the while loop in main() and exits
     }
     
-    blocks[(curr_block+1)%2].snd_una =  blocks[curr_block%2].snd_una;    
-    blocks[(curr_block+1)%2].snd_nxt =  blocks[curr_block%2].snd_nxt;
-
     freeBlock(curr_block);
     if (!maxblockno){
       readBlock(curr_block+2);
@@ -473,32 +482,29 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     }
   }
 
-  if (ackno > blocks[curr_block%2].snd_nxt 
-      || ackno < blocks[curr_block%2].snd_una 
+  if (ackno > snd_nxt 
+      || ackno < snd_una 
       || ack->blockno != curr_block) {
 		/* bad ack */
 		if (debug > 5) fprintf(stderr,
                            "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d\n",
-                           curr_block, ackno, blocks[curr_block%2].snd_nxt, blocks[curr_block%2].snd_una);
+                           curr_block, ackno, snd_nxt, snd_una);
 		badacks++;
 	} else  {
     goodacks++;
 
-    if (ackno > blocks[curr_block%2].snd_nxt){
-      blocks[curr_block%2].snd_una = blocks[curr_block%2].snd_nxt;
-    } else{
-      blocks[curr_block%2].snd_una = ackno;
-    }
+    snd_una = ackno;
 
     idle=0;
     due = rcvt + timeout;   /*restart timer */
     //advance_cwnd();
 
+    // Got an ack for a packet corresponding to the next block
     if (ack->flag == EXT_MOD){
       NextBlockOnFly--;
     }
 
-    if (!maxblockno && blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una - NextBlockOnFly >= 4+ack->dof_req){
+    if (!maxblockno && snd_nxt - snd_una - NextBlockOnFly >= ack->dof_req){
       // send from curr_block + 1
 
       // TODO Can do better. Don't need to send all in the window one way or another
@@ -815,14 +821,14 @@ bwe_calc(double rtt){
     else if (vegas== 3) vrtt = vrttsum/vcnt;
     else if (vegas== 4) vrtt = vrttmax;
     else vrtt = rtt;  /* last rtt */
-    vdelta = minrtt * ((blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una)/minrtt - (blocks[curr_block%2].snd_nxt - bwe_pkt)/vrtt);
+    vdelta = minrtt * ((snd_nxt - snd_una)/minrtt - (snd_nxt - bwe_pkt)/vrtt);
     if (vdelta > max_delta) max_delta=vdelta;  /* vegas delta */
   } else vdelta=0;  /* no samples */
   bwertt = 8.e-6 * mss * (ackno-bwe_prev-1)/rtt; // shift by 20 to the left to convert to Mbits
   if (bwertt > bwertt_max) bwertt_max = bwertt;
   if (debug > 4 ) fprintf(stderr,"bwertt %f %f %f %d %f\n",rcvt-et,bwertt,rtt,ackno-bwe_prev-1,vdelta);
   bwe_prev = bwe_pkt;
-  bwe_pkt = blocks[curr_block%2].snd_nxt;
+  bwe_pkt = snd_nxt;
   vrttmin=999999;
   vrttsum=vcnt=vrttmax=0;
 }
@@ -843,7 +849,7 @@ advance_cwnd(void){
         vsscnt++;   /* count vegas ss adjusts*/
         if ( debug > 2) fprintf(stderr,
                                 "vss %6.2f pkt %d nxt %d max %d  cwnd %d  thresh %d recover %d %f %f\n",
-                                rcvt-et, blocks[curr_block%2].snd_una, blocks[curr_block%2].snd_nxt, snd_max, (int)snd_cwnd,
+                                rcvt-et, snd_una, snd_nxt, snd_max, (int)snd_cwnd,
                                 snd_ssthresh,snd_recover,vdelta,vrtt);
       }
       vinss = 1;
@@ -896,7 +902,20 @@ readBlock(uint32_t blockno){
   // TODO: Make sure that the memory in the block is released before calling this function
   blocks[blockno%2].len = 0;
   blocks[blockno%2].snd_nxt = 1;
-  blocks[blockno%2].snd_una = 1;
+
+  // Compute a random permutation of the rows
+  blocks[blockno%2].order = malloc(BLOCK_SIZE*sizeof(uint8_t));
+  int i, j, swap_temp;
+  for (i=0; i < BLOCK_SIZE; i++){
+    blocks[blockno%2].order[i] = i;
+  }
+  for (i=BLOCK_SIZE - 1; i > 0; i--){
+    j = random()%(i+1);
+    swap_temp = blocks[blockno%2].order[i];
+    blocks[blockno%2].order[i] = blocks[blockno%2].order[j];
+    blocks[blockno%2].order[j] = swap_temp;
+  }
+
 
   blocks[blockno%2].content = malloc(BLOCK_SIZE*sizeof(char*));
 
@@ -929,6 +948,7 @@ freeBlock(uint32_t blockno){
     free(blocks[blockno%2].content[i]);
   }
     free(blocks[blockno%2].content);
+    free(blocks[blockno%2].order);
 }
 
 void
