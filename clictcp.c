@@ -316,6 +316,7 @@ bldack(Data_Pckt *msg, bool match){
 
 
     //printf("current blk %d\t dofs %d \n ", curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
+
     // We always try decoding the curr_block first, even if the next block is decodable, it is not useful
     if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
       // We have enough dofs to decode
@@ -323,15 +324,16 @@ bldack(Data_Pckt *msg, bool match){
       // TODO Here just update curr_block, but put the unwrap and write,... into another thread
       
       double decoding_timer = getTime();
-      if (debug > 5){
-        printf("Starting to decode  ... ");
+      if (debug > 4){
+        printf("Starting to decode block %d ... ", curr_block);
       }
 
       unwrap(curr_block);
 
+
       // Write the decoded packets into the file 
       writeAndFreeBlock(curr_block);
-      
+
       // Initialize the block for next time
       initCodedBlock(curr_block);
 
@@ -340,7 +342,7 @@ bldack(Data_Pckt *msg, bool match){
       curr_block++;
 
       decoding_delay += getTime() - decoding_timer;
-      if (debug > 6){
+      if (debug > 4){
         printf("Done within %f secs\n", getTime()-decoding_timer);
       }
     } // end if the block is done
@@ -374,7 +376,7 @@ bldack(Data_Pckt *msg, bool match){
 // TODO: TEST!
 void
 normalize(uint8_t* coefficients, char*  payload, uint8_t size){
-  uint8_t pivot = FFinv(coefficients[0]);
+  uint8_t pivot = inv_vec[coefficients[0]];
   int i;
 
   for(i = 0; i < size; i++){
@@ -453,6 +455,8 @@ void
 writeAndFreeBlock(uint32_t blockno){
   uint16_t len;
   int i;
+  //printf("Writing a block of length %d\n", blocks[blockno%NUM_BLOCKS].len);      
+
   for(i=0; i < blocks[blockno%NUM_BLOCKS].len; i++){
     // Read the first two bytes containing the length of the useful data 
     memcpy(&len, blocks[blockno%NUM_BLOCKS].content[i], 2);
@@ -460,15 +464,20 @@ writeAndFreeBlock(uint32_t blockno){
     // Convert to host order
     len = ntohs(len);
     //len = PAYLOAD_SIZE - 2;
+    //printf("(%d) Writing a packet of length %d\n", i, len);      
+
 
     // Write the contents of the decode block into the file
     fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
 
+    // TODO remove the if condition (This is to avoid seg fault for the last block)
+    if (blocks[blockno%NUM_BLOCKS].len == BLOCK_SIZE){
     // Free the content
     free(blocks[blockno%NUM_BLOCKS].content[i]);
 
     // Free the matrix
     free(blocks[blockno%NUM_BLOCKS].rows[i]);
+    }
   }
 }
 

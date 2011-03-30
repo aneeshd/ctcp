@@ -29,7 +29,7 @@ unsigned int snd_nxt;
 unsigned int snd_una;
 
 //---------- CTCP specific variables --------------//
-int coding_wnd = 10;
+int coding_wnd = CODING_WND;
 uint32_t maxblockno = 0; // 0 denoting infty, whenever we reach the maximum block of the file, we set it
 
 /* TCP pcb like stuff */
