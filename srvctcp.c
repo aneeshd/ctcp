@@ -21,7 +21,7 @@
 #include "util.h"
 #include "srvctcp.h"
 
-#define SND_CWND 10
+#define SND_CWND 20
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
@@ -31,6 +31,8 @@ int sndbuf = 32768;		/* udp send buff, bigger than mss */
 int rcvbuf = 32768;		/* udp recv buff for ACKs*/
 int mss=1472;			/* user payload, can be > MTU for UDP */
 int numbytes;
+int NextBlockOnFly = 0;
+
 
 double idle_total = 0; // The total time the server has spent waiting for the acks 
 double coding_delay = 0; // Total time spent on encoding
@@ -301,7 +303,8 @@ send_segs(socket_t sockfd, uint32_t blockno){
 
 	while (win--) {
     send_one(sockfd, blockno);
-    blocks[blockno%2].snd_nxt++;
+    blocks[curr_block%2].snd_nxt++;
+    NextBlockOnFly += (blockno > curr_block); // TODO can do this a better way
   }
 }
 
@@ -327,7 +330,7 @@ send_one(socket_t sockfd, uint32_t blockno){
   
   if (debug > 6){
     printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
-           curr_block, 
+           blockno, 
            blocks[curr_block%2].len,
            msg->seqno, 
            blocks[curr_block%2].snd_una,       
@@ -450,16 +453,21 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
     if(maxblockno && ack->blockno > maxblockno){
       done = TRUE;
+      printf("THIS IS THE LAST ACK\n");
       return; // goes back to the beginning of the while loop in main() and exits
     }
     
-    //int window = blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una; 
+    blocks[(curr_block+1)%2].snd_una =  blocks[curr_block%2].snd_una;    
+    blocks[(curr_block+1)%2].snd_nxt =  blocks[curr_block%2].snd_nxt;
+
     freeBlock(curr_block);
-    readBlock(curr_block+2);
-    curr_block++;
-    blocks[curr_block%2].snd_una = 0;
-    //blocks[curr_block%2].snd_nxt = blocks[curr_block%2].snd_una + window;
+    if (!maxblockno){
+      readBlock(curr_block+2);
+    }
     
+    curr_block++;
+    NextBlockOnFly = 0;
+
     if (debug > 5 && curr_block%10==0){
       printf("Now sending block %d \n", curr_block);
     }
@@ -486,12 +494,16 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     due = rcvt + timeout;   /*restart timer */
     //advance_cwnd();
 
+    if (ack->flag == EXT_MOD){
+      NextBlockOnFly--;
+    }
 
-    if (blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una >= ack->dof_req){
+    if (!maxblockno && blocks[curr_block%2].snd_nxt - blocks[curr_block%2].snd_una - NextBlockOnFly >= 4+ack->dof_req){
       // send from curr_block + 1
 
+      // TODO Can do better. Don't need to send all in the window one way or another
       //printf("Calling send segs from block %d \n", curr_block+1);
-      send_segs(sockfd, curr_block+1);  /* send some if we can */      
+      send_segs(sockfd, curr_block+1);  /* send some if we can */   
     }else{
 
     //printf("Calling send segs from block %d \n", curr_block);
@@ -902,6 +914,7 @@ readBlock(uint32_t blockno){
 
   if(feof(snd_file)){
     maxblockno = blockno;
+    printf("This is the last block %d\n", maxblockno);
   }
 }
 

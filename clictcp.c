@@ -201,7 +201,7 @@ main(int argc, char** argv){
       printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
     }
 
-    if (debug && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno); 
+    if (debug > 6 && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno); 
     
     bldack(msg, match);
 
@@ -226,9 +226,7 @@ bldack(Data_Pckt *msg, bool match){
   double elimination_timer = getTime();
 
   uint32_t blockno = msg->blockno;    //The block number of incoming packet
-  uint16_t ackno = msg->seqno + 1;
-
-
+  
   // Update the incoming block lenght
   blocks[blockno%NUM_BLOCKS].len = msg->blk_len;
 
@@ -236,11 +234,10 @@ bldack(Data_Pckt *msg, bool match){
   if (blockno < curr_block){
     // Discard the packet if it is coming from a decoded block or it is too far ahead
     // Send an appropriate ack to return the token
-    last_ackno++;
-    ackno = last_ackno;
+    //printf("Old packet.\n");    
     old_blk_pkts++;
-  }else if (blockno > curr_block){
-    printf("BAD packet: Current block not yet decoded.\n");    
+  }else if (blockno >= curr_block + NUM_BLOCKS){
+    //printf("BAD packet: The block does not exist yet.\n");    
   }else{
 
     // Otherwise, the packet should go to one of the blocks in the memory
@@ -311,22 +308,22 @@ bldack(Data_Pckt *msg, bool match){
       }
     } // end while
 
-    if(blocks[curr_block%NUM_BLOCKS].dofs == prev_dofs){
+    if(blocks[blockno%NUM_BLOCKS].dofs == prev_dofs){
       ndofs++;
     }
     
     elimination_delay += getTime() - elimination_timer;
 
 
-
+    //printf("current blk %d\t dofs %d \n ", curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
     // We always try decoding the curr_block first, even if the next block is decodable, it is not useful
     if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
       // We have enough dofs to decode
       // Decode!
-      // TODO Here just update curr_block and ackno, but put the unwrap and write,... into another thread
+      // TODO Here just update curr_block, but put the unwrap and write,... into another thread
       
       double decoding_timer = getTime();
-      if (debug > 6){
+      if (debug > 5){
         printf("Starting to decode  ... ");
       }
 
@@ -342,10 +339,6 @@ bldack(Data_Pckt *msg, bool match){
       // Increment the current block number
       curr_block++;
 
-      // Reset the ack number
-      ackno = 1;
-      last_ackno = 1;
-
       decoding_delay += getTime() - decoding_timer;
       if (debug > 6){
         printf("Done within %f secs\n", getTime()-decoding_timer);
@@ -355,10 +348,11 @@ bldack(Data_Pckt *msg, bool match){
   } // end else (if   curr_block <= blockno <= curr_block + NUM_BLOCKS -1 )
 
     // Build the ack packet according to the new information
-  Ack_Pckt* ack = ackPacket(ackno, curr_block, 
-                            blocks[curr_block%NUM_BLOCKS].len - blocks[curr_block%NUM_BLOCKS].dofs); 
-  ack->tstamp = msg->tstamp;
-
+  Ack_Pckt* ack = ackPacket(msg->seqno+1, curr_block, 
+                            blocks[curr_block%NUM_BLOCKS].len - blocks[curr_block%NUM_BLOCKS].dofs);  ack->tstamp = msg->tstamp;
+  if (blockno == curr_block + 1){
+    ack->flag = EXT_MOD;
+  }
 
   // =================================================================
  
