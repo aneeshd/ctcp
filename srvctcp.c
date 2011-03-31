@@ -21,7 +21,7 @@
 #include "util.h"
 #include "srvctcp.h"
 
-#define SND_CWND 50
+#define SND_CWND 64
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
@@ -318,29 +318,44 @@ send_one(socket_t sockfd, uint32_t blockno){
   uint8_t num_packets = MIN(coding_wnd, block_len);
   Data_Pckt *msg = dataPacket(snd_nxt, blockno, num_packets);
 
-  if(block_len < BLOCK_SIZE){
-    msg->flag = PARTIAL_BLK;
-    msg->blk_len = block_len;
-  }
-
   double coding_timer = getTime();
 
-
   
+  int row;
   if (blocks[blockno%2].snd_nxt >= BLOCK_SIZE){
-    blocks[blockno%2].snd_nxt = 0;
+    //blocks[blockno%2].snd_nxt = 0;
     // TODO Instead of repermuting choose the row randomly but not uniformly
-    // int row = random();
+    row = random();
+    printf("Need more coded packets. Curr block %d req block %d snd_nxt %d\n", curr_block, blockno, blocks[blockno%2].snd_nxt);
+  }else{
+    row  = blocks[blockno%2].order[blocks[blockno%2].snd_nxt];
   }
-
-
-  int row  = blocks[blockno%2].order[blocks[blockno%2].snd_nxt];
-  
 
   // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
   msg->start_packet = MIN(MAX(row%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
   
   blocks[blockno%2].snd_nxt++;
+
+  
+  memset(msg->payload, 0, PAYLOAD_SIZE);
+
+  msg->packet_coeff[0] = 1;
+  memcpy(msg->payload, blocks[blockno%2].content[msg->start_packet], PAYLOAD_SIZE);
+
+  for(i = 1; i < num_packets; i++){
+    msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
+   
+    for(j = 0; j < PAYLOAD_SIZE; j++){
+      msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%2].content[msg->start_packet+i][j]);
+    }
+  }
+
+  coding_delay += getTime() - coding_timer;
+
+  if(block_len < BLOCK_SIZE){
+    msg->flag = PARTIAL_BLK;
+    msg->blk_len = block_len;
+  }
 
   if (debug > 6){
     printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
@@ -352,23 +367,8 @@ send_one(socket_t sockfd, uint32_t blockno){
            msg->start_packet,
            (int)snd_cwnd,
            coding_wnd);
+    fprintf(db,"%f %d xmt\n", msg->tstamp-et, blockno);
   }
-
-	if (debug > 6) fprintf(db,"%f %d xmt\n", msg->tstamp-et, blockno);
-  
-  memset(msg->payload, 0, PAYLOAD_SIZE);
-
-
-
-  for(i = 0; i < num_packets; i++){
-    msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
-   
-    for(j = 0; j < PAYLOAD_SIZE; j++){
-      msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%2].content[msg->start_packet+i][j]);
-    }
-  }
-
-  coding_delay += getTime() - coding_timer;
 
   // Marshall msg into buf
   int message_size = marshallData(*msg, buff);
@@ -903,7 +903,7 @@ readBlock(uint32_t blockno){
 
   // TODO: Make sure that the memory in the block is released before calling this function
   blocks[blockno%2].len = 0;
-  blocks[blockno%2].snd_nxt = 1;
+  blocks[blockno%2].snd_nxt = 0;
 
   // Compute a random permutation of the rows
   blocks[blockno%2].order = malloc(BLOCK_SIZE*sizeof(uint8_t));

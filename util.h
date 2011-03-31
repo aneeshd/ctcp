@@ -13,9 +13,10 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK} flag_t;
 #define MSS 1500 // XXX: make sure that this is fine...
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 #define PAYLOAD_SIZE 1400
-#define BLOCK_SIZE 64 // Maximum # of packets in a block (Default block length)
+#define BLOCK_SIZE 128 // Maximum # of packets in a block (Default block length)
 #define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t)
 #define CODING_WND 9
+#define MAX_CWND 64
 
 
 typedef int socket_t;

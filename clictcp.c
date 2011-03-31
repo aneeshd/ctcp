@@ -377,17 +377,18 @@ bldack(Data_Pckt *msg, bool match){
 // TODO: TEST!
 void
 normalize(uint8_t* coefficients, char*  payload, uint8_t size){
-  uint8_t pivot = inv_vec[coefficients[0]];
-  int i;
+  if (coefficients[0] != 1){
+    uint8_t pivot = inv_vec[coefficients[0]];
+    int i;
 
-  for(i = 0; i < size; i++){
-     coefficients[i] = FFmult(pivot,  coefficients[i]);
+    for(i = 0; i < size; i++){
+      coefficients[i] = FFmult(pivot,  coefficients[i]);
+    }
+
+    for(i = 0; i < PAYLOAD_SIZE; i++){
+      payload[i] = FFmult(pivot,  payload[i]);
+    }
   }
-
-  for(i = 0; i < PAYLOAD_SIZE; i++){
-     payload[i] = FFmult(pivot,  payload[i]);
-  }
-
 }
 
 
