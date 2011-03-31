@@ -6,7 +6,7 @@
 
 #define PORT "7890" // This is the port that the server is listening to
 #define BUFFSIZE    65535
-#define RTT_DECAY 4 // This is used as the factor to approximate the rto
+#define RTT_DECAY 3 // This is used as the factor to approximate the rto
 
 FILE *db;     /* debug trace file */
 char* log_name; // Name of the log
@@ -77,14 +77,12 @@ int vss = 0;                    /* vegas slow start  0:exit ss  1: go to floyd*/
 double valpha=1.0, vbeta=3.0, vgamma=1.0;  /* vegas parameters */
 
 //--------------- vegas working variables ------------//
-int vinss=0;   /* in vegas slow start */
+int vinss=1;   /* in vegas slow start */
 int vsscnt=0;  /* number of vegas slow start adjusts */
 int vcnt;  /* number of rtt samples */
 int vdecr, v0 ; /* vegas decrements or no adjusts */
 double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;
 //------------------------------------------------------------//
-
-int initial_ss =1;   /* initial slow start */
 
 unsigned int bwe_pkt, bwe_prev, bwe_on=1; // Bandwith estimate??
 double bwertt, bwertt_max;

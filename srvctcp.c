@@ -179,11 +179,12 @@ doit(socket_t sockfd){
   readBlock(curr_block+1);
 
   snd_nxt = snd_una = 1;
-  snd_cwnd = SND_CWND;
+  // snd_cwnd = SND_CWND;
+  snd_cwnd = initsegs;
 
   //	if (bwe_on) bwe_pkt = snd_nxt;
   //	if (maxpkts == 0) maxpkts = 1000000000; // Default time is 10 seconds
-
+  rto = tick;
 	due = getTime() + timeout;  /* when una is due */
 
   // This is where the segments are sent
@@ -256,10 +257,10 @@ doit(socket_t sockfd){
 			  snd_ssthresh = initsegs;
       }
 
-			//snd_cwnd = initsegs;  /* drop window */
-      /*newreno is implemented*/
+      // TODO: check vinss again
+      vinss = 1;
+			snd_cwnd = initsegs;  /* drop window */
       snd_una = snd_nxt;
-      //      snd_nxt = snd_una; XXX: this is the old version
       send_segs(sockfd, curr_block);  /* resend */
 
 			due = t + timeout;  
@@ -301,10 +302,11 @@ send_segs(socket_t sockfd, uint32_t blockno){
   win = snd_cwnd - (snd_nxt -snd_una);
   if (win <= 0) return;  /* no available window => done */
 
-	while (win--) {
+	while (win>=1) {
     send_one(sockfd, blockno);
     snd_nxt++;
     NextBlockOnFly += (blockno > curr_block); // TODO can do this a better way
+    win--;
   }
 }
 
@@ -439,20 +441,20 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
  
   //------------- RTT calculations --------------------------// 
 	if (debug > 8 )printf("ack rcvd %d\n",ackno);
+
   /*fmf-rtt & rto calculations*/
-	rtt = rcvt - ack->tstamp;
+	rtt = rcvt - ack->tstamp; // this calculates the rtt for this coded packet
 	if (rtt < minrtt) minrtt = rtt;
-  else if (rtt > maxrtt) maxrtt = rtt;
+  if (rtt > maxrtt) maxrtt = rtt;
+  // TODO: remove (?) avrgrtt, vcnt???, and remove one of the min/max
 	avrgrtt += rtt;
-  if (rtt < vrttmin) vrttmin=rtt;  /* min for rtt interval */
-  if (rtt > vrttmax) vrttmax=rtt;  /* max for rtt interval */
-  vrttsum += rtt;
   vcnt++;
+
 	/* RTO calculations */
+  // TODO: ??? srtt? :P WTF
 	srtt = (1-g)*srtt + g*rtt;
 	delta = fabs(rtt - srtt);
-  //	if (delta < 0 ) delta = -delta; // TODO: delete this
-	rttvar = (1-h)*rttvar + h * (delta - rttvar);
+	rttvar = (1-h)*rttvar + h*(delta - rttvar);
 	rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
   
 	if (debug > 6) {
@@ -460,6 +462,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
             rcvt-et,ackno,rtt,(int)snd_cwnd,snd_ssthresh);
   }
 	/* rtt bw estimation, vegas like */
+  // TODO: remove some of these conditions? 
   if (bwe_on && bwe_pkt && ackno > bwe_pkt) bwe_calc(rtt);
   //----------------------------------------------------------------------------//
 
@@ -480,7 +483,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     NextBlockOnFly = 0;
 
     if (debug > 5 && curr_block%10==0){
-      printf("Now sending block %d \n", curr_block);
+      printf("Now sending block %d, cwnd %f\n", curr_block, snd_cwnd);
     }
   }
 
@@ -499,7 +502,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
     idle=0;
     due = rcvt + timeout;   /*restart timer */
-    //advance_cwnd();
+    advance_cwnd();
 
     // Got an ack for a packet corresponding to the next block
     if (ack->flag == EXT_MOD){
@@ -819,66 +822,36 @@ bwe_calc(double rtt){
 	/* bw estimate each lossless RTT, vegas delta */
   /* once per rtt and not in recovery */
   if (vcnt) { /* only if we've been had some samples */
-    if (vegas== 2) vrtt = vrttmin;
-    else if (vegas== 3) vrtt = vrttsum/vcnt;
-    else if (vegas== 4) vrtt = vrttmax;
-    else vrtt = rtt;  /* last rtt */
-    vdelta = minrtt * ((snd_nxt - snd_una)/minrtt - (snd_nxt - bwe_pkt)/vrtt);
-    if (vdelta > max_delta) max_delta=vdelta;  /* vegas delta */
+    vdelta = minrtt * ((snd_nxt - snd_una)/minrtt - (snd_nxt - bwe_pkt)/srtt);
+    if (vdelta > max_delta) max_delta = vdelta;  /* vegas delta */
   } else vdelta=0;  /* no samples */
-  bwertt = 8.e-6 * mss * (ackno-bwe_prev-1)/rtt; // shift by 20 to the left to convert to Mbits
+  /* TODO : might need this later?
+  bwertt = (mss * (ackno-bwe_prev-1))/(rtt* (1 << 17)); // shift by 17 to the left to convert to Mbytes
   if (bwertt > bwertt_max) bwertt_max = bwertt;
+
   if (debug > 4 ) fprintf(stderr,"bwertt %f %f %f %d %f\n",rcvt-et,bwertt,rtt,ackno-bwe_prev-1,vdelta);
+  */
   bwe_prev = bwe_pkt;
   bwe_pkt = snd_nxt;
-  vrttmin=999999;
-  vrttsum=vcnt=vrttmax=0;
+
+  vcnt=0;
 }
 
 
 void
 advance_cwnd(void){
+  // TODO check bwe_pkt, different slopes for increasing and decreasing?
+  // TODO make sure ssthresh < max cwnd
+  // TODO increment and decrement values should be adjusted
 	/* advance cwnd according to slow-start of congestion avoidance */
-  if (snd_cwnd <= snd_ssthresh) {
+  if (snd_cwnd <= snd_ssthresh && vinss) {
     /* slow start, expo growth */
-    if (initial_ss && vegas &&  bwe_pkt && (vinss || vdelta > vgamma)){
-      /*
-       * here if initial ss and vegas is on and no CA
-       * vegas would normally leave slow start
-       *  but we revert to  floyd's slow start
-       */
-      if (vinss ==0 ){
-        vsscnt++;   /* count vegas ss adjusts*/
-        if ( debug > 2) fprintf(stderr,
-                                "vss %6.2f pkt %d nxt %d max %d  cwnd %d  thresh %d recover %d %f %f\n",
-                                rcvt-et, snd_una, snd_nxt, snd_max, (int)snd_cwnd,
-                                snd_ssthresh,snd_recover,vdelta,vrtt);
-      }
-      vinss = 1;
-      /* use vss flag to choose
-       * between ssthresh =2 cwnd = actual or floyd ss
-       */
-      if (vss ==1 ) snd_cwnd += (0.5 * 100)/snd_cwnd;
-      else {
-        /* standard vegas leave slow start */
-        if (vss == 2)snd_cwnd = snd_cwnd-vdelta; /* actual ? */
-        else snd_cwnd = snd_cwnd- snd_cwnd/8;
-        if (snd_cwnd < initsegs) snd_cwnd=initsegs;
-        snd_ssthresh = 2;
-        bwe_pkt=0;  /* prevent bwe this RTT */
-        initial_ss = 0;  /* once only */
-      }
-    } else if (max_ssthresh <=0 || snd_cwnd <= max_ssthresh )
-      snd_cwnd += ssincr; /* standard */
-                          /*otherwise reduce rate -- floyd */
-    else snd_cwnd += (0.5 * max_ssthresh) / snd_cwnd;
+      snd_cwnd += ssincr;
   } else{
     /* congestion avoidance phase */
-    int incr;
-    
-    if (floyd) floyd_aimd(0);  /* adjust increment */
+    int incr;    
     incr = increment;
-    if (vegas &&  bwe_pkt) {
+    if (bwe_pkt) {
       /* vegas active and not in recovery */
       if (vdelta > vbeta ){
         incr= -increment; /* too fast, -incr /RTT */
@@ -888,11 +861,9 @@ advance_cwnd(void){
         v0++;
       }
     }
-    /* kelly precludes vegas */
-    if (kai && kai > incr/snd_cwnd) 
-      snd_cwnd += kai;  /* kelly scalable TCP */
-    else snd_cwnd = snd_cwnd + incr/snd_cwnd; /* ca */
+    snd_cwnd = snd_cwnd + incr/snd_cwnd; /* ca */
     if (snd_cwnd < initsegs) snd_cwnd = initsegs;
+    if (snd_cwnd > MAX_CWND ) snd_cwnd = MAX_CWND; // XXX
     vinss = 0; /* no vegas ss now */
   }
 }
@@ -1105,7 +1076,7 @@ restart(void){
   ackno = 0;
   
   //--------------- vegas working variables ------------//
-  vinss=0;   /* in vegas slow start */
+  vinss=1;   /* in vegas slow start */
   vsscnt=0;  /* number of vegas slow start adjusts */
   vcnt = 0;  /* number of rtt samples */
   vdecr = 0; 
@@ -1117,8 +1088,7 @@ restart(void){
   vrttmin=999999;
   //------------------------------------------------------------//
   
-  initial_ss =1;   /* initial slow start */
-  
+ 
   bwe_pkt = 0;
   bwe_prev = 0;
   bwe_on=1; 
