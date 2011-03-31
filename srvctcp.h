@@ -24,25 +24,26 @@ uint32_t curr_block; // Current block number
 bool done;
 Block_t blocks[2];
 
-int NextBlockOnFly = 0;
-unsigned int snd_nxt;
-unsigned int snd_una;
-
 //---------- CTCP specific variables --------------//
 int coding_wnd = CODING_WND;
 uint32_t maxblockno = 0; // 0 denoting infty, whenever we reach the maximum block of the file, we set it
 
+
+int NextBlockOnFly = 0;
+uint32_t snd_nxt;
+uint32_t snd_una;
+
+
 /* TCP pcb like stuff */
 int dupacks;			/* consecutive dup acks recd */
-//uint16_t snd_nxt; 		/* send next */
 unsigned int snd_max; 		/* biggest send */
-unsigned int snd_una; 		/* last unacked */
+//unsigned int snd_una; 		/* last unacked */
 unsigned int snd_fack;		/* Forward (right) most ACK */
 unsigned int snd_recover;	/* One RTT beyond last good data, newreno */
 double snd_cwnd;		/* congestion-controlled window */
 unsigned int snd_ssthresh;	/* slow start threshold */
 
-unsigned int ackno;
+uint32_t ackno;
 unsigned int file_position; // Indicates the msg number at which we are in the file at any given moment
 
 /* configurable variables */

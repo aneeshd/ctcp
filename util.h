@@ -14,7 +14,7 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK} flag_t;
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 #define PAYLOAD_SIZE 1400
 #define BLOCK_SIZE 64 // Maximum # of packets in a block (Default block length)
-#define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint8_t)
+#define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t)
 #define CODING_WND 9
 
 
@@ -25,7 +25,7 @@ typedef struct{
 
   double tstamp;
   flag_t flag;
-  uint16_t  seqno; // Sequence # of the coded packet sent
+  uint32_t  seqno; // Sequence # of the coded packet sent
   uint32_t  blockno; // Base of the current block
   uint8_t blk_len; // The number of packets in the block
   uint8_t start_packet; // The # of the first packet that is mixed
@@ -39,7 +39,7 @@ typedef struct{
 typedef struct{
   double tstamp;
   flag_t flag;
-  uint16_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
+  uint32_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
   uint32_t  blockno; // Base of the current block
   uint8_t dof_req;  // Number of dofs left from the block
   
@@ -66,8 +66,8 @@ typedef struct{
 } Coded_Block_t;
 
 double getTime(void);
-Data_Pckt* dataPacket(uint16_t seqno, uint32_t blockno, uint8_t num_packets);
-Ack_Pckt* ackPacket(uint16_t ackno, uint32_t blockno, uint8_t dofs_left);
+Data_Pckt* dataPacket(uint32_t seqno, uint32_t blockno, uint8_t num_packets);
+Ack_Pckt* ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left);
 
 void htonpData(Data_Pckt *msg);
 void htonpAck(Ack_Pckt *msg);

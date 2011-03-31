@@ -11,7 +11,6 @@ FILE *rcv_file;
 Coded_Block_t blocks[NUM_BLOCKS];
 uint8_t coding_wnd = CODING_WND;
 uint32_t curr_block;
-uint16_t last_ackno;
 
 //char *version = "$Revision: 1.8 $";
 double dbuff[BUFFSIZE/8];
@@ -80,3 +79,5 @@ double secs();
 unsigned int millisecs();
 
 #endif // ATOUSRV_H_
+
+

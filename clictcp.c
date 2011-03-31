@@ -229,7 +229,7 @@ bldack(Data_Pckt *msg, bool match){
   
   // Update the incoming block lenght
   blocks[blockno%NUM_BLOCKS].len = msg->blk_len;
-
+  
  
   if (blockno < curr_block){
     // Discard the packet if it is coming from a decoded block or it is too far ahead
@@ -246,7 +246,7 @@ bldack(Data_Pckt *msg, bool match){
 
     int prev_dofs = blocks[blockno%NUM_BLOCKS].dofs;
 
-    // Shift the row to make shure the leading coefficient is not zero
+    // Shift the row to make SHURE the leading coefficient is not zero
     int shift = shift_row(msg->packet_coeff, coding_wnd);
     start += shift;
 
@@ -351,7 +351,8 @@ bldack(Data_Pckt *msg, bool match){
 
     // Build the ack packet according to the new information
   Ack_Pckt* ack = ackPacket(msg->seqno+1, curr_block, 
-                            blocks[curr_block%NUM_BLOCKS].len - blocks[curr_block%NUM_BLOCKS].dofs);  ack->tstamp = msg->tstamp;
+                            blocks[curr_block%NUM_BLOCKS].len - blocks[curr_block%NUM_BLOCKS].dofs); 
+  ack->tstamp = msg->tstamp;
   if (blockno == curr_block + 1){
     ack->flag = EXT_MOD;
   }
@@ -622,3 +623,5 @@ millisecs(){
   /*fprintf(stderr, "%ld=%u + %u\n", ts, (tv.tv_sec-rtt_base)*1000, tv.tv_usec/1000);*/
   return(ts);
 }
+
+

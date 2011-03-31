@@ -329,13 +329,15 @@ send_one(socket_t sockfd, uint32_t blockno){
   
   if (blocks[blockno%2].snd_nxt >= BLOCK_SIZE){
     blocks[blockno%2].snd_nxt = 0;
+    // TODO Instead of repermuting choose the row randomly but not uniformly
+    // int row = random();
   }
+
 
   int row  = blocks[blockno%2].order[blocks[blockno%2].snd_nxt];
   
 
-  //int row = random();
-
+  // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
   msg->start_packet = MIN(MAX(row%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
   
   blocks[blockno%2].snd_nxt++;

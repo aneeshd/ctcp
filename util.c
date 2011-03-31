@@ -59,7 +59,7 @@ getTime(void){
 }
 
 Data_Pckt*
-dataPacket(uint16_t seqno, uint32_t blockno, uint8_t num_packets){
+dataPacket(uint32_t seqno, uint32_t blockno, uint8_t num_packets){
   Data_Pckt* packet = malloc(sizeof(Data_Pckt));
   packet->tstamp = getTime();
   packet->flag = NORMAL;
@@ -73,7 +73,7 @@ dataPacket(uint16_t seqno, uint32_t blockno, uint8_t num_packets){
 }
 
 Ack_Pckt*
-ackPacket(uint16_t ackno, uint32_t blockno, uint8_t dofs_left){
+ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left){
   Ack_Pckt* ack = malloc(sizeof(Ack_Pckt));
   ack->flag = NORMAL;
   ack->ackno = ackno;
@@ -85,28 +85,28 @@ ackPacket(uint16_t ackno, uint32_t blockno, uint8_t dofs_left){
 void
 htonpData(Data_Pckt* msg){
   msg->flag = htonl(msg->flag);  
-  msg->seqno = htons(msg->seqno);
+  msg->seqno = htonl(msg->seqno);
   msg->blockno = htonl(msg->blockno);
 }
 
 void
 htonpAck(Ack_Pckt* msg){
   msg->flag = htonl(msg->flag);
-  msg->ackno = htons(msg->ackno);
+  msg->ackno = htonl(msg->ackno);
   msg->blockno = htonl(msg->blockno);
 }
 
 void
 ntohpData(Data_Pckt* msg){
   msg->flag = ntohl(msg->flag);
-  msg->seqno = ntohs(msg->seqno);
+  msg->seqno = ntohl(msg->seqno);
   msg->blockno = ntohl(msg->blockno);
 }
 
 void
 ntohpAck(Ack_Pckt* msg){
   msg->flag = ntohl(msg->flag);
-  msg->ackno = ntohs(msg->ackno);
+  msg->ackno = ntohl(msg->ackno);
   msg->blockno = ntohl(msg->blockno);
 }
 
