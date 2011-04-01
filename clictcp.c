@@ -355,6 +355,8 @@ bldack(Data_Pckt *msg, bool match){
   ack->tstamp = msg->tstamp;
   if (blockno == curr_block + 1){
     ack->flag = EXT_MOD;
+  }else if (blockno < curr_block){
+    ack->flag = OLD_PKT;
   }
 
   // =================================================================

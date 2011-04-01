@@ -305,7 +305,8 @@ send_segs(socket_t sockfd, uint32_t blockno){
 	while (win>=1) {
     send_one(sockfd, blockno);
     snd_nxt++;
-    NextBlockOnFly += (blockno > curr_block); // TODO can do this a better way
+    NextBlockOnFly += (blockno > curr_block); // TODO can do this a better way    
+    CurrBlockOnFly += (blockno == curr_block); // TODO can do this a better way
     win--;
   }
 }
@@ -480,7 +481,10 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     }
     
     curr_block++;
-    NextBlockOnFly = 0;
+
+    PrevBlockOnFly = CurrBlockOnFly;
+    CurrBlockOnFly = NextBlockOnFly;
+    NextBlockOnFly = 0;    
 
     if (debug > 5 && curr_block%10==0){
       printf("Now sending block %d, cwnd %f\n", curr_block, snd_cwnd);
@@ -507,9 +511,16 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     // Got an ack for a packet corresponding to the next block
     if (ack->flag == EXT_MOD){
       NextBlockOnFly--;
+    }else if (ack->flag == OLD_PKT){
+      PrevBlockOnFly--;
+    }else{
+      CurrBlockOnFly--;
     }
 
-    if (!maxblockno && snd_nxt - snd_una - NextBlockOnFly >= ack->dof_req){
+
+
+
+    if (!maxblockno && (snd_nxt - snd_una - PrevBlockOnFly - NextBlockOnFly >= ack->dof_req)){
       // send from curr_block + 1
 
       // TODO Can do better. Don't need to send all in the window one way or another

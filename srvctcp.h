@@ -29,7 +29,9 @@ int coding_wnd = CODING_WND;
 uint32_t maxblockno = 0; // 0 denoting infty, whenever we reach the maximum block of the file, we set it
 
 
-int NextBlockOnFly = 0;
+int NextBlockOnFly = 0;    // Upper bound on the number of packets on the fly from the next block
+int CurrBlockOnFly = 0;     // Upper bound on the number of packets on the fly from the current block
+int PrevBlockOnFly = 0;     // Upper bound on the number of packets on the fly from the prev block
 uint32_t snd_nxt;
 uint32_t snd_una;
 

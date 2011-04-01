@@ -8,7 +8,7 @@ typedef int bool;
 #define FALSE 0
 
 // flags for Data_Pckt
-typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK} flag_t;
+typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT} flag_t;
 
 #define MSS 1500 // XXX: make sure that this is fine...
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
