@@ -44,7 +44,7 @@ all: $(PRODUCTS)
 
 # Rule for linking the .o binaries
 $(PRODUCTS): $(OBJS) .buildmode Makefile
-	$(CXX) -o $@ $(UTILS_PRODS) $@.o $(LDFLAGS)
+	$(CXX) -o $@ $(UTILS_PRODS) $@.o $(LDFLAGS) -lm
 
 # Rule for compiling c files.
 %.o :  %.c .buildmode Makefile

@@ -8,6 +8,8 @@
 #define BUFFSIZE    65535
 #define RTT_DECAY 3 // This is used as the factor to approximate the rto
 
+#define ALPHA 2.32  // The number of std to deviate from mean to get 1% target error probability
+
 FILE *db;     /* debug trace file */
 char* log_name; // Name of the log
 FILE *snd_file; // The file to be sent

@@ -35,6 +35,7 @@ int numbytes;
 
 double idle_total = 0; // The total time the server has spent waiting for the acks 
 double coding_delay = 0; // Total time spent on encoding
+int total_loss = 0;
 
 // Should make sure that 50 bytes is enough to store the port string
 char *port = PORT;
@@ -314,8 +315,22 @@ send_segs(socket_t sockfd){
   }
   
   // TODO: redundancy for transition
-  int CurrWin = MIN(dof_req - CurrOnFly, win);
-  int NextWin = win - CurrWin;
+
+  int CurrWin = win;
+  int NextWin = 0;
+
+
+  double p = total_loss/snd_una;
+
+  //double test = sqrt(p);
+
+
+
+  if (dof_req - CurrOnFly < win){
+    CurrWin = MIN(win, (int) ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p)) - CurrOnFly);
+    NextWin = win - CurrWin;
+  }
+
 
   /*
   if (blocks[curr_block%2].snd_nxt >= BLOCK_SIZE){
@@ -445,8 +460,8 @@ endSession(void){
          et,maxpkts*mss,1.e-3*maxpkts*mss/et,8.e-6*maxpkts*mss/et);
   printf("pkts in %d  out %d  enobufs %d\n",
          ipkts,opkts,enobufs);
-  printf("total bytes out %d loss %6.3f %% %f Mbs \n",
-         opkts*mss,100.*rxmts/opkts,8.e-6*opkts*mss/et);
+  printf("total bytes out %d loss %6.3f%% %f Mbs \n",
+         opkts*mss,100.*total_loss/snd_una,8.e-6*opkts*mss/et);
   printf("rxmts %d dup3s %d packs %d timeouts %d  dups %d badacks %d maxack %d maxburst %d\n",
          rxmts,dup3s,packs,timeouts,dups,badacks,maxack,maxburst);
   if (ipkts) avrgrtt /= ipkts;
@@ -532,7 +547,10 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 	} else  {
     goodacks++;
 
-    if (ackno > snd_una +1) printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
+    if (ackno > snd_una +1){
+      total_loss += ackno - (snd_una + 1);
+      printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
+    }
     snd_una = ackno;
 
 
@@ -1143,6 +1161,7 @@ restart(void){
   g=.125;
   due = 0;
   rcvt = 0;
+  total_loss = 0;
 }
 
 
