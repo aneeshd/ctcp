@@ -30,6 +30,8 @@ uint32_t maxblockno = 0; // 0 denoting infty, whenever we reach the maximum bloc
 
 
 int NextBlockOnFly = 0;
+uint32_t OnFly[MAX_CWND]; 
+int dof_req = BLOCK_SIZE;
 uint32_t snd_nxt;
 uint32_t snd_una;
 
@@ -110,7 +112,7 @@ void terminate(socket_t fd);
 void usage(void);
 void readConfig(void);
 int doit( socket_t fd);
-void send_segs(socket_t fd, uint32_t blockno);
+void send_segs(socket_t fd);
 void err_sys(char* s);
 socket_t timedread(socket_t fd, double t);
 void handle_ack(socket_t fd, Ack_Pckt* ack);

@@ -172,6 +172,9 @@ doit(socket_t sockfd){
 	/* send out initial segments, then go for it */
 	et = getTime(); 
 
+  // Initialize the OnFly vectore
+  for(i=0; i < MAX_CWND; i++) OnFly[i] = 0;
+
   done = FALSE;
   curr_block = 1; 
   // read the first two blocks
@@ -188,7 +191,7 @@ doit(socket_t sockfd){
 	due = getTime() + timeout;  /* when una is due */
 
   // This is where the segments are sent
-	send_segs(sockfd, curr_block);
+	send_segs(sockfd);
   
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
   double idle_timer;
@@ -261,7 +264,7 @@ doit(socket_t sockfd){
       vinss = 1;
 			snd_cwnd = initsegs;  /* drop window */
       snd_una = snd_nxt;
-      send_segs(sockfd, curr_block);  /* resend */
+      send_segs(sockfd);  /* resend */
 
 			due = t + timeout;  
 		}
@@ -299,18 +302,43 @@ terminate(socket_t sockfd){
 }
 
 void
-send_segs(socket_t sockfd, uint32_t blockno){
+send_segs(socket_t sockfd){
   int win = 0;
-
   win = snd_cwnd - (snd_nxt - snd_una);
   if (win < 1) return;  /* no available window => done */
 
-	while (win>=1) {
-    send_one(sockfd, blockno);
-    snd_nxt++;
-    NextBlockOnFly += (blockno > curr_block); // TODO can do this a better way
-    win--;
+  int CurrOnFly = 0;
+  int i;
+  for(i = snd_una; i < snd_nxt; i++){
+    CurrOnFly += (OnFly[i%MAX_CWND] == curr_block);
   }
+  
+  // TODO: redundancy for transition
+  int CurrWin = MIN(dof_req - CurrOnFly, win);
+  int NextWin = win - CurrWin;
+
+  /*
+  if (blocks[curr_block%2].snd_nxt >= BLOCK_SIZE){
+    printf("Calling for more - curr_blk %d, ack->dof_req %d, Flag==EXT %d snd_nxt - snd_una %d NextBlockOnFly %d snd_CWND %f\n", curr_block, ack->dof_req, ack->flag == EXT_MOD, snd_nxt - snd_una, NextBlockOnFly, snd_cwnd);
+  }
+  */
+
+	while (CurrWin>=1) {
+    send_one(sockfd, curr_block);
+    snd_nxt++;
+    CurrWin--;
+  }
+
+  if (curr_block != maxblockno){
+    // send from curr_block + 1
+    while (NextWin>=1) {
+      send_one(sockfd, curr_block+1);
+      snd_nxt++;
+      NextWin--;
+    }
+  }
+
+
 }
 
 
@@ -392,6 +420,9 @@ send_one(socket_t sockfd, uint32_t blockno){
     err_sys("write");
   }
 
+  // Update the packets on the fly
+  OnFly[snd_nxt%MAX_CWND] = blockno;
+  
 	if (debug > 8)printf("blockno %d snd_nxt %d \n", blockno, snd_nxt);
 
 	opkts++;
@@ -483,7 +514,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     }
     
     curr_block++;
-    NextBlockOnFly = 0;
+    //NextBlockOnFly = 0;
 
     if (debug > 5 && curr_block%10==0){
       printf("Now sending block %d, cwnd %f\n", curr_block, snd_cwnd);
@@ -504,31 +535,13 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     if (ackno > snd_una +1) printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
     snd_una = ackno;
 
+
     idle=0;
     due = rcvt + timeout;   /*restart timer */
     advance_cwnd();
 
-    // Got an ack for a packet corresponding to the next block
-    if (ack->flag == EXT_MOD){
-      NextBlockOnFly--;
-    }
-
-    if ((curr_block != maxblockno) && (snd_nxt - snd_una - NextBlockOnFly >= ack->dof_req)){
-      // send from curr_block + 1
-
-      // TODO Can do better. Don't need to send all in the window one way or another
-      //printf("Calling send segs from block %d \n", curr_block+1);
-      send_segs(sockfd, curr_block+1);  /* send some if we can */   
-    }else{
-
-    //printf("Calling send segs from block %d \n", curr_block);
-
-      if (blocks[curr_block%2].snd_nxt >= BLOCK_SIZE){
-        printf("Calling for more - curr_blk %d, ack->dof_req %d, Flag==EXT %d snd_nxt - snd_una %d NextBlockOnFly %d snd_CWND %f\n", curr_block, ack->dof_req, ack->flag == EXT_MOD, snd_nxt - snd_una, NextBlockOnFly, snd_cwnd);
-      }
-
-      send_segs(sockfd, curr_block);  /* send some if we can */
-    }
+    dof_req = ack->dof_req;  // Updated the requested dofs for the current block
+    send_segs(sockfd);  /* send some if we can */
 
   } // end else goodack
 }
