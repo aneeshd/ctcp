@@ -30,7 +30,7 @@ double idle_total = 0; // The total time the client has spent waiting for a pack
 double decoding_delay = 0;
 double elimination_delay = 0;
 
-
+int last_seqno = 0;
 
 void
 usage(void) {
@@ -149,9 +149,12 @@ main(int argc, char** argv){
   fprintf(stdout, "Request sent\n");
 
     
-	if (rcvspace) {
-    setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
-	}
+	if (!rcvspace){
+    rcvspace = MSS*MAX_CWND;
+  }
+
+  optlen = sizeof(rcvspace);
+  setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
 	getsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (char *) &rlth, (socklen_t*)&optlen);
 
 	printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
@@ -230,7 +233,10 @@ bldack(Data_Pckt *msg, bool match){
   // Update the incoming block lenght
   blocks[blockno%NUM_BLOCKS].len = msg->blk_len;
   
+  if (msg->seqno > last_seqno+1) printf("Lost report blockno %d seqno %d last seqno %d\n", msg->blockno, msg->seqno, last_seqno);
  
+  last_seqno = msg->seqno;
+  
   if (blockno < curr_block){
     // Discard the packet if it is coming from a decoded block or it is too far ahead
     // Send an appropriate ack to return the token
@@ -299,7 +305,7 @@ bldack(Data_Pckt *msg, bool match){
         
         // Subtract row with index strat with the row at hand (content)
         for(i = 0; i < PAYLOAD_SIZE; i++){
-          msg->payload[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].content[start][i], pivot);
+         msg->payload[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].content[start][i], pivot);
         }
        
         // Shift the row 

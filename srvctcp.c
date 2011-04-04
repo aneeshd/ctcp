@@ -27,8 +27,8 @@
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
 
-int sndbuf = 32768;		/* udp send buff, bigger than mss */
-int rcvbuf = 32768;		/* udp recv buff for ACKs*/
+int sndbuf = MSS*MAX_CWND;		/* udp send buff, bigger than mss */
+int rcvbuf = MSS*MAX_CWND;		/* udp recv buff for ACKs*/
 int mss=1472;			/* user payload, can be > MTU for UDP */
 int numbytes;
 
@@ -282,11 +282,14 @@ terminate(socket_t sockfd){
   int size = marshallData(*msg, buff);
 
   do{
+
     if((numbytes = sendto(sockfd, buff, size, 0, &cli_addr, clilen)) == -1){
       perror("atousrv: sendto");
       exit(1);
     }  
+
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
+
 
   if(numbytes != mss){
     err_sys("write");
@@ -299,8 +302,8 @@ void
 send_segs(socket_t sockfd, uint32_t blockno){
   int win = 0;
 
-  win = snd_cwnd - (snd_nxt -snd_una);
-  if (win <= 0) return;  /* no available window => done */
+  win = snd_cwnd - (snd_nxt - snd_una);
+  if (win < 1) return;  /* no available window => done */
 
 	while (win>=1) {
     send_one(sockfd, blockno);
@@ -381,8 +384,8 @@ send_one(socket_t sockfd, uint32_t blockno){
                           &cli_addr, clilen)) == -1){
       perror("atousrv: sendto");
       exit(1);
-  }
-  
+    }
+
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
 
   if(numbytes != message_size){
@@ -498,6 +501,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 	} else  {
     goodacks++;
 
+    if (ackno > snd_una +1) printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
     snd_una = ackno;
 
     idle=0;
@@ -509,7 +513,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       NextBlockOnFly--;
     }
 
-    if (!maxblockno && snd_nxt - snd_una - NextBlockOnFly >= ack->dof_req){
+    if ((curr_block != maxblockno) && (snd_nxt - snd_una - NextBlockOnFly >= ack->dof_req)){
       // send from curr_block + 1
 
       // TODO Can do better. Don't need to send all in the window one way or another
@@ -518,6 +522,11 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     }else{
 
     //printf("Calling send segs from block %d \n", curr_block);
+
+      if (blocks[curr_block%2].snd_nxt >= BLOCK_SIZE){
+        printf("Calling for more - curr_blk %d, ack->dof_req %d, Flag==EXT %d snd_nxt - snd_una %d NextBlockOnFly %d snd_CWND %f\n", curr_block, ack->dof_req, ack->flag == EXT_MOD, snd_nxt - snd_una, NextBlockOnFly, snd_cwnd);
+      }
+
       send_segs(sockfd, curr_block);  /* send some if we can */
     }
 

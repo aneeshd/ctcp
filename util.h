@@ -16,7 +16,7 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK} flag_t;
 #define BLOCK_SIZE 128 // Maximum # of packets in a block (Default block length)
 #define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t)
 #define CODING_WND 9
-#define MAX_CWND 64
+#define MAX_CWND 70
 
 
 typedef int socket_t;
