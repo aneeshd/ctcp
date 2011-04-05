@@ -38,7 +38,7 @@ double coding_delay = 0; // Total time spent on encoding
 
 int total_loss = 0;
 double slr = 0; // Smoothed loss rate
-double slr_mem = 1/BLOCK_SIZE; // The memory of smoothing function
+double slr_mem = 1.0/BLOCK_SIZE; // The memory of smoothing function
 
 // Should make sure that 50 bytes is enough to store the port string
 char *port = PORT;
@@ -327,7 +327,7 @@ send_segs(socket_t sockfd){
   //double p = total_loss/snd_una;
   //double test = sqrt(p);
 
-  double p = slr;
+  double p = slr/(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
 
 
   if (dof_req - CurrOnFly < win){
@@ -464,7 +464,7 @@ endSession(void){
          et,maxpkts*mss,1.e-3*maxpkts*mss/et,8.e-6*maxpkts*mss/et);
   printf("pkts in %d  out %d  enobufs %d\n",
          ipkts,opkts,enobufs);
-  printf("total bytes out %d loss %6.3f%% %f Mbs \n",
+  printf("total bytes out %d   Loss rate %6.3f%%    %f Mbs \n",
          opkts*mss,100.*total_loss/snd_una,8.e-6*opkts*mss/et);
   printf("rxmts %d dup3s %d packs %d timeouts %d  dups %d badacks %d maxack %d maxburst %d\n",
          rxmts,dup3s,packs,timeouts,dups,badacks,maxack,maxburst);
@@ -553,9 +553,11 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
     int losses = ackno - (snd_una +1);
 
-    if (losses > 0){
-      //printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
-    }
+    /*
+      if (losses > 0){
+      printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
+      }
+    */
 
     total_loss += losses;
     double loss_tmp =  pow(1-slr_mem, losses);
