@@ -35,7 +35,10 @@ int numbytes;
 
 double idle_total = 0; // The total time the server has spent waiting for the acks 
 double coding_delay = 0; // Total time spent on encoding
+
 int total_loss = 0;
+double slr = 0; // Smoothed loss rate
+double slr_mem = 1/BLOCK_SIZE; // The memory of smoothing function
 
 // Should make sure that 50 bytes is enough to store the port string
 char *port = PORT;
@@ -254,6 +257,7 @@ doit(socket_t sockfd){
 			bwe_pkt=0;
 			idle++;
 			dupacks=0; dup_acks=0;
+      slr = 0;
 
 			//snd_ssthresh = snd_cwnd*multiplier; /* shrink */
 
@@ -320,10 +324,10 @@ send_segs(socket_t sockfd){
   int NextWin = 0;
 
 
-  double p = total_loss/snd_una;
-
+  //double p = total_loss/snd_una;
   //double test = sqrt(p);
 
+  double p = slr;
 
 
   if (dof_req - CurrOnFly < win){
@@ -374,7 +378,7 @@ send_one(socket_t sockfd, uint32_t blockno){
     //blocks[blockno%2].snd_nxt = 0;
     // TODO Instead of repermuting choose the row randomly but not uniformly
     row = random();
-    printf("Need more coded packets. Curr block %d req block %d snd_nxt %d\n", curr_block, blockno, blocks[blockno%2].snd_nxt);
+    //printf("Need more coded packets. Curr block %d req block %d snd_nxt %d\n", curr_block, blockno, blocks[blockno%2].snd_nxt);
   }else{
     row  = blocks[blockno%2].order[blocks[blockno%2].snd_nxt];
   }
@@ -547,10 +551,16 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 	} else  {
     goodacks++;
 
-    if (ackno > snd_una +1){
-      total_loss += ackno - (snd_una + 1);
-      printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
+    int losses = ackno - (snd_una +1);
+
+    if (losses > 0){
+      //printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
     }
+
+    total_loss += losses;
+    double loss_tmp =  pow(1-slr_mem, losses);
+    slr = loss_tmp*(1-slr_mem)*slr + (1 - loss_tmp);
+
     snd_una = ackno;
 
 
@@ -1162,6 +1172,7 @@ restart(void){
   due = 0;
   rcvt = 0;
   total_loss = 0;
+  slr = 0;
 }
 
 
