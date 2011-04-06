@@ -41,7 +41,7 @@ double slr = 0; // Smoothed loss rate
 double slr_mem = 1.0/BLOCK_SIZE; // The memory of smoothing function
 
 // Should make sure that 50 bytes is enough to store the port string
-char *port = PORT;
+char *port;
 
 /*
  * Print usage message
@@ -537,7 +537,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
 
     if (debug > 5 && curr_block%10==0){
-      printf("Now sending block %d, cwnd %f, SLR %f%%\n", curr_block, snd_cwnd, 100*slr);
+      printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms\n", curr_block, snd_cwnd, 100*slr, srtt*1000);
     }
   }
 
@@ -639,7 +639,8 @@ readConfig(void){
 	char line[128], var[32];
 	double val;
   time_t t;
-  
+	port = malloc(10);  
+
 	fp = fopen(configfile,"r");
 
 	if (fp == NULL) {

@@ -4,7 +4,7 @@
 #define TRUE 1
 #define FALSE 0
 
-#define PORT "7890" // This is the port that the server is listening to
+#define PORT "7890" // This is the port that the server is listenin to
 #define BUFFSIZE    65535
 #define RTT_DECAY 3 // This is used as the factor to approximate the rto
 
@@ -98,7 +98,7 @@ double max_delta;  /* vegas like tracker */
 int ipkts,opkts,dup3s,dups,packs,badacks,maxburst,maxack, rxmts, timeouts;
 int enobufs, ooacks;
 double et,minrtt=999999., maxrtt=0, avrgrtt;
-static double rto,delta,srtt=0,rttvar=3., h=.25, g=.125;
+static double rto,delta,srtt=0,rttvar=3., h=.25, g=1.0/BLOCK_SIZE;
 double due,rcvt;
 
 char *configfile = "config";
