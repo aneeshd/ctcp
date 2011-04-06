@@ -27,14 +27,18 @@
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
 
-int sndbuf = 32768;		/* udp send buff, bigger than mss */
-int rcvbuf = 32768;		/* udp recv buff for ACKs*/
+int sndbuf = MSS*MAX_CWND;		/* udp send buff, bigger than mss */
+int rcvbuf = MSS*MAX_CWND;		/* udp recv buff for ACKs*/
 int mss=1472;			/* user payload, can be > MTU for UDP */
 int numbytes;
 
 
 double idle_total = 0; // The total time the server has spent waiting for the acks 
 double coding_delay = 0; // Total time spent on encoding
+
+int total_loss = 0;
+double slr = 0; // Smoothed loss rate
+double slr_mem = 1.0/BLOCK_SIZE; // The memory of smoothing function
 
 // Should make sure that 50 bytes is enough to store the port string
 char *port = PORT;
@@ -172,6 +176,9 @@ doit(socket_t sockfd){
 	/* send out initial segments, then go for it */
 	et = getTime(); 
 
+  // Initialize the OnFly vectore
+  for(i=0; i < MAX_CWND; i++) OnFly[i] = 0;
+
   done = FALSE;
   curr_block = 1; 
   // read the first two blocks
@@ -188,7 +195,7 @@ doit(socket_t sockfd){
 	due = getTime() + timeout;  /* when una is due */
 
   // This is where the segments are sent
-	send_segs(sockfd, curr_block);
+	send_segs(sockfd);
   
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
   double idle_timer;
@@ -250,6 +257,7 @@ doit(socket_t sockfd){
 			bwe_pkt=0;
 			idle++;
 			dupacks=0; dup_acks=0;
+      slr = 0;
 
 			//snd_ssthresh = snd_cwnd*multiplier; /* shrink */
 
@@ -261,7 +269,7 @@ doit(socket_t sockfd){
       vinss = 1;
 			snd_cwnd = initsegs;  /* drop window */
       snd_una = snd_nxt;
-      send_segs(sockfd, curr_block);  /* resend */
+      send_segs(sockfd);  /* resend */
 
 			due = t + timeout;  
 		}
@@ -282,11 +290,14 @@ terminate(socket_t sockfd){
   int size = marshallData(*msg, buff);
 
   do{
+
     if((numbytes = sendto(sockfd, buff, size, 0, &cli_addr, clilen)) == -1){
       perror("atousrv: sendto");
       exit(1);
     }  
+
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
+
 
   if(numbytes != mss){
     err_sys("write");
@@ -296,19 +307,57 @@ terminate(socket_t sockfd){
 }
 
 void
-send_segs(socket_t sockfd, uint32_t blockno){
+send_segs(socket_t sockfd){
   int win = 0;
+  win = snd_cwnd - (snd_nxt - snd_una);
+  if (win < 1) return;  /* no available window => done */
 
-  win = snd_cwnd - (snd_nxt -snd_una);
-  if (win <= 0) return;  /* no available window => done */
-
-	while (win>=1) {
-    send_one(sockfd, blockno);
-    snd_nxt++;
-    NextBlockOnFly += (blockno > curr_block); // TODO can do this a better way    
-    CurrBlockOnFly += (blockno == curr_block); // TODO can do this a better way
-    win--;
+  int CurrOnFly = 0;
+  int i;
+  for(i = snd_una; i < snd_nxt; i++){
+    CurrOnFly += (OnFly[i%MAX_CWND] == curr_block);
   }
+  
+  // TODO: redundancy for transition
+
+  int CurrWin = win;
+  int NextWin = 0;
+
+
+  //double p = total_loss/snd_una;
+  //double test = sqrt(p);
+
+  double p = slr/(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
+
+
+  if (dof_req - CurrOnFly < win){
+    CurrWin = MIN(win, (int) ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p)) - CurrOnFly);
+    NextWin = win - CurrWin;
+  }
+
+
+  /*
+  if (blocks[curr_block%2].snd_nxt >= BLOCK_SIZE){
+    printf("Calling for more - curr_blk %d, ack->dof_req %d, Flag==EXT %d snd_nxt - snd_una %d NextBlockOnFly %d snd_CWND %f\n", curr_block, ack->dof_req, ack->flag == EXT_MOD, snd_nxt - snd_una, NextBlockOnFly, snd_cwnd);
+  }
+  */
+
+	while (CurrWin>=1) {
+    send_one(sockfd, curr_block);
+    snd_nxt++;
+    CurrWin--;
+  }
+
+  if (curr_block != maxblockno){
+    // send from curr_block + 1
+    while (NextWin>=1) {
+      send_one(sockfd, curr_block+1);
+      snd_nxt++;
+      NextWin--;
+    }
+  }
+
+
 }
 
 
@@ -329,7 +378,7 @@ send_one(socket_t sockfd, uint32_t blockno){
     //blocks[blockno%2].snd_nxt = 0;
     // TODO Instead of repermuting choose the row randomly but not uniformly
     row = random();
-    printf("Need more coded packets. Curr block %d req block %d snd_nxt %d\n", curr_block, blockno, blocks[blockno%2].snd_nxt);
+    //printf("Need more coded packets. Curr block %d req block %d snd_nxt %d\n", curr_block, blockno, blocks[blockno%2].snd_nxt);
   }else{
     row  = blocks[blockno%2].order[blocks[blockno%2].snd_nxt];
   }
@@ -382,14 +431,17 @@ send_one(socket_t sockfd, uint32_t blockno){
                           &cli_addr, clilen)) == -1){
       perror("atousrv: sendto");
       exit(1);
-  }
-  
+    }
+
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
 
   if(numbytes != message_size){
     err_sys("write");
   }
 
+  // Update the packets on the fly
+  OnFly[snd_nxt%MAX_CWND] = blockno;
+  
 	if (debug > 8)printf("blockno %d snd_nxt %d \n", blockno, snd_nxt);
 
 	opkts++;
@@ -412,8 +464,8 @@ endSession(void){
          et,maxpkts*mss,1.e-3*maxpkts*mss/et,8.e-6*maxpkts*mss/et);
   printf("pkts in %d  out %d  enobufs %d\n",
          ipkts,opkts,enobufs);
-  printf("total bytes out %d loss %6.3f %% %f Mbs \n",
-         opkts*mss,100.*rxmts/opkts,8.e-6*opkts*mss/et);
+  printf("total bytes out %d   Loss rate %6.3f%%    %f Mbs \n",
+         opkts*mss,100.*total_loss/snd_una,8.e-6*opkts*mss/et);
   printf("rxmts %d dup3s %d packs %d timeouts %d  dups %d badacks %d maxack %d maxburst %d\n",
          rxmts,dup3s,packs,timeouts,dups,badacks,maxack,maxburst);
   if (ipkts) avrgrtt /= ipkts;
@@ -481,10 +533,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     }
     
     curr_block++;
+    //NextBlockOnFly = 0;
 
-    PrevBlockOnFly = CurrBlockOnFly;
-    CurrBlockOnFly = NextBlockOnFly;
-    NextBlockOnFly = 0;    
 
     if (debug > 5 && curr_block%10==0){
       printf("Now sending block %d, cwnd %f\n", curr_block, snd_cwnd);
@@ -502,35 +552,27 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 	} else  {
     goodacks++;
 
+    int losses = ackno - (snd_una +1);
+
+    /*
+      if (losses > 0){
+      printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
+      }
+    */
+
+    total_loss += losses;
+    double loss_tmp =  pow(1-slr_mem, losses);
+    slr = loss_tmp*(1-slr_mem)*slr + (1 - loss_tmp);
+
     snd_una = ackno;
+
 
     idle=0;
     due = rcvt + timeout;   /*restart timer */
     advance_cwnd();
 
-    // Got an ack for a packet corresponding to the next block
-    if (ack->flag == EXT_MOD){
-      NextBlockOnFly--;
-    }else if (ack->flag == OLD_PKT){
-      PrevBlockOnFly--;
-    }else{
-      CurrBlockOnFly--;
-    }
-
-
-
-
-    if (!maxblockno && (snd_nxt - snd_una - PrevBlockOnFly - NextBlockOnFly >= ack->dof_req)){
-      // send from curr_block + 1
-
-      // TODO Can do better. Don't need to send all in the window one way or another
-      //printf("Calling send segs from block %d \n", curr_block+1);
-      send_segs(sockfd, curr_block+1);  /* send some if we can */   
-    }else{
-
-    //printf("Calling send segs from block %d \n", curr_block);
-      send_segs(sockfd, curr_block);  /* send some if we can */
-    }
+    dof_req = ack->dof_req;  // Updated the requested dofs for the current block
+    send_segs(sockfd);  /* send some if we can */
 
   } // end else goodack
 }
@@ -1132,6 +1174,8 @@ restart(void){
   g=.125;
   due = 0;
   rcvt = 0;
+  total_loss = 0;
+  slr = 0;
 }
 
 

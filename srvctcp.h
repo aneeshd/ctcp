@@ -8,6 +8,8 @@
 #define BUFFSIZE    65535
 #define RTT_DECAY 3 // This is used as the factor to approximate the rto
 
+#define ALPHA 2.32  // The number of std to deviate from mean to get 1% target error probability
+
 FILE *db;     /* debug trace file */
 char* log_name; // Name of the log
 FILE *snd_file; // The file to be sent
@@ -29,9 +31,10 @@ int coding_wnd = CODING_WND;
 uint32_t maxblockno = 0; // 0 denoting infty, whenever we reach the maximum block of the file, we set it
 
 
-int NextBlockOnFly = 0;    // Upper bound on the number of packets on the fly from the next block
-int CurrBlockOnFly = 0;     // Upper bound on the number of packets on the fly from the current block
-int PrevBlockOnFly = 0;     // Upper bound on the number of packets on the fly from the prev block
+int NextBlockOnFly = 0;
+uint32_t OnFly[MAX_CWND]; 
+int dof_req = BLOCK_SIZE;
+
 uint32_t snd_nxt;
 uint32_t snd_una;
 
@@ -112,7 +115,7 @@ void terminate(socket_t fd);
 void usage(void);
 void readConfig(void);
 int doit( socket_t fd);
-void send_segs(socket_t fd, uint32_t blockno);
+void send_segs(socket_t fd);
 void err_sys(char* s);
 socket_t timedread(socket_t fd, double t);
 void handle_ack(socket_t fd, Ack_Pckt* ack);
