@@ -20,6 +20,9 @@
 #define HOST "127.0.0.1"
 #define FILE_NAME "Avatar.mov"
 
+#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
+#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
+
 struct sockaddr srv_addr;
 struct addrinfo *result;
 int sockfd, rcvspace;
@@ -238,12 +241,12 @@ bldack(Data_Pckt *msg, bool match){
   blocks[blockno%NUM_BLOCKS].len = msg->blk_len;
   
   if (msg->seqno > last_seqno+1){
-    printf("Loss report blockno %d seqno %d last seqno %d\n", msg->blockno, msg->seqno, last_seqno);
+    printf("Loss report blockno %d Number of losses %d\n", msg->blockno, msg->seqno - last_seqno - 1);
     total_loss += msg->seqno - (last_seqno+1);
       }
  
-  last_seqno = msg->seqno;
-  
+  last_seqno = MAX(msg->seqno, last_seqno) ;  // ignore out of order packets
+
   if (blockno < curr_block){
     // Discard the packet if it is coming from a decoded block or it is too far ahead
     // Send an appropriate ack to return the token

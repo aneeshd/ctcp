@@ -537,7 +537,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
 
     if (debug > 5 && curr_block%10==0){
-      printf("Now sending block %d, cwnd %f\n", curr_block, snd_cwnd);
+      printf("Now sending block %d, cwnd %f, SLR %f%%\n", curr_block, snd_cwnd, 100*slr);
     }
   }
 
