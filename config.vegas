@@ -8,7 +8,7 @@ vegas 1
 valpha 30
 vbeta 40
 vgamma 200
-rcvrwin 60
+thresh_init 0.75
 maxtime 0
 debug 6
 #droplist 200 200

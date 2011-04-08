@@ -80,7 +80,7 @@ main (int argc, char** argv){
 	readConfig();
 
 	if (thresh_init) {
-    snd_ssthresh = thresh_init*rcvrwin;
+    snd_ssthresh = thresh_init*MAX_CWND;
   } else {
     snd_ssthresh = 2147483647;  /* normal TCP, infinite */
   }
