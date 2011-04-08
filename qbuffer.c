@@ -14,8 +14,6 @@ q_init(q_buffer_t* buff){
   buff->head = 0;
   buff->tail = 0;
   buff->size = 0;
-  
-  return buff;
 }
 
 void
@@ -29,7 +27,7 @@ q_push(q_buffer_t* buff, Data_Pckt* packet){
   
   buff->head++;
   buff->size++;
-  buff->q_[head%MAX_Q_SIZE] = packet;
+  buff->q_[buff->head%MAX_Q_SIZE] = packet;
   
   pthread_cond_signal( &(buff->q_condv_pop_) );
   pthread_cond_signal( &(buff->q_condv_push_) );
@@ -37,7 +35,7 @@ q_push(q_buffer_t* buff, Data_Pckt* packet){
   assert(pthread_mutex_unlock(&buff->q_mutex_) == 0);
 }
 
-void
+Data_Pckt*
 q_pop(q_buffer_t* buff){
   assert(pthread_mutex_lock(&buff->q_mutex_) == 0);
 
@@ -46,7 +44,7 @@ q_pop(q_buffer_t* buff){
     pthread_cond_wait( &(buff->q_condv_pop_), &(buff->q_mutex_) );
   }
   
-  Data_Pckt* packet = buff->q_[tail%MAX_Q_SIZE];
+  Data_Pckt* packet = buff->q_[buff->tail%MAX_Q_SIZE];
 
   buff->tail++;
   buff->size--;
@@ -55,4 +53,5 @@ q_pop(q_buffer_t* buff){
   pthread_cond_signal( &(buff->q_condv_pop_) );
 
   assert(pthread_mutex_unlock(&buff->q_mutex_) == 0);
+  return packet;
 }

@@ -5,12 +5,14 @@ LDFLAGS :=
 # Put here the name of all the binaries
 TARGETS := util \
 	md5 \
+	qbuffer \
 	clictcp \
 	srvctcp \
 
 # Common libraries to be built and included to the products
 UTILS := util \
 	md5 \
+	qbuffer \
 
 SRCS := $(TARGETS:%=%.c)
 

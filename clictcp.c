@@ -14,6 +14,7 @@
 #include	<errno.h>
 
 #include "util.h"
+#include "qbuffer.h"
 #include "clictcp.h"
 
 #define PORT "7890"
