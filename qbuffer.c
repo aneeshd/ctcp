@@ -5,7 +5,7 @@
 #include "qbuffer.h"
 
 void
-q_init(q_buffer_t* buff){
+q_init(qbuffer_t* buff){
 
   assert(pthread_mutex_init( &(buff->q_mutex_) , NULL ) == 0 );
   assert(pthread_cond_init( &(buff->q_condv_pop_) , NULL ) == 0 );
@@ -14,10 +14,15 @@ q_init(q_buffer_t* buff){
   buff->head = 0;
   buff->tail = 0;
   buff->size = 0;
+
+  int i;
+  for(i = 0; i < MAX_Q_SIZE; i++){
+    buff->q_[i] = NULL;
+  }
 }
 
 void
-q_push(q_buffer_t* buff, Data_Pckt* packet){
+q_push(qbuffer_t* buff, Data_Pckt* packet){
   assert(pthread_mutex_lock(&buff->q_mutex_) == 0);
   
   while(buff->size == MAX_Q_SIZE){
@@ -36,7 +41,7 @@ q_push(q_buffer_t* buff, Data_Pckt* packet){
 }
 
 Data_Pckt*
-q_pop(q_buffer_t* buff){
+q_pop(qbuffer_t* buff){
   assert(pthread_mutex_lock(&buff->q_mutex_) == 0);
 
   while(buff->size == 0){
@@ -54,4 +59,19 @@ q_pop(q_buffer_t* buff){
 
   assert(pthread_mutex_unlock(&buff->q_mutex_) == 0);
   return packet;
+}
+
+
+void
+q_free(qbuffer_t* buff, int begin, int n){
+  assert(pthread_mutex_lock(&buff->q_mutex_) == 0);
+  
+  int i;
+  for(i = 0; i < n; i++){
+    free(buff->q_[(begin+i)%MAX_Q_SIZE]->packet_coeff);
+    free(buff->q_[(begin+i)%MAX_Q_SIZE]->payload);
+    free(buff->q_[(begin+i)%MAX_Q_SIZE]);
+  }
+
+  assert(pthread_mutex_unlock(&buff->q_mutex_) == 0);
 }

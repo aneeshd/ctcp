@@ -10,7 +10,7 @@
  * implementation.
  */
 
-#define MAX_Q_SIZE 2*MAX_CWND*sizeof(Data_Pckt*)
+#define MAX_Q_SIZE 2*BLOCK_SIZE*sizeof(Data_Pckt*)
 
 typedef struct{
   pthread_mutex_t q_mutex_;
@@ -22,10 +22,12 @@ typedef struct{
   Data_Pckt* q_[MAX_Q_SIZE];
 
   int size; // The number of elements currently in the queue
-} q_buffer_t;
+} qbuffer_t;
 
-void q_init(q_buffer_t* buff);
-void q_push(q_buffer_t* buff, Data_Pckt* packet);
-Data_Pckt* q_pop(q_buffer_t* buff);
+void q_init(qbuffer_t* buff);
+void q_push(qbuffer_t* buff, Data_Pckt* packet);
+Data_Pckt* q_pop(qbuffer_t* buff);
+void q_free(qbuffer_t* buff, int begin, int n);
+
 
 #endif // QUEUE_H

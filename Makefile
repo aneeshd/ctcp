@@ -1,6 +1,6 @@
 CXX := gcc
 CFLAGS := -g -Wall
-LDFLAGS :=
+LDFLAGS := -lm
 
 # Put here the name of all the binaries
 TARGETS := util \
@@ -46,7 +46,7 @@ all: $(PRODUCTS)
 
 # Rule for linking the .o binaries
 $(PRODUCTS): $(OBJS) .buildmode Makefile
-	$(CXX) -o $@ $(UTILS_PRODS) $@.o $(LDFLAGS) -lm
+	$(CXX) -o $@ $(UTILS_PRODS) $@.o $(LDFLAGS) 
 
 # Rule for compiling c files.
 %.o :  %.c .buildmode Makefile
