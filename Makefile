@@ -1,6 +1,6 @@
 CXX := gcc
 CFLAGS := -g -Wall
-LDFLAGS := -lm
+LDFLAGS := -lm -lpthread
 
 # Put here the name of all the binaries
 TARGETS := util \
