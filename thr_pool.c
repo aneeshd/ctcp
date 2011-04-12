@@ -18,7 +18,7 @@ do_worker(void *arg)
     
     tprintf("Got it\n");
 
-    //    (void)(j.f)(j.a);
+    //(void)(j.f)(j.a);
   }
   pthread_exit(NULL);
 }
@@ -36,7 +36,7 @@ thrpool_init(thr_pool_t *pool, int sz)
   int i;
   for(i = 0; i < sz; i++){
     pthread_t t;
-    assert(pthread_create(&t, &pool->attr_, &do_worker, pool) == 0);
+    pthread_create(&t, &pool->attr_, &do_worker, pool);
     pool->th_[i] = t;
   }
 }
@@ -46,9 +46,9 @@ thrpool_kill(thr_pool_t* pool)
 {
   int i;
   for(i = 0; i < pool->nthreads_; i++){
-    assert(pthread_join(pool->th_[i], NULL) == 0);
+   pthread_join(pool->th_[i], NULL);
   }
-  assert(pthread_attr_destroy(&pool->attr_) == 0);
+ pthread_attr_destroy(&pool->attr_);
 }
 
 void

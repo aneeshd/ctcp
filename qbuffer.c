@@ -7,9 +7,9 @@
 void
 q_init(qbuffer_t* buff, int max_size){
 
-  assert(pthread_mutex_init( &(buff->q_mutex_) , NULL ) == 0 );
-  assert(pthread_cond_init( &(buff->q_condv_pop_) , NULL ) == 0 );
-  assert(pthread_cond_init( &(buff->q_condv_push_) , NULL ) == 0 );
+  pthread_mutex_init( &(buff->q_mutex_) , NULL );
+  pthread_cond_init( &(buff->q_condv_pop_) ,NULL );
+  pthread_cond_init( &(buff->q_condv_push_) , NULL );
 
   buff->max_size = max_size;
   buff->head = 0;
@@ -52,11 +52,11 @@ q_pop(qbuffer_t* buff){
     pthread_cond_wait( &(buff->q_condv_pop_), &(buff->q_mutex_) );
   }
   
-  void* entry = buff->q_[buff->tail%buff->max_size];
-
   buff->tail++;
   buff->size--;
   
+  void* entry = buff->q_[buff->tail%buff->max_size];
+
   pthread_cond_signal( &(buff->q_condv_push_) );
   pthread_cond_signal( &(buff->q_condv_pop_) );
 
