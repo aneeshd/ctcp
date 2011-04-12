@@ -58,12 +58,14 @@ tags: $(SRCS)
 tests: test.c util.o clictcp.o srvctcp.o md5.o .buildmode Makefile
 	$(CXX) $(CFLAGS) $< util.o md5.o -o test $(LDFLAGS)
 
+test-thr: thr_pool_tester.c thr_pool.o qbuffer.o .buildmode Makefile
+	$(CXX) $(CFLAGS) $< thr_pool.o qbuffer.o -o test_thr $(LDFLAGS)
+
 md5: md5driver.c md5.o
 	$(CXX) $(CFLAGS) $< md5.o -o $@ $(LDFLAGS)
 
 clean:
-	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS test\
-	*.o *.d
+	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS test test_thr *.o *.d
 
 clean_logs:
 	$(RM) *.log

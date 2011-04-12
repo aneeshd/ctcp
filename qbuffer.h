@@ -23,10 +23,9 @@ typedef struct{
   int size; // The number of elements currently in the queue
 } qbuffer_t;
 
-void q_init(qbuffer_t* buff);
+void q_init(qbuffer_t* buff, int max_size);
 void q_push(qbuffer_t* buff, void* entry);
 void* q_pop(qbuffer_t* buff);
-void q_free(qbuffer_t* buff, int begin, int n);
-
+void q_free(qbuffer_t* buff, void (*free_handler)(const void*), int begin, int n);
 
 #endif // QUEUE_H

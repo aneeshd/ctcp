@@ -19,10 +19,10 @@ typedef struct {
 
 } thr_pool_t;
 
-void thrpool_init(thr_pool_t* pool);
+void thrpool_init(thr_pool_t* pool, int sz);
 void thrpool_kill(thr_pool_t* pool);
 void addJob(thr_pool_t* pool, void *(*f)(void *), void *a);
-bool takejob(thr_pool_t* pool, job_t* j);
-void do_worker(void *arg);
+bool takeJob(thr_pool_t* pool, job_t* j);
+void* do_worker(void *arg);
 
-#endif __THR_POOL__
+#endif // __THR_POOL__

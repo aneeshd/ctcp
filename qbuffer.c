@@ -26,7 +26,7 @@ q_init(qbuffer_t* buff, int max_size){
 
 void
 q_push(qbuffer_t* buff, void* entry){
-  assert(pthread_mutex_lock(&buff->q_mutex_) == 0);
+  pthread_mutex_lock(&buff->q_mutex_);
   
   while(buff->size == buff->max_size){
     pthread_cond_signal( &(buff->q_condv_pop_) );
@@ -40,12 +40,12 @@ q_push(qbuffer_t* buff, void* entry){
   pthread_cond_signal( &(buff->q_condv_pop_) );
   pthread_cond_signal( &(buff->q_condv_push_) );
   
-  assert(pthread_mutex_unlock(&buff->q_mutex_) == 0);
+  pthread_mutex_unlock(&buff->q_mutex_);
 }
 
 void*
 q_pop(qbuffer_t* buff){
-  assert(pthread_mutex_lock(&buff->q_mutex_) == 0);
+  pthread_mutex_lock(&buff->q_mutex_);
 
   while(buff->size == 0){
     pthread_cond_signal( &(buff->q_condv_push_) );
@@ -60,20 +60,20 @@ q_pop(qbuffer_t* buff){
   pthread_cond_signal( &(buff->q_condv_push_) );
   pthread_cond_signal( &(buff->q_condv_pop_) );
 
-  assert(pthread_mutex_unlock(&buff->q_mutex_) == 0);
+  pthread_mutex_unlock(&buff->q_mutex_);
   return entry;
 }
 
 void
 q_free(qbuffer_t* buff, void (*free_handler)(const void*), int begin, int n){
-  assert(pthread_mutex_lock(&buff->q_mutex_) == 0);
+  pthread_mutex_lock(&buff->q_mutex_);
   
   int i;
   for(i = 0; i < n; i++){
     free_handler(buff->q_[(begin+i)%buff->max_size]);
   }
 
-  assert(pthread_mutex_unlock(&buff->q_mutex_) == 0);
+  pthread_mutex_unlock(&buff->q_mutex_);
 }
 
 
