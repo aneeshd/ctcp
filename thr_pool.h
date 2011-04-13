@@ -22,7 +22,7 @@ typedef struct {
 void thrpool_init(thr_pool_t* pool, int sz);
 void thrpool_kill(thr_pool_t* pool);
 void addJob(thr_pool_t* pool, void *(*f)(void *), void *a);
-bool takeJob(thr_pool_t* pool, job_t* j);
+bool takeJob(thr_pool_t* pool, job_t** j);
 void* do_worker(void *arg);
 
 #endif // __THR_POOL__

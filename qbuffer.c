@@ -18,6 +18,8 @@ q_init(qbuffer_t* buff, int max_size){
 
   buff->q_ = malloc(max_size*sizeof(void*));
 
+  fprintf(stdout, "Initialized the buffer. Max size is %d\n", buff->max_size);
+
   int i;
   for(i = 0; i < max_size; i++){
     buff->q_[i] = NULL;
@@ -28,12 +30,14 @@ void
 q_push(qbuffer_t* buff, void* entry){
   pthread_mutex_lock(&buff->q_mutex_);
   
-  while(buff->size == buff->max_size){
+  while(buff->size == buff->max_size ){
     pthread_cond_signal( &(buff->q_condv_pop_) );
     pthread_cond_wait( &(buff->q_condv_push_), &(buff->q_mutex_) );
   }
   
-  buff->head++;
+  fprintf(stdout, "push: Head %d, Tail %d, Size %d\n", buff->head, buff->tail, buff->size);
+
+  buff->head = (buff->head+1)%buff->max_size;
   buff->size++;
   buff->q_[buff->head%buff->max_size] = entry;
   
@@ -51,14 +55,17 @@ q_pop(qbuffer_t* buff){
     pthread_cond_signal( &(buff->q_condv_push_) );
     pthread_cond_wait( &(buff->q_condv_pop_), &(buff->q_mutex_) );
   }
+
+  fprintf(stdout, "pop: Head %d, Tail %d, Size %d\n", buff->head, buff->tail, buff->size);
   
-  buff->tail++;
+  buff->tail = (buff->tail + 1)%buff->max_size;
   buff->size--;
   
   void* entry = buff->q_[buff->tail%buff->max_size];
 
   pthread_cond_signal( &(buff->q_condv_push_) );
   pthread_cond_signal( &(buff->q_condv_pop_) );
+
 
   pthread_mutex_unlock(&buff->q_mutex_);
   return entry;
