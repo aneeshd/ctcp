@@ -22,6 +22,8 @@ do_worker(void *arg)
     }
     
     (void)(j->f)(j->a); // Here is where the magic happens
+    j->free_handler((void*)j->a); // Free this job arguments
+    free(j);
   }
   
   fprintf(stdout, "*** Dying thread id: %lu ***\n", pthread_self());
@@ -58,12 +60,13 @@ thrpool_kill(thr_pool_t* pool)
 }
 
 void
-addJob(thr_pool_t* pool, void *(*f)(void *), void *a, priority_t p)
+addJob(thr_pool_t* pool, void *(*f)(void *), void *a, void *(*free_handler)(const void *), priority_t p)
 {
   job_t* j = malloc(sizeof(job_t));
   j->f = f;
   j->a = a;
-  
+  j->free_handler = free_handler;
+
   if(HIGH == p){
     q_push_front(&pool->job_q, j);
   }else if(LOW == p){

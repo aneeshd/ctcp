@@ -38,6 +38,28 @@ typedef struct{
 } Data_Pckt;
 
 typedef struct{
+  uint16_t payload_size;
+  char* payload;
+} Bare_Pckt; // This is the datastructure for holding packets before encoding
+
+
+// -------------- MultiThreading related variables ------------//
+
+typedef struct{ // TODO: this datastructure can store the dof's and other state related to the blocks
+  pthread_mutex_t block_mutex;
+  uint32_t len; // Number of bare packets inside the block
+  char** content; // Array of pointers that point to the marshalled data of the bare packets
+} Block_t;
+
+typedef struct{
+  uint32_t blockno;
+  int dof_request;
+} coding_job_t;
+
+
+//----------------------------------------------------------
+
+typedef struct{
   double tstamp;
   flag_t flag;
   uint32_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
@@ -46,18 +68,6 @@ typedef struct{
   
   //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
 } Ack_Pckt;
-
-typedef struct{
-  uint16_t payload_size;
-  char* payload;
-} Bare_Pckt; // This is the datastructure for holding packets before encoding
-
-typedef struct{ // TODO: this datastructure can store the dof's and other state related to the blocks
-  int snd_nxt; // The sequence number of the next packet to be sent from this block
-  uint8_t* order;  // The order according to which the rows are picked
-  uint32_t len; // Number of bare packets inside the block
-  char** content; // Array of pointers that point to the marshalled data of the bare packets
-} Block_t;
 
 typedef struct{
   uint8_t dofs; // Number of degrees of freedom thus far

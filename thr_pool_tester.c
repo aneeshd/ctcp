@@ -10,12 +10,21 @@
 
 typedef struct{
   char * msg;
-} print_job_t;
+ } print_job_t;
 
 void*
 print_job(void *a){
   print_job_t* job = (print_job_t*) a;
   tprintf( "Job processed by thread %lu: %s\n", pthread_self(), job->msg);
+  return NULL;
+}
+
+void*
+free_print_job(const void* a)
+{
+  print_job_t* job = (print_job_t*) a;
+  free(job->msg);
+  free(job);
   return NULL;
 }
 
@@ -28,21 +37,23 @@ main(void){
   thr_pool_t pool;
   tprintf( "Initializing the threadpool\n");
   thrpool_init(&pool, THREADS);
-  tprintf(  "Done\n");
+  tprintf("Done\n");
 
-  print_job_t job[JOBS];
+
 
   char* message = "Message ";
   char* important = "IMPORTANT ";
 
   int i = 0;
   while(i < JOBS){
-    job[i].msg = malloc(40);
+    print_job_t* job = malloc(sizeof print_job_t);
+
+    job->msg = malloc(40);
 
     char* m = (i%2) ? message : important;
-    sprintf(job[i].msg, "%s%d", m, i);
+    sprintf(job->msg, "%s%d", m, i);
     priority_t p = (i%2) ? LOW : HIGH;
-    addJob(&pool, &print_job, &job[i], p);
+    addJob(&pool, &print_job, job, &free_print_job, p);
     i++;
   }
   
@@ -52,7 +63,7 @@ main(void){
 
   // Kill the threadpool
   for(i = 0; i < THREADS; i++){
-    addJob(&pool, NULL, NULL, LOW);
+    addJob(&pool, NULL, NULL, NULL, LOW);
   }
   
   thrpool_kill(&pool);

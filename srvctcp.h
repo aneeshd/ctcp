@@ -4,6 +4,7 @@
 #define TRUE 1
 #define FALSE 0
 
+#define THREADS 5
 #define PORT "7890" // This is the port that the server is listenin to
 #define BUFFSIZE    65535
 #define RTT_DECAY 3 // This is used as the factor to approximate the rto
@@ -24,7 +25,15 @@ char *buff = (char *)dbuff;
 
 uint32_t curr_block; // Current block number
 bool done;
-Block_t blocks[2];
+Block_t blocks[NUM_BLOCKS];
+
+// ------------ Multithreading related variables ---------------//
+qbuffer_t coded_q[NUM_BLOCKS];
+thread_pool_t workers;
+
+
+
+
 
 //---------- CTCP specific variables --------------//
 int coding_wnd = CODING_WND;

@@ -110,6 +110,7 @@ q_free(qbuffer_t* buff, void (*free_handler)(const void*), int begin, int n){
   int i;
   for(i = 0; i < n; i++){
     free_handler(buff->q_[modulo(begin+i, buff->max_size)]);
+    buff->q_[modulo(begin+i, buff->max_size)] = NULL;
   }
 
   pthread_mutex_unlock(&buff->q_mutex_);

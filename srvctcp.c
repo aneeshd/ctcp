@@ -22,6 +22,7 @@
 #include "qbuffer.h"
 #include "srvctcp.h"
 
+#define NUM_BLOCKS 2
 #define SND_CWND 64
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
@@ -124,6 +125,16 @@ main (int argc, char** argv){
 
   freeaddrinfo(servinfo);
 
+  thrpool_init( &workers, THREADS );
+
+  // Initialize the block mutexes and queue of coded packets
+  int i;
+  for(i = 0; i < NUM_BLOCKS; i++){
+    pthread_mutex_init( &blocks[i].block_mutex, NULL );
+    q_init(&coded_q[i], 2*BLOCK_SIZE);
+  }
+
+
   char *file_name = malloc(1024);
   while(1){
     fprintf(stdout, "\nWaiting for requests...\n");
@@ -183,8 +194,10 @@ doit(socket_t sockfd){
   done = FALSE;
   curr_block = 1; 
   // read the first two blocks
-  readBlock(curr_block);  
-  readBlock(curr_block+1);
+  conding_job_t* job1 = malloc(sizeof coding_job_t);
+  conding_job_t* job2 = malloc(sizeof coding_job_t);
+  
+  
 
   snd_nxt = snd_una = 1;
   // snd_cwnd = SND_CWND;
@@ -245,7 +258,7 @@ doit(socket_t sockfd){
         fprintf(stderr,
                 "timerxmit %6.2f blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  coding wnd %d\n",
                 t-et,curr_block, 
-                blocks[curr_block%2].len,
+                blocks[curr_block%NUM_BLOCKS].len,
                 snd_una, 
                 snd_nxt, 
                 (int)snd_cwnd,
@@ -338,7 +351,7 @@ send_segs(socket_t sockfd){
 
 
   /*
-  if (blocks[curr_block%2].snd_nxt >= BLOCK_SIZE){
+  if (blocks[curr_block%NUM_BLOCKS].snd_nxt >= BLOCK_SIZE){
     printf("Calling for more - curr_blk %d, ack->dof_req %d, Flag==EXT %d snd_nxt - snd_una %d NextBlockOnFly %d snd_CWND %f\n", curr_block, ack->dof_req, ack->flag == EXT_MOD, snd_nxt - snd_una, NextBlockOnFly, snd_cwnd);
   }
   */
@@ -367,7 +380,7 @@ send_one(socket_t sockfd, uint32_t blockno){
   // Send coded packet from block number blockno
 
 	int i, j;
-  uint8_t block_len = blocks[blockno%2].len;
+  uint8_t block_len = blocks[blockno%NUM_BLOCKS].len;
   uint8_t num_packets = MIN(coding_wnd, block_len);
   Data_Pckt *msg = dataPacket(snd_nxt, blockno, num_packets);
 
@@ -375,31 +388,31 @@ send_one(socket_t sockfd, uint32_t blockno){
 
   
   int row;
-  if (blocks[blockno%2].snd_nxt >= BLOCK_SIZE){
-    //blocks[blockno%2].snd_nxt = 0;
+  if (blocks[blockno%NUM_BLOCKS].snd_nxt >= BLOCK_SIZE){
+    //blocks[blockno%NUM_BLOCKS].snd_nxt = 0;
     // TODO Instead of repermuting choose the row randomly but not uniformly
     row = random();
-    //printf("Need more coded packets. Curr block %d req block %d snd_nxt %d\n", curr_block, blockno, blocks[blockno%2].snd_nxt);
+    //printf("Need more coded packets. Curr block %d req block %d snd_nxt %d\n", curr_block, blockno, blocks[blockno%NUM_BLOCKS].snd_nxt);
   }else{
-    row  = blocks[blockno%2].order[blocks[blockno%2].snd_nxt];
+    row  = blocks[blockno%NUM_BLOCKS].order[blocks[blockno%NUM_BLOCKS].snd_nxt];
   }
 
   // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
   msg->start_packet = MIN(MAX(row%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
   
-  blocks[blockno%2].snd_nxt++;
+  blocks[blockno%NUM_BLOCKS].snd_nxt++;
 
   
   memset(msg->payload, 0, PAYLOAD_SIZE);
 
   msg->packet_coeff[0] = 1;
-  memcpy(msg->payload, blocks[blockno%2].content[msg->start_packet], PAYLOAD_SIZE);
+  memcpy(msg->payload, blocks[blockno%NUM_BLOCKS].content[msg->start_packet], PAYLOAD_SIZE);
 
   for(i = 1; i < num_packets; i++){
     msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
    
     for(j = 0; j < PAYLOAD_SIZE; j++){
-      msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%2].content[msg->start_packet+i][j]);
+      msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j]);
     }
   }
 
@@ -413,7 +426,7 @@ send_one(socket_t sockfd, uint32_t blockno){
   if (debug > 6){
     printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
            blockno, 
-           blocks[curr_block%2].len,
+           blocks[curr_block%NUM_BLOCKS].len,
            msg->seqno, 
            snd_una,       
            snd_nxt, 
@@ -923,31 +936,137 @@ advance_cwnd(void){
   }
 }
 
+//---------------WORKER FUNCTION ----------------------------------
+void*
+coding_job(void *a){
+  coding_job_t* job = (coding_job_t*) a;
+  tprintf( "Job processed by thread %lu: blockno %d dof %d\n", pthread_self(), job->blockno, job->dof_request);
+
+  pthread_mutex_lock( &blocks[blockno%NUM_BLOCKS].block_mutex );
+
+  // Check whether the requested blockno is already read, if not, read it from the file
+  // generate the first set of degrees of freedom according toa  random permutation
+
+  uint32_t blockno = job->blockno;
+  int dof_request = job->dof_request;  
+  uint8_t block_len = blocks[blockno%NUM_BLOCKS].len;
+
+  if (block_len  == 0){
+
+    readBlock(blockno);
+    block_len = blocks[blockno%NUM_BLOCKS].len;
+
+    // Compute a random permutation of the rows
+    
+    uint8_t order[block_len];
+    int i, j, swap_temp;
+    for (i=0; i < block_len; i++){
+     order[i] = i;
+    }
+    for (i=block_len - 1; i > 0; i--){
+      j = random()%(i+1);
+      swap_temp = order[i];
+      order[i] = order[j];
+      order[j] = swap_temp;
+    }
+
+    // Make sure this never happens!
+    if (dof_request < block_len){
+      printf("Error: the initially requested dofs are less than the block length\n");
+      dof_request = block_len;
+    }
+
+    
+    // Generate random combination by picking rows based on order
+
+    int i, j;
+    uint8_t num_packets = MIN(coding_wnd, block_len);
+    Data_Pckt *msg = dataPacket(0, blockno, num_packets);
+
+    int dof_ix, row;
+
+    for (dof_ix = 0; dof_ix < block_len; dof_ix++){
+
+      row = order[dof_ix];
+      // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
+      msg->start_packet = MIN(MAX(row%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
+
+      //memset(msg->payload, 0, PAYLOAD_SIZE);
+
+      msg->packet_coeff[0] = 1;
+      memcpy(msg->payload, blocks[blockno%NUM_BLOCKS].content[msg->start_packet], PAYLOAD_SIZE);
+
+      for(i = 1; i < num_packets; i++){
+        msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
+   
+        for(j = 0; j < PAYLOAD_SIZE; j++){
+          msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j]);
+        }
+      }
+
+      if(block_len < BLOCK_SIZE){
+        msg->flag = PARTIAL_BLK;
+        msg->blk_len = block_len;
+      }
+
+      q_push_back(&coded_q[blockno%NUM_BLOCKS], msg);
+    }  // Done with forming the initial set of coded packets
+
+    dof_request = MAX(0, dof_request - block_len);  // This many more to go
+  }
+
+  if (dof_req > 0){
+    // Extra degrees of freedom are generated by picking a row randomly
+
+    int i, j;
+    uint8_t num_packets = MIN(coding_wnd, block_len);
+    Data_Pckt *msg = dataPacket(0, blockno, num_packets);
+
+    int dof_ix, row;
+
+    for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
+
+      row = random();
+      // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
+      msg->start_packet = MIN(MAX(row%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
+
+      memset(msg->payload, 0, PAYLOAD_SIZE);
+
+      msg->packet_coeff[0] = 1;
+      memcpy(msg->payload, blocks[blockno%NUM_BLOCKS].content[msg->start_packet], PAYLOAD_SIZE);
+
+      for(i = 1; i < num_packets; i++){
+        msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
+   
+        for(j = 0; j < PAYLOAD_SIZE; j++){
+          msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j]);
+        }
+      }
+
+      if(block_len < BLOCK_SIZE){
+        msg->flag = PARTIAL_BLK;
+        msg->blk_len = block_len;
+      }
+      q_push_back(&coded_q[blockno%NUM_BLOCKS], msg);
+    }  // Done with forming the remaining set of coded packets
+
+  }
+
+  pthread_mutex_unlock( &blocks[blockno%NUM_BLOCKS].block_mutex );
+
+  return NULL;
+}
+
+//----------------END WORKER ---------------------------------------
 
 void
 readBlock(uint32_t blockno){
 
   // TODO: Make sure that the memory in the block is released before calling this function
-  blocks[blockno%2].len = 0;
-  blocks[blockno%2].snd_nxt = 0;
 
-  // Compute a random permutation of the rows
-  blocks[blockno%2].order = malloc(BLOCK_SIZE*sizeof(uint8_t));
-  int i, j, swap_temp;
-  for (i=0; i < BLOCK_SIZE; i++){
-    blocks[blockno%2].order[i] = i;
-  }
-  for (i=BLOCK_SIZE - 1; i > 0; i--){
-    j = random()%(i+1);
-    swap_temp = blocks[blockno%2].order[i];
-    blocks[blockno%2].order[i] = blocks[blockno%2].order[j];
-    blocks[blockno%2].order[j] = swap_temp;
-  }
+  blocks[blockno%NUM_BLOCKS].content = malloc(BLOCK_SIZE*sizeof(char*));
 
-
-  blocks[blockno%2].content = malloc(BLOCK_SIZE*sizeof(char*));
-
-  while(blocks[blockno%2].len < BLOCK_SIZE && !feof(snd_file)){
+  while(blocks[blockno%NUM_BLOCKS].len < BLOCK_SIZE && !feof(snd_file)){
     char* tmp = malloc(PAYLOAD_SIZE);
     memset(tmp, 0, PAYLOAD_SIZE); // This is done to pad with 0's 
     uint16_t bytes_read = (uint16_t) fread(tmp + 2, 1, PAYLOAD_SIZE-2, snd_file);
@@ -955,8 +1074,8 @@ readBlock(uint32_t blockno){
     memcpy(tmp, &bytes_read, sizeof(uint16_t));
     
     // Insert this pointer into the blocks datastructure
-    blocks[blockno%2].content[blocks[blockno%2].len] = tmp;
-    blocks[blockno%2].len++;
+    blocks[blockno%NUM_BLOCKS].content[blocks[blockno%NUM_BLOCKS].len] = tmp;
+    blocks[blockno%NUM_BLOCKS].len++;
   }
 
   if(feof(snd_file)){
@@ -972,11 +1091,11 @@ readBlock(uint32_t blockno){
 void
 freeBlock(uint32_t blockno){
   int i;
-  for(i = 0; i < blocks[blockno%2].len; i++){
-    free(blocks[blockno%2].content[i]);
+  for(i = 0; i < blocks[blockno%NUM_BLOCKS].len; i++){
+    free(blocks[blockno%NUM_BLOCKS].content[i]);
   }
-    free(blocks[blockno%2].content);
-    free(blocks[blockno%2].order);
+    free(blocks[blockno%NUM_BLOCKS].content);
+    blocks[blockno%NUM_BLOCKS].len = 0;
 }
 
 void
