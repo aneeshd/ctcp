@@ -19,6 +19,7 @@
 
 #include "scoreboard.h" //TODO: remove this 
 #include "util.h"
+#include "qbuffer.h"
 #include "srvctcp.h"
 
 #define SND_CWND 64
