@@ -24,8 +24,10 @@ typedef struct{
 } qbuffer_t;
 
 void q_init(qbuffer_t* buff, int max_size);
-void q_push(qbuffer_t* buff, void* entry);
+void q_push_back(qbuffer_t* buff, void* entry);
+void q_push_front(qbuffer_t* buff, void* entry);
 void* q_pop(qbuffer_t* buff);
 void q_free(qbuffer_t* buff, void (*free_handler)(const void*), int begin, int n);
+
 
 #endif // QUEUE_H

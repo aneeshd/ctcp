@@ -12,22 +12,19 @@ do_worker(void *arg)
 {
   thr_pool_t *pool = (thr_pool_t *) arg;
   
-  fprintf(stdout, "*** Started thread pid: %d ***\n", getpid());
+  fprintf(stdout, "*** Started thread id:  %lu***\n", pthread_self());
 
   while(1){
     job_t* j;
-    tprintf("Taking job\n");
 
     if(!takeJob(pool, &j)){
       break; //die
     }
     
-    tprintf("Got it\n");
-
-    (void)(j->f)(j->a);
+    (void)(j->f)(j->a); // Here is where the magic happens
   }
   
-  fprintf(stdout, "*** Dying thread pid: %d ***\n", getpid());
+  fprintf(stdout, "*** Dying thread id: %lu ***\n", pthread_self());
   pthread_exit(NULL);
 }
 
@@ -61,12 +58,17 @@ thrpool_kill(thr_pool_t* pool)
 }
 
 void
-addJob(thr_pool_t* pool, void *(*f)(void *), void *a)
+addJob(thr_pool_t* pool, void *(*f)(void *), void *a, priority_t p)
 {
   job_t* j = malloc(sizeof(job_t));
   j->f = f;
   j->a = a;
-  q_push(&pool->job_q, j);
+  
+  if(HIGH == p){
+    q_push_front(&pool->job_q, j);
+  }else if(LOW == p){
+    q_push_back(&pool->job_q, j);
+  }
 }
 
 bool

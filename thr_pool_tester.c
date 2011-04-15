@@ -5,7 +5,8 @@
 #include "tprintf.h"
 #include "thr_pool.h"
 
-#define THREADS 5
+#define THREADS 10
+#define JOBS 1000
 
 typedef struct{
   char * msg;
@@ -14,10 +15,9 @@ typedef struct{
 void*
 print_job(void *a){
   print_job_t* job = (print_job_t*) a;
-  tprintf( "%s\n", job->msg);
+  tprintf( "Job processed by thread %lu: %s\n", pthread_self(), job->msg);
   return NULL;
 }
-
 
 int
 main(void){
@@ -30,25 +30,29 @@ main(void){
   thrpool_init(&pool, THREADS);
   tprintf(  "Done\n");
 
-  print_job_t job[20];
+  print_job_t job[JOBS];
 
+  char* message = "Message ";
+  char* important = "IMPORTANT ";
 
-  int i;
-  for(i = 0; i < 20; i++){
-    tprintf( "Adding job %d\n", i);
-    job[i].msg = malloc(20);
-    sprintf(job[i].msg, "Message %d", i);
-    addJob(&pool, &print_job, &job[i]);
+  int i = 0;
+  while(i < JOBS){
+    job[i].msg = malloc(40);
+
+    char* m = (i%2) ? message : important;
+    sprintf(job[i].msg, "%s%d", m, i);
+    priority_t p = (i%2) ? LOW : HIGH;
+    addJob(&pool, &print_job, &job[i], p);
+    i++;
   }
   
+
+
   fprintf(stdout, "\n\n ************** KILLING THREADS ***********\n\n");
-  fprintf(stdout, "Head %d, Tail %d, Size %d\n", pool.job_q.head, pool.job_q.tail, pool.job_q.size);
 
   // Kill the threadpool
   for(i = 0; i < THREADS; i++){
-    tprintf(  "Killing thread %d\n", i);
-    addJob(&pool, NULL, NULL);
-    fprintf(stdout, "Head %d, Tail %d, Size %d\n", pool.job_q.head, pool.job_q.tail, pool.job_q.size);
+    addJob(&pool, NULL, NULL, LOW);
   }
   
   thrpool_kill(&pool);
