@@ -20,6 +20,7 @@
 #include "scoreboard.h" //TODO: remove this 
 #include "srvctcp.h"
 
+
 #define SND_CWND 64
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
@@ -122,13 +123,15 @@ main (int argc, char** argv){
 
   freeaddrinfo(servinfo);
 
+  // initialize the thread pool
   thrpool_init( &workers, THREADS );
 
-  // Initialize the block mutexes and queue of coded packets
+  // Initialize the block mutexes and queue of coded packets and counters
   int i;
   for(i = 0; i < NUM_BLOCKS; i++){
     pthread_mutex_init( &blocks[i].block_mutex, NULL );
     q_init(&coded_q[i], 2*BLOCK_SIZE);
+    dof_remain[i] = 0;
   }
 
 
@@ -190,10 +193,15 @@ doit(socket_t sockfd){
 
   done = FALSE;
   curr_block = 1; 
-  // read the first two blocks
-  conding_job_t* job1 = malloc(sizeof coding_job_t);
-  conding_job_t* job2 = malloc(sizeof coding_job_t);
-  
+  // read and code the first two blocks
+  for (i=1; i <= 2; i++){
+    coding_job_t* job = malloc(sizeof(coding_job_t));
+    job->blockno = i;
+    job->dof_request = (int) ceil(BLOCK_SIZE*1.1);
+    priority_t coding_urgency = LOW;
+    addJob(&workers, &coding_job, job, &free_coding_job, coding_urgency);
+    dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+  }
   
 
   snd_nxt = snd_una = 1;
@@ -294,7 +302,8 @@ doit(socket_t sockfd){
 void 
 terminate(socket_t sockfd){
   Data_Pckt *msg = dataPacket(snd_nxt, curr_block, 0);
-  
+  msg->tstamp = getTime();
+
   // FIN_CLI
   msg->flag = FIN_CLI;
 
@@ -329,42 +338,68 @@ send_segs(socket_t sockfd){
     CurrOnFly += (OnFly[i%MAX_CWND] == curr_block);
   }
   
-  // TODO: redundancy for transition
 
   int CurrWin = win;
   int NextWin = 0;
 
 
-  //double p = total_loss/snd_una;
-  //double test = sqrt(p);
+  //Redundancy for transition
 
+  //double p = total_loss/snd_una;
   double p = slr/(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
 
+  // The total number of dofs the we think we should be sending (for the current block) from now on
+  int dof_needed = (int) ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p)) - CurrOnFly;
 
   if (dof_req - CurrOnFly < win){
-    CurrWin = MIN(win, (int) ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p)) - CurrOnFly);
+    CurrWin = MIN(win, dof_needed);
     NextWin = win - CurrWin;
   }
 
-
-  /*
-  if (blocks[curr_block%NUM_BLOCKS].snd_nxt >= BLOCK_SIZE){
-    printf("Calling for more - curr_blk %d, ack->dof_req %d, Flag==EXT %d snd_nxt - snd_una %d NextBlockOnFly %d snd_CWND %f\n", curr_block, ack->dof_req, ack->flag == EXT_MOD, snd_nxt - snd_una, NextBlockOnFly, snd_cwnd);
+  // Check whether we have enough coded packets for current block
+  if (dof_remain[curr_block%NUM_BLOCKS] < dof_needed){
+    coding_job_t* job = malloc(sizeof(coding_job_t));
+    job->blockno = curr_block;
+    job->dof_request = dof_needed - dof_remain[curr_block%NUM_BLOCKS];
+    priority_t coding_urgency = HIGH;
+    addJob(&workers, &coding_job, job, &free_coding_job, coding_urgency);
+    dof_remain[curr_block%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
   }
-  */
 
-	while (CurrWin>=1) {
+
+  while (CurrWin>=1) {
     send_one(sockfd, curr_block);
     snd_nxt++;
     CurrWin--;
+    dof_remain[curr_block%NUM_BLOCKS]--;   // Update the internal dof counter
   }
 
+  /* if (blocks[curr_block%NUM_BLOCKS].snd_nxt >= BLOCK_SIZE){
+  printf("Calling for more - curr_blk %d, ack->dof_req %d, 
+  Flag==EXT %d snd_nxt - snd_una %d NextBlockOnFly %d snd_CWND %f\n", 
+  curr_block, ack->dof_req, ack->flag == EXT_MOD, 
+  snd_nxt - snd_una, NextBlockOnFly, snd_cwnd);
+  }  */
+
   if (curr_block != maxblockno){
+
+    // Check whether we have enough coded packets for next block 
+    if (dof_remain[(curr_block+1)%NUM_BLOCKS] < NextWin){
+      coding_job_t* job = malloc(sizeof(coding_job_t));
+      job->blockno = curr_block+1;
+      job->dof_request = NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
+      priority_t coding_urgency = LOW;
+      addJob(&workers, &coding_job, job, &free_coding_job, coding_urgency);
+      dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
+    }
+
+
     // send from curr_block + 1
     while (NextWin>=1) {
       send_one(sockfd, curr_block+1);
       snd_nxt++;
       NextWin--;
+      dof_remain[(curr_block+1)%NUM_BLOCKS]--;   // Update the internal dof counter
     }
   }
 
@@ -375,51 +410,16 @@ send_segs(socket_t sockfd){
 void
 send_one(socket_t sockfd, uint32_t blockno){
   // Send coded packet from block number blockno
-
-	int i, j;
-  uint8_t block_len = blocks[blockno%NUM_BLOCKS].len;
-  uint8_t num_packets = MIN(coding_wnd, block_len);
-  Data_Pckt *msg = dataPacket(snd_nxt, blockno, num_packets);
-
-  double coding_timer = getTime();
-
   
-  int row;
-  if (blocks[blockno%NUM_BLOCKS].snd_nxt >= BLOCK_SIZE){
-    //blocks[blockno%NUM_BLOCKS].snd_nxt = 0;
-    // TODO Instead of repermuting choose the row randomly but not uniformly
-    row = random();
-    //printf("Need more coded packets. Curr block %d req block %d snd_nxt %d\n", curr_block, blockno, blocks[blockno%NUM_BLOCKS].snd_nxt);
-  }else{
-    row  = blocks[blockno%NUM_BLOCKS].order[blocks[blockno%NUM_BLOCKS].snd_nxt];
-  }
-
-  // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
-  msg->start_packet = MIN(MAX(row%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
+  // Get a coded packet from the queue
+  //q_pop is blocking. If the queue is empty, we wait until the coded packets are created
+  // We should decide in send_segs whether we need more coded packets in the queue
+  Data_Pckt *msg = (Data_Pckt*) q_pop(&coded_q[blockno%NUM_BLOCKS]);
   
-  blocks[blockno%NUM_BLOCKS].snd_nxt++;
-
+  // Correct the header information of the outgoing message
+  msg->seqno = snd_nxt;
+  msg->tstamp = getTime();
   
-  memset(msg->payload, 0, PAYLOAD_SIZE);
-
-  msg->packet_coeff[0] = 1;
-  memcpy(msg->payload, blocks[blockno%NUM_BLOCKS].content[msg->start_packet], PAYLOAD_SIZE);
-
-  for(i = 1; i < num_packets; i++){
-    msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
-   
-    for(j = 0; j < PAYLOAD_SIZE; j++){
-      msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j]);
-    }
-  }
-
-  coding_delay += getTime() - coding_timer;
-
-  if(block_len < BLOCK_SIZE){
-    msg->flag = PARTIAL_BLK;
-    msg->blk_len = block_len;
-  }
-
   if (debug > 6){
     printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
            blockno, 
@@ -539,13 +539,18 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     }
     
     freeBlock(curr_block);
+    q_free(&coded_q[curr_block%NUM_BLOCKS], &free_coded_pkt);
     if (!maxblockno){
-      readBlock(curr_block+2);
+      //readBlock(curr_block+2);
+      coding_job_t* job = malloc(sizeof(coding_job_t));
+      job->blockno = curr_block+2;
+      job->dof_request = (int) ceil(BLOCK_SIZE*(1+2*slr));
+      priority_t coding_urgency = LOW;
+      addJob(&workers, &coding_job, job, &free_coding_job, coding_urgency);
+      dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
     }
     
     curr_block++;
-    //NextBlockOnFly = 0;
-
 
     if (debug > 5 && curr_block%10==0){
       printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms\n", curr_block, snd_cwnd, 100*slr, srtt*1000);
@@ -565,11 +570,9 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
     int losses = ackno - (snd_una +1);
 
-    /*
-      if (losses > 0){
+    /* if (losses > 0){
       printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
-      }
-    */
+      }  */
 
     total_loss += losses;
     double loss_tmp =  pow(1-slr_mem, losses);
@@ -937,15 +940,16 @@ advance_cwnd(void){
 void*
 coding_job(void *a){
   coding_job_t* job = (coding_job_t*) a;
-  tprintf( "Job processed by thread %lu: blockno %d dof %d\n", pthread_self(), job->blockno, job->dof_request);
+  printf("Job processed by thread %lu: blockno %d dof %d\n", pthread_self(), job->blockno, job->dof_request);
+
+  uint32_t blockno = job->blockno;
+  int dof_request = job->dof_request;  
 
   pthread_mutex_lock( &blocks[blockno%NUM_BLOCKS].block_mutex );
 
   // Check whether the requested blockno is already read, if not, read it from the file
   // generate the first set of degrees of freedom according toa  random permutation
 
-  uint32_t blockno = job->blockno;
-  int dof_request = job->dof_request;  
   uint8_t block_len = blocks[blockno%NUM_BLOCKS].len;
 
   if (block_len  == 0){
@@ -976,7 +980,6 @@ coding_job(void *a){
     
     // Generate random combination by picking rows based on order
 
-    int i, j;
     uint8_t num_packets = MIN(coding_wnd, block_len);
     Data_Pckt *msg = dataPacket(0, blockno, num_packets);
 
@@ -1056,11 +1059,32 @@ coding_job(void *a){
 
 //----------------END WORKER ---------------------------------------
 
+// Free Handler for the coding_job
+void*
+free_coding_job(const void* a)
+{
+  coding_job_t* job = (coding_job_t*) a; // XXX Do we need this? 
+  free(job);
+  return NULL;
+}
+
+// Free Handler for the coded packets in coded_q
+void*
+free_coded_pkt(const void* a)
+{
+  Data_Pckt* msg = (Data_Pckt*) a;  
+  free(msg->packet_coeff);
+  free(msg->payload);
+  free(msg);
+  return NULL;
+}
+
+//--------------------------------------------------------------------
 void
 readBlock(uint32_t blockno){
 
   // TODO: Make sure that the memory in the block is released before calling this function
-
+  blocks[blockno%NUM_BLOCKS].len = 0;
   blocks[blockno%NUM_BLOCKS].content = malloc(BLOCK_SIZE*sizeof(char*));
 
   while(blocks[blockno%NUM_BLOCKS].len < BLOCK_SIZE && !feof(snd_file)){
@@ -1094,7 +1118,7 @@ freeBlock(uint32_t blockno){
     free(blocks[blockno%NUM_BLOCKS].content);
     blocks[blockno%NUM_BLOCKS].len = 0;
 }
-
+//-------------------------------------------------------------------------------------
 void
 openLog(void){
   time_t rawtime;

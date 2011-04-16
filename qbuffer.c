@@ -104,14 +104,18 @@ q_pop(qbuffer_t* buff){
 }
 
 void
-q_free(qbuffer_t* buff, void (*free_handler)(const void*), int begin, int n){
+q_free(qbuffer_t* buff, void*(*free_handler)(const void*)){
   pthread_mutex_lock(&buff->q_mutex_);
   
   int i;
-  for(i = 0; i < n; i++){
-    free_handler(buff->q_[modulo(begin+i, buff->max_size)]);
-    buff->q_[modulo(begin+i, buff->max_size)] = NULL;
+  for(i = buff->head; i > buff->tail; i--){
+    free_handler(buff->q_[modulo(i, buff->max_size)]);
+    buff->q_[modulo(i, buff->max_size)] = NULL;
   }
+
+  buff->head = 0;
+  buff->tail = 0;
+  buff->size = 0;
 
   pthread_mutex_unlock(&buff->q_mutex_);
 }

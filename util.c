@@ -66,7 +66,7 @@ getTime(void){
 Data_Pckt*
 dataPacket(uint32_t seqno, uint32_t blockno, uint8_t num_packets){
   Data_Pckt* packet = malloc(sizeof(Data_Pckt));
-  packet->tstamp = getTime();
+  //packet->tstamp = getTime();   // We set this properly in send_one()
   packet->flag = NORMAL;
   packet->seqno = seqno;
   packet->blockno = blockno;

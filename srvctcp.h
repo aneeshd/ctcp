@@ -4,7 +4,6 @@
 #include "thr_pool.h"
 #include "qbuffer.h"
 
-
 #define NUM_BLOCKS 2
 
 #define TRUE 1
@@ -35,9 +34,11 @@ Block_t blocks[NUM_BLOCKS];
 
 // ------------ Multithreading related variables ---------------//
 qbuffer_t coded_q[NUM_BLOCKS];
-thread_pool_t workers;
+thr_pool_t workers;
 
-
+// Internal dof counter: the number of dofs left in the server (does not necessarily coincide with the number of packets in coded_q)
+// Need to update this whenever we add a coding job, or pop the coded_q
+int dof_remain[NUM_BLOCKS];  
 
 
 
@@ -145,5 +146,11 @@ bool unmarshallAck(Ack_Pckt* msg, char* buf);
 void duplicate(socket_t fd, int sackno);
 void restart(void);
 void openLog(void);
+
+void* coding_job(void *a);
+void* free_coding_job(const void* a);
+void* free_coded_pkt(const void* a);
+
+
 
 #endif // ATOUCLI_H_

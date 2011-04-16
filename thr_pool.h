@@ -5,7 +5,7 @@
 
 #include "qbuffer.h"
 
-typedef enum { LOW = 0, HIGH } priority_t;
+typedef enum {LOW = 0, HIGH} priority_t;
 
 typedef struct{
   void *(*f)(void *); // function pointer for the job

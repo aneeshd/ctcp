@@ -6,6 +6,7 @@ LDFLAGS := -lm -lpthread
 TARGETS := util \
 	md5 \
 	qbuffer \
+	thr_pool \
 	clictcp \
 	srvctcp \
 
@@ -13,6 +14,7 @@ TARGETS := util \
 UTILS := util \
 	md5 \
 	qbuffer \
+	thr_pool \
 
 SRCS := $(TARGETS:%=%.c)
 
