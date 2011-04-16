@@ -1,6 +1,12 @@
 #ifndef ATOUCLI_H_
 #define ATOUCLI_H_
 
+#include "thr_pool.h"
+#include "qbuffer.h"
+
+
+#define NUM_BLOCKS 2
+
 #define TRUE 1
 #define FALSE 0
 

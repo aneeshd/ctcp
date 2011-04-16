@@ -46,7 +46,7 @@ main(void){
 
   int i = 0;
   while(i < JOBS){
-    print_job_t* job = malloc(sizeof print_job_t);
+    print_job_t* job = malloc(sizeof( print_job_t ));
 
     job->msg = malloc(40);
 
@@ -61,11 +61,6 @@ main(void){
 
   fprintf(stdout, "\n\n ************** KILLING THREADS ***********\n\n");
 
-  // Kill the threadpool
-  for(i = 0; i < THREADS; i++){
-    addJob(&pool, NULL, NULL, NULL, LOW);
-  }
-  
   thrpool_kill(&pool);
   return 0;
 }

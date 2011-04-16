@@ -52,7 +52,12 @@ thrpool_init(thr_pool_t *pool, int sz)
 void 
 thrpool_kill(thr_pool_t* pool)
 {
+  // Kill the threadpool
   int i;
+  for(i = 0; i < pool->nthreads_; i++){
+    addJob(pool, NULL, NULL, NULL, LOW);
+  }
+
   for(i = 0; i < pool->nthreads_; i++){
    pthread_join(pool->th_[i], NULL);
   }

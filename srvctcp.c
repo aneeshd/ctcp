@@ -18,11 +18,8 @@
 #include <assert.h>
 
 #include "scoreboard.h" //TODO: remove this 
-#include "util.h"
-#include "qbuffer.h"
 #include "srvctcp.h"
 
-#define NUM_BLOCKS 2
 #define SND_CWND 64
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
