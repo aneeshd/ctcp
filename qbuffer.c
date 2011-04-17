@@ -47,10 +47,24 @@ q_push_back(qbuffer_t* buff, void* entry){
   
   //  fprintf(stdout, "pop: Head %d, Tail %d, Size %d\n", buff->head, buff->tail, buff->size);
 
-  buff->head = modulo(buff->head+1, buff->max_size);
+  /*
+  int k;
+  for (k=1; k <= buff->size; k++){
+    Data_Pckt *tmp = (Data_Pckt*) buff->q_[buff->tail+k];
+    printf("BEFORE push buff msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
+    }*/
+
+  buff->head = modulo((buff->head)+1, buff->max_size);
   buff->size++;
   buff->q_[buff->head] = entry;
   
+  /*
+  for (k=1; k <= buff->size; k++){
+    Data_Pckt *tmp = (Data_Pckt*) buff->q_[buff->tail+k];
+    printf("AFTER  push buff msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
+    }*/
+
+
   pthread_cond_signal( &(buff->q_condv_pop_) );
   pthread_cond_signal( &(buff->q_condv_push_) );
   
@@ -89,12 +103,21 @@ q_pop(qbuffer_t* buff){
     pthread_cond_wait( &(buff->q_condv_pop_), &(buff->q_mutex_) );
   }
 
-  //  fprintf(stdout, "pop: Head %d, Tail %d, Size %d\n", buff->head, buff->tail, buff->size);
+  //fprintf(stdout, "pop: Head %d, Tail %d, Size %d\n", buff->head, buff->tail, buff->size);
   
   buff->tail = modulo( buff->tail + 1, buff->max_size );
   buff->size--;
   
   void* entry = buff->q_[buff->tail];
+
+
+  /*
+  int k;
+  for (k=0; k <= buff->size; k++){
+    Data_Pckt *tmp = (Data_Pckt*) buff->q_[buff->tail+k];
+    printf("buff msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
+  }
+  */
 
   pthread_cond_signal( &(buff->q_condv_push_) );
   pthread_cond_signal( &(buff->q_condv_pop_) );
@@ -106,9 +129,18 @@ q_pop(qbuffer_t* buff){
 void
 q_free(qbuffer_t* buff, void*(*free_handler)(const void*)){
   pthread_mutex_lock(&buff->q_mutex_);
-  
+
+  /*  fprintf(stdout, "Free: Head %d, Tail %d, Size %d\n", buff->head, buff->tail, buff->size);
+  int k;
+  for (k=1; k <= buff->size; k++){
+    Data_Pckt *tmp = (Data_Pckt*) buff->q_[buff->tail+k];
+    printf("buff msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
+  }
+  */
+
   int i;
   for(i = buff->head; i > buff->tail; i--){
+    //printf("freeing element %d\n", i);
     free_handler(buff->q_[modulo(i, buff->max_size)]);
     buff->q_[modulo(i, buff->max_size)] = NULL;
   }

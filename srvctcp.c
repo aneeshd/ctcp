@@ -358,6 +358,9 @@ send_segs(socket_t sockfd){
 
   // Check whether we have enough coded packets for current block
   if (dof_remain[curr_block%NUM_BLOCKS] < dof_needed){
+    
+    printf("requesting more dofs: curr block %d,  dof_remain %d, dof_needed %d dof_req %d\n", curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req);
+
     coding_job_t* job = malloc(sizeof(coding_job_t));
     job->blockno = curr_block;
     job->dof_request = dof_needed - dof_remain[curr_block%NUM_BLOCKS];
@@ -411,11 +414,32 @@ void
 send_one(socket_t sockfd, uint32_t blockno){
   // Send coded packet from block number blockno
   
+  if (debug > 6){
+    fprintf(stdout, "\n block %d DOF left %d q size %d\n",blockno, dof_remain[blockno%NUM_BLOCKS], coded_q[blockno%NUM_BLOCKS].size);
+  }
+
+
   // Get a coded packet from the queue
   //q_pop is blocking. If the queue is empty, we wait until the coded packets are created
   // We should decide in send_segs whether we need more coded packets in the queue
   Data_Pckt *msg = (Data_Pckt*) q_pop(&coded_q[blockno%NUM_BLOCKS]);
   
+
+  /* // TEST ONLY
+  pthread_mutex_lock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
+
+  //fprintf(stdout, "\n queue size %d HEAD %d, TAIL %d\n",coded_q[blockno%NUM_BLOCKS].size, coded_q[blockno%NUM_BLOCKS].head, coded_q[blockno%NUM_BLOCKS].tail);
+
+  int k;
+  for (k=1; k <= coded_q[blockno%NUM_BLOCKS].size; k++){
+    Data_Pckt *tmp = (Data_Pckt*) coded_q[blockno%NUM_BLOCKS].q_[coded_q[blockno%NUM_BLOCKS].tail+k];
+    printf("tmp msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
+  }
+
+  pthread_mutex_unlock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
+  */
+
+
   // Correct the header information of the outgoing message
   msg->seqno = snd_nxt;
   msg->tstamp = getTime();
@@ -453,12 +477,14 @@ send_one(socket_t sockfd, uint32_t blockno){
   // Update the packets on the fly
   OnFly[snd_nxt%MAX_CWND] = blockno;
   
-	if (debug > 8)printf("blockno %d snd_nxt %d \n", blockno, snd_nxt);
+	//printf("Freeing the message - blockno %d snd_nxt %d ....", blockno, snd_nxt);
 
 	opkts++;
   free(msg->packet_coeff);
   free(msg->payload);
   free(msg);
+
+	//printf("Done Freeing the message - blockno %d snd_nxt %d \n\n\n", blockno, snd_nxt);
 }
 
 
@@ -540,11 +566,12 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     
     freeBlock(curr_block);
     q_free(&coded_q[curr_block%NUM_BLOCKS], &free_coded_pkt);
+
     if (!maxblockno){
       //readBlock(curr_block+2);
       coding_job_t* job = malloc(sizeof(coding_job_t));
       job->blockno = curr_block+2;
-      job->dof_request = (int) ceil(BLOCK_SIZE*(1+2*slr));
+      job->dof_request = (int) ceil(BLOCK_SIZE*(1.02+2*slr));
       priority_t coding_urgency = LOW;
       addJob(&workers, &coding_job, job, &free_coding_job, coding_urgency);
       dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
@@ -570,9 +597,9 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
     int losses = ackno - (snd_una +1);
 
-    /* if (losses > 0){
+     if (losses > 0){
       printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
-      }  */
+      }  
 
     total_loss += losses;
     double loss_tmp =  pow(1-slr_mem, losses);
@@ -940,12 +967,12 @@ advance_cwnd(void){
 void*
 coding_job(void *a){
   coding_job_t* job = (coding_job_t*) a;
-  printf("Job processed by thread %lu: blockno %d dof %d\n", pthread_self(), job->blockno, job->dof_request);
+  //printf("Job processed by thread %lu: blockno %d dof %d\n", pthread_self(), job->blockno, job->dof_request);
 
   uint32_t blockno = job->blockno;
   int dof_request = job->dof_request;  
 
-  pthread_mutex_lock( &blocks[blockno%NUM_BLOCKS].block_mutex );
+  pthread_mutex_lock(&blocks[blockno%NUM_BLOCKS].block_mutex);
 
   // Check whether the requested blockno is already read, if not, read it from the file
   // generate the first set of degrees of freedom according toa  random permutation
@@ -956,6 +983,7 @@ coding_job(void *a){
 
     readBlock(blockno);
     block_len = blocks[blockno%NUM_BLOCKS].len;
+
 
     // Compute a random permutation of the rows
     
@@ -980,14 +1008,17 @@ coding_job(void *a){
     
     // Generate random combination by picking rows based on order
 
-    uint8_t num_packets = MIN(coding_wnd, block_len);
-    Data_Pckt *msg = dataPacket(0, blockno, num_packets);
 
     int dof_ix, row;
 
     for (dof_ix = 0; dof_ix < block_len; dof_ix++){
 
+      uint8_t num_packets = MIN(coding_wnd, block_len);
+      Data_Pckt *msg = dataPacket(0, blockno, num_packets);
+
       row = order[dof_ix];
+
+
       // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
       msg->start_packet = MIN(MAX(row%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
 
@@ -1009,7 +1040,24 @@ coding_job(void *a){
         msg->blk_len = block_len;
       }
 
+      /*
+      printf("Pushing ... block %d, row %d \t start pkt %d\n", blockno, row, msg->start_packet);     
+      fprintf(stdout, "before BEFORE push  queue size %d HEAD %d, TAIL %d\n",coded_q[blockno%NUM_BLOCKS].size, coded_q[blockno%NUM_BLOCKS].head, coded_q[blockno%NUM_BLOCKS].tail);
+     
+      if (coded_q[blockno%NUM_BLOCKS].size > 0){
+        int k;
+        for (k=1; k <= coded_q[blockno%NUM_BLOCKS].size; k++){
+          Data_Pckt *tmp = (Data_Pckt*) coded_q[blockno%NUM_BLOCKS].q_[coded_q[blockno%NUM_BLOCKS].tail+k];
+          printf("before BEFORE push buff msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
+        }
+      }
+      */
+
+
+
       q_push_back(&coded_q[blockno%NUM_BLOCKS], msg);
+
+
     }  // Done with forming the initial set of coded packets
 
     dof_request = MAX(0, dof_request - block_len);  // This many more to go
@@ -1019,12 +1067,12 @@ coding_job(void *a){
     // Extra degrees of freedom are generated by picking a row randomly
 
     int i, j;
-    uint8_t num_packets = MIN(coding_wnd, block_len);
-    Data_Pckt *msg = dataPacket(0, blockno, num_packets);
-
     int dof_ix, row;
 
     for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
+
+      uint8_t num_packets = MIN(coding_wnd, block_len);
+      Data_Pckt *msg = dataPacket(0, blockno, num_packets);
 
       row = random();
       // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
@@ -1051,6 +1099,7 @@ coding_job(void *a){
     }  // Done with forming the remaining set of coded packets
 
   }
+  //printf("Almost done with block %d\n", blockno);
 
   pthread_mutex_unlock( &blocks[blockno%NUM_BLOCKS].block_mutex );
 
@@ -1073,6 +1122,7 @@ void*
 free_coded_pkt(const void* a)
 {
   Data_Pckt* msg = (Data_Pckt*) a;  
+  //printf("freeing msg blockno %d start pkt %d\n", msg->blockno, msg->start_packet);
   free(msg->packet_coeff);
   free(msg->payload);
   free(msg);
@@ -1116,7 +1166,9 @@ freeBlock(uint32_t blockno){
     free(blocks[blockno%NUM_BLOCKS].content[i]);
   }
     free(blocks[blockno%NUM_BLOCKS].content);
+    // reset the counters
     blocks[blockno%NUM_BLOCKS].len = 0;
+    dof_remain[blockno&NUM_BLOCKS] = 0;
 }
 //-------------------------------------------------------------------------------------
 void
