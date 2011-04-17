@@ -1168,7 +1168,7 @@ freeBlock(uint32_t blockno){
     free(blocks[blockno%NUM_BLOCKS].content);
     // reset the counters
     blocks[blockno%NUM_BLOCKS].len = 0;
-    dof_remain[blockno&NUM_BLOCKS] = 0;
+    dof_remain[blockno%NUM_BLOCKS] = 0;
 }
 //-------------------------------------------------------------------------------------
 void
