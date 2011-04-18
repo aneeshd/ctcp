@@ -37,6 +37,14 @@ else
 	NEWMODE += nodebug
 endif
 
+ifeq ($(PROF),1)
+	CFLAGS += -pg
+	LDFLAGS += -pg
+	NEWMODE += profile
+endif
+
+
+
 # If the new mode does'n match the old mode, write the new mode to .buildmode.
 # This forces a rebuild of all the objects files, because they depend on .buildmode.
 OLDMODE := $(shell cat .buildmode 2> /dev/null)
