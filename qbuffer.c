@@ -127,16 +127,8 @@ q_pop(qbuffer_t* buff){
 }
 
 void
-q_free(qbuffer_t* buff, void*(*free_handler)(const void*)){
+q_free(qbuffer_t* buff, void (*free_handler)(void*)){
   pthread_mutex_lock(&buff->q_mutex_);
-
-  /*  fprintf(stdout, "Free: Head %d, Tail %d, Size %d\n", buff->head, buff->tail, buff->size);
-  int k;
-  for (k=1; k <= buff->size; k++){
-    Data_Pckt *tmp = (Data_Pckt*) buff->q_[buff->tail+k];
-    printf("buff msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
-  }
-  */
 
   int i;
   for(i = buff->head; i > buff->tail; i--){

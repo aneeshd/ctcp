@@ -19,13 +19,12 @@ print_job(void *a){
   return NULL;
 }
 
-void*
-free_print_job(const void* a)
+void
+free_print_job(void* a)
 {
   print_job_t* job = (print_job_t*) a;
   free(job->msg);
   free(job);
-  return NULL;
 }
 
 int

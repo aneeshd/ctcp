@@ -10,7 +10,7 @@ typedef enum {LOW = 0, HIGH} priority_t;
 typedef struct{
   void *(*f)(void *); // function pointer for the job
   void *a; // function arguments
-  void *(*free_handler)(const void *);
+  void (*free_handler)(void *);
 } job_t;
 
 typedef struct {
@@ -29,7 +29,7 @@ void* do_worker(void *arg);
 void addJob(thr_pool_t* pool,
             void *(*f)(void *),
             void *a,
-            void *(*free_handler)(const void *),
+            void (*free_handler)(void *),
             priority_t p);
 
 

@@ -148,8 +148,8 @@ void restart(void);
 void openLog(void);
 
 void* coding_job(void *a);
-void* free_coding_job(const void* a);
-void* free_coded_pkt(const void* a);
+void free_coding_job(void* a);
+void free_coded_pkt(void* a);
 
 
 

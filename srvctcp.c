@@ -203,7 +203,7 @@ doit(socket_t sockfd){
     job->blockno = i;
     job->dof_request = (int) ceil(BLOCK_SIZE*1.1);
     priority_t coding_urgency = LOW;
-    addJob(&workers, &coding_job, job, &free_coding_job, coding_urgency);
+    addJob(&workers, &coding_job, job, &free, coding_urgency);
     dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
   }
   
@@ -369,7 +369,7 @@ send_segs(socket_t sockfd){
     job->blockno = curr_block;
     job->dof_request = dof_needed - dof_remain[curr_block%NUM_BLOCKS];
     priority_t coding_urgency = HIGH;
-    addJob(&workers, &coding_job, job, &free_coding_job, coding_urgency);
+    addJob(&workers, &coding_job, job, &free, coding_urgency);
     dof_remain[curr_block%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
   }
 
@@ -396,7 +396,7 @@ send_segs(socket_t sockfd){
       job->blockno = curr_block+1;
       job->dof_request = NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
       priority_t coding_urgency = LOW;
-      addJob(&workers, &coding_job, job, &free_coding_job, coding_urgency);
+      addJob(&workers, &coding_job, job, &free, coding_urgency);
       dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
     }
 
@@ -577,7 +577,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       job->blockno = curr_block+2;
       job->dof_request = (int) ceil(BLOCK_SIZE*(1.02+2*slr));
       priority_t coding_urgency = LOW;
-      addJob(&workers, &coding_job, job, &free_coding_job, coding_urgency);
+      addJob(&workers, &coding_job, job, &free, coding_urgency);
       dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
     }
     
@@ -1117,25 +1117,16 @@ coding_job(void *a){
 
 //----------------END WORKER ---------------------------------------
 
-// Free Handler for the coding_job
-void*
-free_coding_job(const void* a)
-{
-  coding_job_t* job = (coding_job_t*) a; // XXX Do we need this? 
-  free(job);
-  return NULL;
-}
 
 // Free Handler for the coded packets in coded_q
-void*
-free_coded_pkt(const void* a)
+void
+free_coded_pkt(void* a)
 {
   Data_Pckt* msg = (Data_Pckt*) a;  
   //printf("freeing msg blockno %d start pkt %d\n", msg->blockno, msg->start_packet);
   free(msg->packet_coeff);
   free(msg->payload);
   free(msg);
-  return NULL;
 }
 
 //--------------------------------------------------------------------
