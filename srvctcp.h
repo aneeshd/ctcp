@@ -40,7 +40,7 @@ thr_pool_t workers;
 // Need to update this whenever we add a coding job, or pop the coded_q
 int dof_remain[NUM_BLOCKS];  
 
-
+pthread_mutex_t file_mutex;  // Allows locking the file while reading a block
 
 //---------- CTCP specific variables --------------//
 int coding_wnd = CODING_WND;
@@ -65,7 +65,7 @@ double snd_cwnd;		/* congestion-controlled window */
 unsigned int snd_ssthresh;	/* slow start threshold */
 
 uint32_t ackno;
-unsigned int file_position; // Indicates the msg number at which we are in the file at any given moment
+unsigned int file_position; // Indicates the block number at which we are in the file at any given moment
 
 /* configurable variables */
 int droplist[11];  /* debuggin */

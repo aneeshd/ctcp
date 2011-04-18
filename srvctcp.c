@@ -126,6 +126,10 @@ main (int argc, char** argv){
   // initialize the thread pool
   thrpool_init( &workers, THREADS );
 
+  // Initialize the file mutex and position
+  pthread_mutex_init(&file_mutex, NULL);
+  file_position = 1; // Initially called to read the first block
+  
   // Initialize the block mutexes and queue of coded packets and counters
   int i;
   for(i = 0; i < NUM_BLOCKS; i++){
@@ -981,7 +985,12 @@ coding_job(void *a){
 
   if (block_len  == 0){
 
+    // lock the file
+    pthread_mutex_lock(&file_mutex);
     readBlock(blockno);
+    // unlock the file
+    pthread_mutex_unlock(&file_mutex);
+    
     block_len = blocks[blockno%NUM_BLOCKS].len;
 
 
@@ -1136,6 +1145,10 @@ readBlock(uint32_t blockno){
   // TODO: Make sure that the memory in the block is released before calling this function
   blocks[blockno%NUM_BLOCKS].len = 0;
   blocks[blockno%NUM_BLOCKS].content = malloc(BLOCK_SIZE*sizeof(char*));
+  
+  if (file_position != blockno){
+    fseek(snd_file, (blockno-1)*BLOCK_SIZE*(PAYLOAD_SIZE-2), SEEK_SET);
+  }
 
   while(blocks[blockno%NUM_BLOCKS].len < BLOCK_SIZE && !feof(snd_file)){
     char* tmp = malloc(PAYLOAD_SIZE);
@@ -1148,6 +1161,8 @@ readBlock(uint32_t blockno){
     blocks[blockno%NUM_BLOCKS].content[blocks[blockno%NUM_BLOCKS].len] = tmp;
     blocks[blockno%NUM_BLOCKS].len++;
   }
+  
+  file_position = blockno + 1;  // Advance the counter
 
   if(feof(snd_file)){
     maxblockno = blockno;
@@ -1335,7 +1350,8 @@ restart(void){
   vrttmin=999999;
   //------------------------------------------------------------//
   
- 
+  file_position = 1; // Initially called to read the first block
+
   bwe_pkt = 0;
   bwe_prev = 0;
   bwe_on=1; 
