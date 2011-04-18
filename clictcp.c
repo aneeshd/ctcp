@@ -8,13 +8,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <signal.h>
-#include	<errno.h>
+#include <errno.h>
 
-#include "util.h"
-#include "qbuffer.h"
 #include "clictcp.h"
 
 #define PORT "7890"
@@ -267,6 +264,13 @@ bldack(Data_Pckt *msg, bool match){
     int shift = shift_row(msg->packet_coeff, coding_wnd);
     start += shift;
 
+    elimination_vector_t* v = malloc(sizeof(elimination_vector_t));
+    v->start  = start;
+    v->length = 0;
+
+    // Initialize the vector coefficients to 0s
+    memset( v->coeffs, 0, BLOCK_SIZE );
+
     // THE while loop!
     while(!isEmpty(msg->packet_coeff, coding_wnd)){
       if(blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
@@ -280,13 +284,11 @@ bldack(Data_Pckt *msg, bool match){
         memset(blocks[blockno%NUM_BLOCKS].rows[start], 0, coding_wnd);
 
         // Normalize the coefficients and the packet contents
+        v->normalizer = msg->packet_coeff[0];
         normalize(msg->packet_coeff, msg->payload, coding_wnd);
 
         // Put the coefficients into the matrix
         memcpy(blocks[blockno%NUM_BLOCKS].rows[start], msg->packet_coeff, coding_wnd);
-        
-        // Put the payload into the corresponding place
-        memcpy(blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
         
         // We got an innovative eqn
         blocks[blockno%NUM_BLOCKS].dofs++;
@@ -309,28 +311,40 @@ bldack(Data_Pckt *msg, bool match){
         }
 
         msg->packet_coeff[0] = 0; // TODO; check again
-        // Subtract row with index strat with the row at hand (coffecients)
+        v->coeffs[start] = pivot;
+        // Subtract row with index start with the row at hand (coffecients)
         for(i = 1; i < coding_wnd; i++){
           msg->packet_coeff[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].rows[start][i], pivot);
         }
-        
-        // Subtract row with index strat with the row at hand (content)
-        for(i = 0; i < PAYLOAD_SIZE; i++){
-         msg->payload[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].content[start][i], pivot);
-        }
-       
+
         // Shift the row 
         shift = shift_row(msg->packet_coeff, coding_wnd);
+        v->length += shift;
         start += shift;
       }
     } // end while
 
-    if(blocks[blockno%NUM_BLOCKS].dofs == prev_dofs){
-      ndofs++;
-    }
-    
     elimination_delay += getTime() - elimination_timer;
 
+    if(blocks[blockno%NUM_BLOCKS].dofs == prev_dofs){
+      ndofs++;
+    }else{
+      // Got a dof, do the GE on the payload and put it in the matrix
+
+      // Subtract row with index strat with the row at hand (content)
+      int i,j;
+        for( j=v->start; j < (v->start + v->length); j++){
+          if(v->coeffs[j]){
+            v->coeffs[j] = FFmult(inv_vec[v->normalizer], v->coeffs[j]);
+            for(i = 0; i < PAYLOAD_SIZE; i++){
+              msg->payload[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].content[j][i], v->coeffs[j]);
+            }
+          }
+        }
+    
+      // Put the payload into the corresponding place
+      memcpy(blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
+    }
 
     //printf("current blk %d\t dofs %d \n ", curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
 
@@ -443,11 +457,11 @@ isEmpty(uint8_t* coefficients, uint8_t size){
 void
 initCodedBlock(uint32_t blockno){
   blocks[blockno%NUM_BLOCKS].dofs = 0;
-  blocks[blockno%NUM_BLOCKS].len = BLOCK_SIZE; // this may change once we get packets  
+  blocks[blockno%NUM_BLOCKS].len  = BLOCK_SIZE; // this may change once we get packets  
   
   int i;
   for(i = 0; i < BLOCK_SIZE; i++){
-    blocks[blockno%NUM_BLOCKS].rows[i] = NULL;
+    blocks[blockno%NUM_BLOCKS].rows[i]    = NULL;
     blocks[blockno%NUM_BLOCKS].content[i] = NULL;
   }
 }
@@ -494,7 +508,7 @@ writeAndFreeBlock(uint32_t blockno){
     // TODO remove the if condition (This is to avoid seg fault for the last block)
     if (blocks[blockno%NUM_BLOCKS].len == BLOCK_SIZE){
     // Free the content
-    free(blocks[blockno%NUM_BLOCKS].content[i]);
+      //    free(blocks[blockno%NUM_BLOCKS].content[i]);
 
     // Free the matrix
     free(blocks[blockno%NUM_BLOCKS].rows[i]);

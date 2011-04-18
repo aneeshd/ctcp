@@ -4,7 +4,18 @@
 #define MAXHO 1024
 #define BUFFSIZE  65536
 
+#include <unistd.h>
+#include "util.h"
+#include "qbuffer.h"
+
 FILE *rcv_file;
+
+typedef struct{
+  uint8_t start;
+  uint8_t length;
+  uint8_t normalizer;
+  uint8_t coeffs[BLOCK_SIZE];
+} elimination_vector_t;
 
 //---------------- CTCP related variables ------------------//
 #define NUM_BLOCKS 2
@@ -12,7 +23,6 @@ Coded_Block_t blocks[NUM_BLOCKS];
 uint8_t coding_wnd = CODING_WND;
 uint32_t curr_block;
 
-//char *version = "$Revision: 1.8 $";
 double dbuff[BUFFSIZE/8];
 char *buff = (char *)dbuff;
 int sockfd, rcvspace;
@@ -61,22 +71,21 @@ unsigned int millisecs();
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
-void  ctrlc(void);
+void ctrlc(void);
 void err_sys(char *s);
 void bldack(Data_Pckt *msg, bool match);
 
 void normalize(uint8_t* coefficients, char*  payload, uint8_t size);
-int shift_row(uint8_t* buf, int len);
+int  shift_row(uint8_t* buf, int len);
 bool isEmpty(uint8_t* coefficients, uint8_t size);
 void initCodedBlock(uint32_t blockno);
 void unwrap(uint32_t blockno);
 void writeAndFreeBlock(uint32_t blockno);
 
 bool unmarshallData(Data_Pckt* msg, char* buf);
-int marshallAck(Ack_Pckt msg, char* buf);
+int  marshallAck(Ack_Pckt msg, char* buf);
 
 double secs();
-unsigned int millisecs();
 
 #endif // ATOUSRV_H_
 
