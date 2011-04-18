@@ -1,9 +1,0 @@
-#port 2000
-rcvbuf 200000
-newreno 0
-rcvrwin 1000
-#thresh_init 0.5
-#increment 1
-#dup_thresh 9
-maxtime 10
-debug 4
