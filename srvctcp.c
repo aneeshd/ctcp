@@ -277,7 +277,7 @@ doit(socket_t sockfd){
 
 			timeouts++;
 			rxmts++;
-			bwe_pkt=0;
+			bwe_pkt=1;
 			idle++;
 			dupacks=0; dup_acks=0;
       slr = 0;
@@ -353,7 +353,7 @@ send_segs(socket_t sockfd){
   double p = slr/(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
 
   // The total number of dofs the we think we should be sending (for the current block) from now on
-  int dof_needed = (int) ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p)) - CurrOnFly;
+  int dof_needed = MAX(0, (int) ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p)) - CurrOnFly);
 
   if (dof_req - CurrOnFly < win){
     CurrWin = MIN(win, dof_needed);
@@ -557,6 +557,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
   }
 	/* rtt bw estimation, vegas like */
   // TODO: remove some of these conditions? 
+  //printf("bwe_on %d, bwe_pkt %d, ackno %d\n", bwe_on, bwe_pkt, ackno);
   if (bwe_on && bwe_pkt && ackno > bwe_pkt) bwe_calc(rtt);
   //----------------------------------------------------------------------------//
 
@@ -821,119 +822,22 @@ ClearScoreBoard() {
   length_ = 0;
 }
 
-/* floyd aimd calculator  may '02  */
-static struct Aimd_Vals {
-	unsigned int cwnd;
-	unsigned int increment;
-	unsigned int decrement;
-} aimd_vals[] = {
-  {     0},{     1},{  128}, /*  0.50 */
-  {    38},{     1},{  128}, /*  0.50 */
-  {   118},{     2},{  112}, /*  0.44 */
-  {   221},{     3},{  104}, /*  0.41 */
-  {   347},{     4},{   98}, /*  0.38 */
-  {   495},{     5},{   93}, /*  0.37 */
-  {   663},{     6},{   89}, /*  0.35 */
-  {   851},{     7},{   86}, /*  0.34 */
-  {  1058},{     8},{   83}, /*  0.33 */
-  {  1284},{     9},{   81}, /*  0.32 */
-  {  1529},{    10},{   78}, /*  0.31 */
-  {  1793},{    11},{   76}, /*  0.30 */
-  {  2076},{    12},{   74}, /*  0.29 */
-  {  2378},{    13},{   72}, /*  0.28 */
-  {  2699},{    14},{   71}, /*  0.28 */
-  {  3039},{    15},{   69}, /*  0.27 */
-  {  3399},{    16},{   68}, /*  0.27 */
-  {  3778},{    17},{   66}, /*  0.26 */
-  {  4177},{    18},{   65}, /*  0.26 */
-  {  4596},{    19},{   64}, /*  0.25 */
-  {  5036},{    20},{   62}, /*  0.25 */
-  {  5497},{    21},{   61}, /*  0.24 */
-  {  5979},{    22},{   60}, /*  0.24 */
-  {  6483},{    23},{   59}, /*  0.23 */
-  {  7009},{    24},{   58}, /*  0.23 */
-  {  7558},{    25},{   57}, /*  0.22 */
-  {  8130},{    26},{   56}, /*  0.22 */
-  {  8726},{    27},{   55}, /*  0.22 */
-  {  9346},{    28},{   54}, /*  0.21 */
-  {  9991},{    29},{   53}, /*  0.21 */
-  { 10661},{    30},{   52}, /*  0.21 */
-  { 11358},{    31},{   52}, /*  0.20 */
-  { 12082},{    32},{   51}, /*  0.20 */
-  { 12834},{    33},{   50}, /*  0.20 */
-  { 13614},{    34},{   49}, /*  0.19 */
-  { 14424},{    35},{   48}, /*  0.19 */
-  { 15265},{    36},{   48}, /*  0.19 */
-  { 16137},{    37},{   47}, /*  0.19 */
-  { 17042},{    38},{   46}, /*  0.18 */
-  { 17981},{    39},{   45}, /*  0.18 */
-  { 18955},{    40},{   45}, /*  0.18 */
-  { 19965},{    41},{   44}, /*  0.17 */
-  { 21013},{    42},{   43}, /*  0.17 */
-  { 22101},{    43},{   43}, /*  0.17 */
-  { 23230},{    44},{   42}, /*  0.17 */
-  { 24402},{    45},{   41}, /*  0.16 */
-  { 25618},{    46},{   41}, /*  0.16 */
-  { 26881},{    47},{   40}, /*  0.16 */
-  { 28193},{    48},{   39}, /*  0.16 */
-  { 29557},{    49},{   39}, /*  0.15 */
-  { 30975},{    50},{   38}, /*  0.15 */
-  { 32450},{    51},{   38}, /*  0.15 */
-  { 33986},{    52},{   37}, /*  0.15 */
-  { 35586},{    53},{   36}, /*  0.14 */
-  { 37253},{    54},{   36}, /*  0.14 */
-  { 38992},{    55},{   35}, /*  0.14 */
-  { 40808},{    56},{   35}, /*  0.14 */
-  { 42707},{    57},{   34}, /*  0.13 */
-  { 44694},{    58},{   33}, /*  0.13 */
-  { 46776},{    59},{   33}, /*  0.13 */
-  { 48961},{    60},{   32}, /*  0.13 */
-  { 51258},{    61},{   32}, /*  0.13 */
-  { 53677},{    62},{   31}, /*  0.12 */
-  { 56230},{    63},{   30}, /*  0.12 */
-  { 58932},{    64},{   30}, /*  0.12 */
-  { 61799},{    65},{   29}, /*  0.12 */
-  { 64851},{    66},{   28}, /*  0.11 */
-  { 68113},{    67},{   28}, /*  0.11 */
-  { 71617},{    68},{   27}, /*  0.11 */
-  { 75401},{    69},{   26}, /*  0.10 */
-  { 79517},{    70},{   26}, /*  0.10 */
-  { 84035},{    71},{   25}, /*  0.10 */
-  { 89053},{    72},{   24}, /*  0.10 */
-  { 94717},{    73},{   23}, /*  0.09 */
-  {999999},{    73},{   23}  /*  0.09 */
-};
-
-void
-floyd_aimd(int cevent){
-  
-	static int current =1;  /* points at upper bound */
-  
-	if (snd_cwnd >  aimd_vals[current].cwnd ){
-		/* find new upper bound */
-		while (snd_cwnd >  aimd_vals[current].cwnd ) current++;
-	} else  if (snd_cwnd < aimd_vals[current-1].cwnd ){
-		/* find new lower bound */
-		while (snd_cwnd < aimd_vals[current-1].cwnd ) current--;
-	} else return;   /* no change */
-	increment = aimd_vals[current].increment;
-	multiplier = 1 - aimd_vals[current].decrement / 256.; 
-	if (cevent) fprintf(stderr,"floyd cwnd %d current %d incr %d mult %f\n",
-                      (int)snd_cwnd,current,(int)increment,multiplier);
-}
-
 void
 bwe_calc(double rtt){
+  //printf("in bwe_calc %f\n", rtt);
 	/* bw estimate each lossless RTT, vegas delta */
   /* once per rtt and not in recovery */
   if (vcnt) { /* only if we've been had some samples */
-    vdelta = minrtt * ((snd_nxt - snd_una)/minrtt - (snd_nxt - bwe_pkt)/srtt);
+    vdelta = 1- (srtt*(snd_nxt-snd_una)/(rtt*(snd_nxt - bwe_pkt)));
+    //vdelta = minrtt * ((snd_nxt - snd_una)/minrtt - (snd_nxt - bwe_pkt)/srtt);
+    //printf("vdelta %f, minrtt %f, snd_nxt %d, snd_una %d, bwe_pkt %d \n", vdelta, minrtt, snd_nxt, snd_una, bwe_pkt);
     if (vdelta > max_delta) max_delta = vdelta;  /* vegas delta */
   } else vdelta=0;  /* no samples */
   /* TODO : might need this later?
   bwertt = (mss * (ackno-bwe_prev-1))/(rtt* (1 << 17)); // shift by 17 to the left to convert to Mbytes
   if (bwertt > bwertt_max) bwertt_max = bwertt;
 
+  
   if (debug > 4 ) fprintf(stderr,"bwertt %f %f %f %d %f\n",rcvt-et,bwertt,rtt,ackno-bwe_prev-1,vdelta);
   */
   bwe_prev = bwe_pkt;
@@ -953,20 +857,27 @@ advance_cwnd(void){
     /* slow start, expo growth */
       snd_cwnd += ssincr;
   } else{
+    //   printf("congestion avoidance phase\n");
     /* congestion avoidance phase */
     int incr;    
     incr = increment;
     if (bwe_pkt) {
       /* vegas active and not in recovery */
       if (vdelta > vbeta ){
+        printf("vdelta %f going down from %f \n", vdelta, snd_cwnd);
         incr= -increment; /* too fast, -incr /RTT */
         vdecr++;
       } else if (vdelta > valpha) {
+        printf("vdelta %f staying at %f\n", vdelta, snd_cwnd);
         incr =0; /* just right */
         v0++;
       }
     }
     snd_cwnd = snd_cwnd + incr/snd_cwnd; /* ca */
+    /*
+    if (incr !=0){
+          printf("window size %d\n", (int)snd_cwnd);
+          }*/
     if (snd_cwnd < initsegs) snd_cwnd = initsegs;
     if (snd_cwnd > MAX_CWND ) snd_cwnd = MAX_CWND; // XXX
     vinss = 0; /* no vegas ss now */
@@ -1349,7 +1260,7 @@ restart(void){
   
   file_position = 1; // Initially called to read the first block
 
-  bwe_pkt = 0;
+  bwe_pkt = 1;
   bwe_prev = 0;
   bwe_on=1; 
   bwertt = 0;

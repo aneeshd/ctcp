@@ -5,8 +5,8 @@ fack 0
 sack 0
 rampdown 0
 vegas 1
-valpha 30
-vbeta 40
+valpha 0.1
+vbeta 0.3
 vgamma 200
 thresh_init 0.75
 maxtime 0

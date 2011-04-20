@@ -105,7 +105,7 @@ int vdecr, v0 ; /* vegas decrements or no adjusts */
 double vdelta, vrtt,vrttsum,vrttmax, vrttmin=999999;
 //------------------------------------------------------------//
 
-unsigned int bwe_pkt, bwe_prev, bwe_on=1; // Bandwith estimate??
+unsigned int bwe_pkt=1, bwe_prev, bwe_on=1; // Bandwith estimate??
 double bwertt, bwertt_max;
 double max_delta;  /* vegas like tracker */
 
