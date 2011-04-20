@@ -239,7 +239,7 @@ bldack(Data_Pckt *msg, bool match){
   blocks[blockno%NUM_BLOCKS].len = msg->blk_len;
   
   if (msg->seqno > last_seqno+1){
-    printf("Loss report blockno %d Number of losses %d\n", msg->blockno, msg->seqno - last_seqno - 1);
+    //printf("Loss report blockno %d Number of losses %d\n", msg->blockno, msg->seqno - last_seqno - 1);
     total_loss += msg->seqno - (last_seqno+1);
       }
  
@@ -324,7 +324,6 @@ bldack(Data_Pckt *msg, bool match){
       }
     } // end while
 
-    elimination_delay += getTime() - elimination_timer;
 
     if(blocks[blockno%NUM_BLOCKS].dofs == prev_dofs){
       ndofs++;
@@ -345,6 +344,9 @@ bldack(Data_Pckt *msg, bool match){
       // Put the payload into the corresponding place
       memcpy(blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
     }
+
+    elimination_delay += getTime() - elimination_timer;
+
 
     //printf("current blk %d\t dofs %d \n ", curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
 

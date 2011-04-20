@@ -20,7 +20,7 @@
 #include "scoreboard.h" //TODO: remove this 
 #include "srvctcp.h"
 
-
+#define MIN_DOF_REQUEST 5
 #define SND_CWND 64
 
 #define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
@@ -367,7 +367,7 @@ send_segs(socket_t sockfd){
 
     coding_job_t* job = malloc(sizeof(coding_job_t));
     job->blockno = curr_block;
-    job->dof_request = dof_needed - dof_remain[curr_block%NUM_BLOCKS];
+    job->dof_request = MAX(MIN_DOF_REQUEST, dof_needed - dof_remain[curr_block%NUM_BLOCKS]);
     priority_t coding_urgency = HIGH;
     addJob(&workers, &coding_job, job, &free, coding_urgency);
     dof_remain[curr_block%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
@@ -394,7 +394,7 @@ send_segs(socket_t sockfd){
     if (dof_remain[(curr_block+1)%NUM_BLOCKS] < NextWin){
       coding_job_t* job = malloc(sizeof(coding_job_t));
       job->blockno = curr_block+1;
-      job->dof_request = NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
+      job->dof_request = MAX(MIN_DOF_REQUEST, NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS]);
       priority_t coding_urgency = LOW;
       addJob(&workers, &coding_job, job, &free, coding_urgency);
       dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
@@ -573,6 +573,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     freeBlock(curr_block);
     q_free(&coded_q[curr_block%NUM_BLOCKS], &free_coded_pkt);
 
+    pthread_mutex_unlock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
+
     if (!maxblockno){
       //readBlock(curr_block+2);
       coding_job_t* job = malloc(sizeof(coding_job_t));
@@ -583,8 +585,6 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
     }
     
-    pthread_mutex_unlock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
-
     curr_block++;
 
     if (debug > 5 && curr_block%10==0){
@@ -605,9 +605,11 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
     int losses = ackno - (snd_una +1);
 
+    /*
      if (losses > 0){
       printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
       }  
+    */
 
     total_loss += losses;
     double loss_tmp =  pow(1-slr_mem, losses);
