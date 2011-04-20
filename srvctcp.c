@@ -201,7 +201,7 @@ doit(socket_t sockfd){
 
     idle_total += getTime() - idle_timer;
 
-		if (r > 0) {  /* ack ready */
+    if (r > 0) {  /* ack ready */
       
       // The recvfrom should be done to a separate buffer (not buff)
 			r= recvfrom(sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen); // TODO maybe we can set flags so that recvfrom has a timeout of tick seconds
@@ -321,8 +321,8 @@ send_segs(socket_t sockfd){
   double p = slr/(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
 
   // The total number of dofs the we think we should be sending (for the current block) from now on
-  int dof_needed = MAX(0, (int) ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p)) - CurrOnFly);
-
+  int dof_needed = MAX(0, (int) (ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p))) - CurrOnFly);
+  
   if (dof_req - CurrOnFly < win){
     CurrWin = MIN(win, dof_needed);
     NextWin = win - CurrWin;
@@ -335,7 +335,7 @@ send_segs(socket_t sockfd){
 
     coding_job_t* job = malloc(sizeof(coding_job_t));
     job->blockno = curr_block;
-    job->dof_request = MAX(MIN_DOF_REQUEST, dof_needed - dof_remain[curr_block%NUM_BLOCKS]);
+    job->dof_request = MIN_DOF_REQUEST + dof_needed - dof_remain[curr_block%NUM_BLOCKS];
     priority_t coding_urgency = HIGH;
     addJob(&workers, &coding_job, job, &free, coding_urgency);
     dof_remain[curr_block%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
@@ -362,7 +362,7 @@ send_segs(socket_t sockfd){
     if (dof_remain[(curr_block+1)%NUM_BLOCKS] < NextWin){
       coding_job_t* job = malloc(sizeof(coding_job_t));
       job->blockno = curr_block+1;
-      job->dof_request = MAX(MIN_DOF_REQUEST, NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS]);
+      job->dof_request = MIN_DOF_REQUEST + NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
       priority_t coding_urgency = LOW;
       addJob(&workers, &coding_job, job, &free, coding_urgency);
       dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
@@ -532,7 +532,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       //readBlock(curr_block+2);
       coding_job_t* job = malloc(sizeof(coding_job_t));
       job->blockno = curr_block+2;
-      job->dof_request = (int) ceil(BLOCK_SIZE*(1.02+2*slr));
+      job->dof_request = (int) ceil(BLOCK_SIZE*(1.04+2*slr));
       priority_t coding_urgency = LOW;
       addJob(&workers, &coding_job, job, &free, coding_urgency);
       dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
@@ -546,36 +546,44 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
   }
 
   if (ackno > snd_nxt 
-      || ackno < snd_una 
       || ack->blockno != curr_block) {
 		/* bad ack */
 		if (debug > 5) fprintf(stderr,
                            "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d\n",
                            curr_block, ackno, snd_nxt, snd_una);
 		badacks++;
-	} else  {
-    goodacks++;
+	} else {
 
-    int losses = ackno - (snd_una +1);
+    if (ackno <= snd_una){
+      //late ack
+      if (debug > 5) fprintf(stderr,
+			     "Late ack: curr block %d badack no %d snd_nxt %d snd_una %d\n",
+			     curr_block, ackno, snd_nxt, snd_una);
+    } else {
+      // good ack
+      goodacks++;
 
-    /*
-     if (losses > 0){
-      printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
-      }  
-    */
+      int losses = ackno - (snd_una +1);
 
-    total_loss += losses;
-    double loss_tmp =  pow(1-slr_mem, losses);
-    slr = loss_tmp*(1-slr_mem)*slr + (1 - loss_tmp);
+      /*
+	if (losses > 0){
+	printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
+	}  
+      */
 
-    snd_una = ackno;
+      total_loss += losses;
+      double loss_tmp =  pow(1-slr_mem, losses);
+      slr = loss_tmp*(1-slr_mem)*slr + (1 - loss_tmp);
 
+      snd_una = ackno;
+    }
+
+    dof_req = ack->dof_req;  // Updated the requested dofs for the current block
 
     idle=0;
     due = rcvt + timeout;   /*restart timer */
     advance_cwnd();
 
-    dof_req = ack->dof_req;  // Updated the requested dofs for the current block
     send_segs(sockfd);  /* send some if we can */
 
   } // end else goodack
@@ -668,15 +676,21 @@ advance_cwnd(void){
     /* congestion avoidance phase */
     int incr;    
     incr = increment;
+
     /* vegas active and not in recovery */
     if (vdelta > vbeta ){
-      printf("vdelta %f going down from %f \n", vdelta, snd_cwnd);
+      if (debug > 6){
+	printf("vdelta %f going down from %f \n", vdelta, snd_cwnd);
+      }
       incr= -increment; /* too fast, -incr /RTT */
       vdecr++;
     } else if (vdelta > valpha) {
-      printf("vdelta %f staying at %f\n", vdelta, snd_cwnd);
+      if (debug > 6){
+	printf("vdelta %f staying at %f\n", vdelta, snd_cwnd);
+      }
       incr =0; /* just right */
       v0++;
+
     }
     snd_cwnd = snd_cwnd + incr/snd_cwnd; /* ca */
     /*
