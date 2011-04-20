@@ -2,10 +2,8 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
-
 #include <netinet/in.h>      
 #include <netdb.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -15,42 +13,18 @@
 #include <errno.h>
 #include <time.h>
 
-#include <assert.h>
-
-#include "scoreboard.h" //TODO: remove this 
 #include "srvctcp.h"
-
-#define MIN_DOF_REQUEST 5
-#define SND_CWND 64
-
-#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
-#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
-
 
 int sndbuf = MSS*MAX_CWND;		/* udp send buff, bigger than mss */
 int rcvbuf = MSS*MAX_CWND;		/* udp recv buff for ACKs*/
-int mss=1472;			/* user payload, can be > MTU for UDP */
 int numbytes;
 
 
 double idle_total = 0; // The total time the server has spent waiting for the acks 
 double coding_delay = 0; // Total time spent on encoding
-
 int total_loss = 0;
 double slr = 0; // Smoothed loss rate
 double slr_mem = 1.0/BLOCK_SIZE; // The memory of smoothing function
-
-// Should make sure that 50 bytes is enough to store the port string
-char *port;
-
-/*
- * Print usage message
- */
-void
-usage(void){
-	printf("atousrv [configfile] \n");
-	exit(1);
-}
 
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
@@ -97,7 +71,6 @@ main (int argc, char** argv){
     err_sys(""); 
     return 1;
   }
-
   // Loop through all the results and connect to the first possible
   for(result = servinfo; result != NULL; result = result->ai_next) {
     if((sockfd = socket(result->ai_family, 
@@ -106,13 +79,11 @@ main (int argc, char** argv){
       perror("atousrv: error during socket initialization");
       continue;
     }
-
     if (bind(sockfd, result->ai_addr, result->ai_addrlen) == -1) {
       close(sockfd);
       err_sys("atousrv: can't bind local address");
       continue;
     }
-
     break;
   }
 
@@ -276,10 +247,7 @@ doit(socket_t sockfd){
 
 
 			timeouts++;
-			rxmts++;
-			bwe_pkt=1;
 			idle++;
-			dupacks=0; dup_acks=0;
       slr = 0;
 
 			//snd_ssthresh = snd_cwnd*multiplier; /* shrink */
@@ -323,7 +291,7 @@ terminate(socket_t sockfd){
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
 
 
-  if(numbytes != mss){
+  if(numbytes != size){
     err_sys("write");
   }
   free(msg->payload);
@@ -422,13 +390,11 @@ send_one(socket_t sockfd, uint32_t blockno){
     fprintf(stdout, "\n block %d DOF left %d q size %d\n",blockno, dof_remain[blockno%NUM_BLOCKS], coded_q[blockno%NUM_BLOCKS].size);
   }
 
-
   // Get a coded packet from the queue
   //q_pop is blocking. If the queue is empty, we wait until the coded packets are created
   // We should decide in send_segs whether we need more coded packets in the queue
   Data_Pckt *msg = (Data_Pckt*) q_pop(&coded_q[blockno%NUM_BLOCKS]);
   
-
   /* // TEST ONLY
   pthread_mutex_lock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
 
@@ -442,8 +408,6 @@ send_one(socket_t sockfd, uint32_t blockno){
 
   pthread_mutex_unlock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
   */
-
-
   // Correct the header information of the outgoing message
   msg->seqno = snd_nxt;
   msg->tstamp = getTime();
@@ -465,7 +429,6 @@ send_one(socket_t sockfd, uint32_t blockno){
   int message_size = marshallData(*msg, buff);
 
   do{
-
     if((numbytes = sendto(sockfd, buff, message_size, 0, 
                           &cli_addr, clilen)) == -1){
       perror("atousrv: sendto");
@@ -497,18 +460,17 @@ endSession(void){
 	char myname[128];
   char* host = "Host"; // TODO: extract this from the packet
 
-	mss-=12;
+	int mss = PAYLOAD_SIZE;
   gethostname(myname,sizeof(myname));
-  printf("%s => %s %f Mbs win %d rxmts %d\n",
-         myname,host,8.e-6*maxpkts*mss/et,rcvrwin,rxmts);
+  printf("%s => %s %f Mbs win %d\n",
+         myname,host,8.e-6*maxpkts*mss/et,rcvrwin);
   printf("%f secs %d good bytes goodput %f KBs %f Mbs \n",
          et,maxpkts*mss,1.e-3*maxpkts*mss/et,8.e-6*maxpkts*mss/et);
   printf("pkts in %d  out %d  enobufs %d\n",
          ipkts,opkts,enobufs);
   printf("total bytes out %d   Loss rate %6.3f%%    %f Mbs \n",
          opkts*mss,100.*total_loss/snd_una,8.e-6*opkts*mss/et);
-  printf("rxmts %d dup3s %d packs %d timeouts %d  dups %d badacks %d maxack %d maxburst %d\n",
-         rxmts,dup3s,packs,timeouts,dups,badacks,maxack,maxburst);
+  printf("timeouts %d badacks %d\n",timeouts,badacks);
   if (ipkts) avrgrtt /= ipkts;
   printf("minrtt  %f maxrtt %f avrgrtt %f\n",
          minrtt,maxrtt,avrgrtt/*,8.e6*rcvrwin/avrgrtt*/);
@@ -516,14 +478,11 @@ endSession(void){
   printf("win/rtt = %f Mbs  bwdelay = %d KB  %d segs\n",
          8.e-6*rcvrwin*mss/avrgrtt, (int)(1.e-3*avrgrtt*opkts*mss/et),
          (int)(avrgrtt*opkts/et));
-	printf("bwertt %f bwertt_max %f max_delta %f\n",bwertt,bwertt_max,max_delta);
-  if (vegas) printf("vsscnt %d vdecr %d v0 %d vrtt %f vdelta %f\n",
-                    vsscnt,vdecr, v0,vrtt,vdelta);
+  printf("%f max_delta\n", max_delta);
+  printf("vdecr %d v0 %d  vdelta %f\n",vdecr, v0,vdelta);
   printf("snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d snd_max %d\n",
-         snd_nxt,(int)snd_cwnd, snd_una,snd_ssthresh,snd_max);
-  
-  printf("goodacks %d cumacks %d ooacks %d\n", goodacks, cumacks, ooacks);
-  
+         snd_nxt,(int)snd_cwnd, snd_una,snd_ssthresh,snd_max);  
+  printf("goodacks %d\n", goodacks);  
   printf("Total idle time %f, Total coding delay %f\n", idle_total, coding_delay);  
 }
 
@@ -532,37 +491,30 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 	double rtt;
   
 	ackno = ack->ackno;
+	if (debug > 8 )printf("ack rcvd %d\n",ackno);
  
   //------------- RTT calculations --------------------------// 
-	if (debug > 8 )printf("ack rcvd %d\n",ackno);
-
   /*fmf-rtt & rto calculations*/
 	rtt = rcvt - ack->tstamp; // this calculates the rtt for this coded packet
 	if (rtt < minrtt) minrtt = rtt;
   if (rtt > maxrtt) maxrtt = rtt;
-  // TODO: remove (?) avrgrtt, vcnt???, and remove one of the min/max
 	avrgrtt += rtt;
-  vcnt++;
 
 	/* RTO calculations */
-  // TODO: ??? srtt? :P WTF
 	srtt = (1-g)*srtt + g*rtt;
-	delta = fabs(rtt - srtt);
-	rttvar = (1-h)*rttvar + h*(delta - rttvar);
+	rttvar = (1-h)*rttvar + h*(fabs(rtt - srtt) - rttvar);
 	rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
   
 	if (debug > 6) {
-    fprintf(db,"%f %d %f  %d %d ack\n",
-            rcvt-et,ackno,rtt,(int)snd_cwnd,snd_ssthresh);
+    fprintf(db,"%f %d %f  %d %d ack\n",rcvt-et,ackno,rtt,(int)snd_cwnd,snd_ssthresh);
   }
-	/* rtt bw estimation, vegas like */
-  // TODO: remove some of these conditions? 
-  //printf("bwe_on %d, bwe_pkt %d, ackno %d\n", bwe_on, bwe_pkt, ackno);
-  if (bwe_on && bwe_pkt && ackno > bwe_pkt) bwe_calc(rtt);
-  //----------------------------------------------------------------------------//
+  if (ackno > snd_una){
+    vdelta = 1- (srtt/rtt);
+    if (vdelta > max_delta) max_delta = vdelta;  /* vegas delta */
+  }
+  //------------- RTT calculations --------------------------// 
 
   if (ack->blockno > curr_block){
-
     if(maxblockno && ack->blockno > maxblockno){
       done = TRUE;
       printf("THIS IS THE LAST ACK\n");
@@ -629,41 +581,6 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
   } // end else goodack
 }
 
-
-/*
- * Checks for partial ack.  If partial ack arrives, force the retransmission
- * of the next unacknowledged segment, do not clear dupacks, and return
- * 1.  By setting snd_nxt to ackno, this forces retransmission timer to
- * be started again.  If the ack advances at least to snd_recover, return 0.
- */
-/*
-int
-tcp_newreno(socket_t sockfd){
-	if (ackno < snd_recover){
-		int ocwnd = snd_cwnd;
-		int onxt = snd_nxt;
-    
-		if ( debug > 1)fprintf(stderr,
-                           "packrxmit pkt %d nxt %d max %d cwnd %d  thresh %d recover %d una %d\n",
-                           ackno,snd_nxt, snd_max, (int)snd_cwnd,
-                           snd_ssthresh,snd_recover,snd_una);
-		rxmts++;
-		packs++;
-		due = rcvt + timeout;   restart timer 
-		snd_cwnd = 1 + ackno - snd_una;
-		snd_nxt = ackno;
-		send_segs(sockfd); 
-		snd_cwnd = ocwnd;
-		if (onxt > snd_nxt) snd_nxt = onxt;
-//partial deflation, una not updated yet
-		snd_cwnd -= (ackno - snd_una -1);
-		if (snd_cwnd < initsegs) snd_cwnd = initsegs;
-return TRUE;  //yes was a partial ack 
-	}
-	return FALSE;
-}*/
-
-
 // Perhaps this is unnecesary.... No need to use select -> maybe use libevent (maybe does not have timeou?)
 socket_t
 timedread(socket_t sockfd, double t){
@@ -696,7 +613,7 @@ readConfig(void){
 	fp = fopen(configfile,"r");
 
 	if (fp == NULL) {
-		printf("atousrv unable to open %s\n",configfile);
+		printf("ctcp unable to open %s\n",configfile);
 		return;
 	}
 
@@ -707,144 +624,35 @@ readConfig(void){
 		else if (strcmp(var,"increment")==0) increment = val;
 		else if (strcmp(var,"multiplier")==0) multiplier = val;
 		else if (strcmp(var,"tick")==0) tick = val;
-		else if (strcmp(var,"newreno")==0) newreno = val;
-		else if (strcmp(var,"sack")==0) sack = val;
-    else if (strcmp(var,"delack")==0) delack = val;
-		else if (strcmp(var,"timeout")==0) timeout = val;
+    else if (strcmp(var,"timeout")==0) timeout = val;
 		else if (strcmp(var,"initsegs")==0) initsegs = val;
 		else if (strcmp(var,"ssincr")==0) ssincr = val;
 		else if (strcmp(var,"thresh_init")==0) thresh_init = val;
-		else if (strcmp(var,"max_ssthresh")==0) max_ssthresh = val;
 		else if (strcmp(var,"maxpkts")==0) maxpkts = val;
 		else if (strcmp(var,"maxidle")==0) maxidle = val;
 		else if (strcmp(var,"maxtime")==0) maxtime = val;
-		else if (strcmp(var,"mss")==0) mss = val;
 		else if (strcmp(var,"port")==0) sprintf(port, "%d", (int)val); 
-    else if (strcmp(var,"vegas")==0) vegas = val;
-    else if (strcmp(var,"vss")==0) vss = val;
     else if (strcmp(var,"valpha")==0) valpha = val;
     else if (strcmp(var,"vbeta")==0) vbeta = val;
-    else if (strcmp(var,"vgamma")==0) vgamma = val;
-		else if (strcmp(var,"dup_thresh")==0) dup_thresh = val;
 		else if (strcmp(var,"sndbuf")==0) sndbuf = val;
 		else if (strcmp(var,"rcvbuf")==0) rcvbuf = val;
-		else if (strcmp(var,"burst_limit")==0) burst_limit = val;
-		else if (strcmp(var,"droplist")==0){
-      /* set up droplist */
-      sscanf(line,"%s %d %d %d %d %d %d %d %d %d %d",
-             var,droplist,droplist+1,droplist+2,droplist+3,
-             droplist+4, droplist+5, droplist+6,droplist+7,
-             droplist+8, droplist+9);
-      
-		}
 		else if (strcmp(var,"debug")==0) debug = val;
-		else if (strcmp(var,"rampdown")==0) rampdown = val;
-		else if (strcmp(var,"fack")==0) fack = val;
-		else if (strcmp(var,"floyd")==0) floyd = val;
 		else printf("config unknown: %s\n",line);
 	}
 
   t=time(NULL);
-  printf("config: atousrv %s port %s debug %d %s", version,port,debug,
-         ctime(&t));
-  printf("config: initsegs %d mss %d tick %f timeout %f\n",
-         initsegs,mss,tick,timeout);
+  printf("*** CTCP %s ***\n",version);
+  printf("config: port %s debug %d, %s",port,debug, ctime(&t));
+  printf("config: initsegs %d tick %f timeout %f\n", initsegs,tick,timeout);
 	printf("config: maxidle %d maxtime %d\n",maxidle, maxtime);
-  printf("config: floyd %d rcvrwin %d  increment %d  multiplier %f kai %f\n",
-         floyd,rcvrwin,increment,multiplier,kai);
-  printf("config: thresh_init %f ssincr %d max_ssthresh %d\n",
-         thresh_init, ssincr, max_ssthresh);
+  printf("config: thresh_init %f ssincr %d\n", thresh_init, ssincr);
   printf("config: rcvrwin %d  increment %d  multiplier %f thresh_init %f\n",
          rcvrwin,increment,multiplier,thresh_init);
-  printf("config: newreno %d sack %d rampdown %d fack %d delack %d maxpkts %d burst_limit %d dup_thresh %d\n",
-         newreno,sack,rampdown,fack,delack,maxpkts,burst_limit,dup_thresh);
+  printf("config: alpha %f beta %f\n", valpha,vbeta);
 
-  if (vegas) {
-    bwe_on = 1;
-    printf("config: vegas %d vss %d valpha %f vbeta %f vgamma %f\n",
-           vegas,vss,valpha,vbeta,vgamma);
-  }
-
-	if (droplist[0]){
-    int i;
-    printf("config:droplist ");
-    for(i=0;droplist[i];i++)printf("%d ",droplist[i]);
-    printf("\n");
-	}
-
-  /* fack is an alteration of sack and uses rampdown */
-	if(fack) {
-	  sack = 1;
-	}
-
-  /* rampdown goes with sack and/or fack so one or both must be enabled */
-	if(!(sack || fack))
-	  rampdown = 0;
 }
 
-int
-GetNextRetran() {
-  int i;
-  /*get the next packet to be retransmitted--if any*/
-  if(length_) {
-    for(i=SBN[(first_)%SBSIZE].seq_no_;
-        i<SBN[(first_)%SBSIZE].seq_no_+length_; i++) {
-      if(!SBNI.ack_flag_ && !SBNI.sack_flag_ && !SBNI.retran_) {
-        return(i);
-      }
-    }
-  }
-  return(-1);
-}
 
-void
-MarkRetran (int retran_seqno, int snd_max) { 
-  /*mark the packet as retransmitted*/
-  SBN[retran_seqno%SBSIZE].retran_ = 1;
-  SBN[retran_seqno%SBSIZE].snd_nxt_ = snd_max;
-}
-
-int
-RetransOK (int retran_seqno) { 
-  /*see if the packet was retransmitted*/
-  if(SBN[retran_seqno%SBSIZE].retran_ > 0)
-    /*if it was, has it been lost again? */
-    if(SBN[retran_seqno%SBSIZE].snd_nxt_ < snd_fack)
-      return(1);
-    else
-      return(0);
-  else
-    return(1);
-}
-
-void
-ClearScoreBoard() {
-  length_ = 0;
-}
-
-void
-bwe_calc(double rtt){
-  //printf("in bwe_calc %f\n", rtt);
-	/* bw estimate each lossless RTT, vegas delta */
-  /* once per rtt and not in recovery */
-  if (vcnt) { /* only if we've been had some samples */
-    vdelta = 1- (srtt*(snd_nxt-snd_una)/(rtt*(snd_nxt - bwe_pkt)));
-    //vdelta = minrtt * ((snd_nxt - snd_una)/minrtt - (snd_nxt - bwe_pkt)/srtt);
-    //printf("vdelta %f, minrtt %f, snd_nxt %d, snd_una %d, bwe_pkt %d \n", vdelta, minrtt, snd_nxt, snd_una, bwe_pkt);
-    if (vdelta > max_delta) max_delta = vdelta;  /* vegas delta */
-  } else vdelta=0;  /* no samples */
-  /* TODO : might need this later?
-  bwertt = (mss * (ackno-bwe_prev-1))/(rtt* (1 << 17)); // shift by 17 to the left to convert to Mbytes
-  if (bwertt > bwertt_max) bwertt_max = bwertt;
-
-  
-  if (debug > 4 ) fprintf(stderr,"bwertt %f %f %f %d %f\n",rcvt-et,bwertt,rtt,ackno-bwe_prev-1,vdelta);
-  */
-  bwe_prev = bwe_pkt;
-  bwe_pkt = snd_nxt;
-
-  vcnt=0;
-}
 
 
 void
@@ -857,21 +665,18 @@ advance_cwnd(void){
     /* slow start, expo growth */
       snd_cwnd += ssincr;
   } else{
-    //   printf("congestion avoidance phase\n");
     /* congestion avoidance phase */
     int incr;    
     incr = increment;
-    if (bwe_pkt) {
-      /* vegas active and not in recovery */
-      if (vdelta > vbeta ){
-        printf("vdelta %f going down from %f \n", vdelta, snd_cwnd);
-        incr= -increment; /* too fast, -incr /RTT */
-        vdecr++;
-      } else if (vdelta > valpha) {
-        printf("vdelta %f staying at %f\n", vdelta, snd_cwnd);
-        incr =0; /* just right */
-        v0++;
-      }
+    /* vegas active and not in recovery */
+    if (vdelta > vbeta ){
+      printf("vdelta %f going down from %f \n", vdelta, snd_cwnd);
+      incr= -increment; /* too fast, -incr /RTT */
+      vdecr++;
+    } else if (vdelta > valpha) {
+      printf("vdelta %f staying at %f\n", vdelta, snd_cwnd);
+      incr =0; /* just right */
+      v0++;
     }
     snd_cwnd = snd_cwnd + incr/snd_cwnd; /* ca */
     /*
@@ -910,7 +715,6 @@ coding_job(void *a){
     
     block_len = blocks[blockno%NUM_BLOCKS].len;
 
-
     // Compute a random permutation of the rows
     
     uint8_t order[block_len];
@@ -933,39 +737,29 @@ coding_job(void *a){
 
     
     // Generate random combination by picking rows based on order
-
-
     int dof_ix, row;
-
     for (dof_ix = 0; dof_ix < block_len; dof_ix++){
-
       uint8_t num_packets = MIN(coding_wnd, block_len);
       Data_Pckt *msg = dataPacket(0, blockno, num_packets);
 
       row = order[dof_ix];
 
-
       // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
       msg->start_packet = MIN(MAX(row%block_len - coding_wnd/2, 0), MAX(block_len - coding_wnd, 0));
-
       //memset(msg->payload, 0, PAYLOAD_SIZE);
-
       msg->packet_coeff[0] = 1;
       memcpy(msg->payload, blocks[blockno%NUM_BLOCKS].content[msg->start_packet], PAYLOAD_SIZE);
 
       for(i = 1; i < num_packets; i++){
         msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
-   
         for(j = 0; j < PAYLOAD_SIZE; j++){
           msg->payload[j] ^= FFmult(msg->packet_coeff[i], blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j]);
         }
       }
-
       if(block_len < BLOCK_SIZE){
         msg->flag = PARTIAL_BLK;
         msg->blk_len = block_len;
       }
-
       /*
       printf("Pushing ... block %d, row %d \t start pkt %d\n", blockno, row, msg->start_packet);     
       fprintf(stdout, "before BEFORE push  queue size %d HEAD %d, TAIL %d\n",coded_q[blockno%NUM_BLOCKS].size, coded_q[blockno%NUM_BLOCKS].head, coded_q[blockno%NUM_BLOCKS].tail);
@@ -978,14 +772,8 @@ coding_job(void *a){
         }
       }
       */
-
-
-
       q_push_back(&coded_q[blockno%NUM_BLOCKS], msg);
-
-
     }  // Done with forming the initial set of coded packets
-
     dof_request = MAX(0, dof_request - block_len);  // This many more to go
   }
 
@@ -1093,7 +881,7 @@ freeBlock(uint32_t blockno){
     blocks[blockno%NUM_BLOCKS].len = 0;
     dof_remain[blockno%NUM_BLOCKS] = 0;
 }
-//-------------------------------------------------------------------------------------
+
 void
 openLog(void){
   time_t rawtime;
@@ -1237,55 +1025,27 @@ restart(void){
   // Print to the db file to differentiate traces
   fprintf(stdout, "\n\n*************************************\n****** Starting New Connection ******\n*************************************\n");
   done = FALSE;
-
-  /* TCP pcb like stuff */
-  dupacks = 0;			/* consecutive dup acks recd */
+  file_position = 1; // Initially called to read the first block
   snd_max = 0; 		/* biggest send */
-  snd_recover = 0;	/* One RTT beyond last good data, newreno */
   maxpkts = 0;
   ackno = 0;
   
-  //--------------- vegas working variables ------------//
   vinss=1;   /* in vegas slow start */
-  vsscnt=0;  /* number of vegas slow start adjusts */
-  vcnt = 0;  /* number of rtt samples */
   vdecr = 0; 
   v0  = 0; /* vegas decrements or no adjusts */
   vdelta = 0;
-  vrtt = 0; 
-  vrttsum = 0;
-  vrttmax = 0; 
-  vrttmin=999999;
-  //------------------------------------------------------------//
-  
-  file_position = 1; // Initially called to read the first block
-
-  bwe_pkt = 1;
-  bwe_prev = 0;
-  bwe_on=1; 
-  bwertt = 0;
-  bwertt_max = 0;
   max_delta = 0;  /* vegas like tracker */
   
-  /* stats */
   ipkts = 0;
   opkts = 0;
-  dup3s = 0;
-  dups = 0;
-  packs = 0;
   badacks = 0;
-  maxburst = 0;
-  maxack = 0;
-  rxmts = 0;
   timeouts = 0;
   enobufs = 0;
-  ooacks = 0;
   et = 0;
   minrtt=999999.;
   maxrtt=0;
   avrgrtt = 0;
   rto = 0;
-  delta = 0;
   srtt=0;
   rttvar=3.;
   h=.25;

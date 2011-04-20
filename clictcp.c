@@ -2,24 +2,20 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
-
 #include <netinet/in.h>
 #include <netdb.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <errno.h>
-
 #include "clictcp.h"
 
 #define PORT "7890"
 #define HOST "127.0.0.1"
 #define FILE_NAME "Avatar.mov"
 
-#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
-#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
+
 
 struct sockaddr srv_addr;
 struct addrinfo *result;

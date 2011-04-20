@@ -1,6 +1,7 @@
 #ifndef ATOUSRV_H_
 #define ATOUSRV_H_
-
+#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
+#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 #define MAXHO 1024
 #define BUFFSIZE  65536
 

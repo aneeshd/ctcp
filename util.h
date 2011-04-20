@@ -13,17 +13,16 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT} flag_t;
 #define MSS 1500 // XXX: make sure that this is fine...
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 #define PAYLOAD_SIZE 1400
+// TODO: change such that we can change PAYLOAD_SIZE, BLOCK_SIZE, CODING_WIN via config file
 #define BLOCK_SIZE 128 // Maximum # of packets in a block (Default block length)
 #define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t)
 #define CODING_WND 9
 #define MAX_CWND 70
 
-
 typedef int socket_t;
 typedef struct timeval timeval_t;
 
 typedef struct{
-
   double tstamp;
   flag_t flag;
   uint32_t  seqno; // Sequence # of the coded packet sent
@@ -32,7 +31,6 @@ typedef struct{
   uint8_t start_packet; // The # of the first packet that is mixed
   uint8_t  num_packets; // The number of packets that are mixed
   uint8_t* packet_coeff; // The coefficients of the mixed packets
-
   //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
   char *payload;  // The payload size is negotiated at the beginning of the transaction
 } Data_Pckt;
@@ -41,7 +39,6 @@ typedef struct{
   uint16_t payload_size;
   char* payload;
 } Bare_Pckt; // This is the datastructure for holding packets before encoding
-
 
 // -------------- MultiThreading related variables ------------//
 
@@ -56,16 +53,12 @@ typedef struct{
   int dof_request;
 } coding_job_t;
 
-
-//----------------------------------------------------------
-
 typedef struct{
   double tstamp;
   flag_t flag;
   uint32_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
   uint32_t  blockno; // Base of the current block
-  uint8_t dof_req;  // Number of dofs left from the block
-  
+  uint8_t dof_req;  // Number of dofs left from the block 
   //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
 } Ack_Pckt;
 
@@ -79,7 +72,6 @@ typedef struct{
 double getTime(void);
 Data_Pckt* dataPacket(uint32_t seqno, uint32_t blockno, uint8_t num_packets);
 Ack_Pckt* ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left);
-
 void htonpData(Data_Pckt *msg);
 void htonpAck(Ack_Pckt *msg);
 void ntohpData(Data_Pckt *msg);

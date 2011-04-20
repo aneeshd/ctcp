@@ -1,13 +1,11 @@
 # you MUST use -s with atousrv for fack/sack
 port 7890
-newreno 0
-fack 0
-sack 0
-rampdown 0
-vegas 1
-valpha 0.1
-vbeta 0.3
-vgamma 200
+#newreno 0
+#fack 0
+#sack 0
+#rampdown 0
+valpha 0.05
+vbeta 0.2
 thresh_init 0.75
 maxtime 0
 debug 6
