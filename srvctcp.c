@@ -568,6 +568,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       return; // goes back to the beginning of the while loop in main() and exits
     }
     
+    pthread_mutex_lock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
+
     freeBlock(curr_block);
     q_free(&coded_q[curr_block%NUM_BLOCKS], &free_coded_pkt);
 
@@ -581,6 +583,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
     }
     
+    pthread_mutex_unlock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
+
     curr_block++;
 
     if (debug > 5 && curr_block%10==0){
