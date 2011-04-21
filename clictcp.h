@@ -1,46 +1,15 @@
 #ifndef ATOUSRV_H_
 #define ATOUSRV_H_
+#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
+#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
+#define MAXHO 1024
+#define BUFFSIZE  65536
 
 #include <unistd.h>
 #include "util.h"
 #include "qbuffer.h"
 
-//---------------- CTCP parameters ------------------//
-#define BUFFSIZE  65536
-#define PORT "7890"
-#define HOST "127.0.0.1"
-#define FILE_NAME "Avatar.mov"
-
-#define NUM_BLOCKS 2
-Coded_Block_t blocks[NUM_BLOCKS];
-uint8_t coding_wnd = CODING_WND;
-uint32_t curr_block;
-
-/*************************************************************
- ************************************************************/
-
-// ------------ CTCP variables ---------------//
 FILE *rcv_file;
-struct sockaddr srv_addr;
-struct addrinfo *result;
-double dbuff[BUFFSIZE/8];
-char *buff = (char *)dbuff;
-int sockfd, rcvspace;
-int pkts, acks;
-int debug = 0;
-socklen_t srvlen;
-int ndofs = 0;
-int old_blk_pkts = 0;
-int total_loss = 0;
-double idle_total = 0; // The total time the client has spent waiting for a packet
-double decoding_delay = 0;
-double elimination_delay = 0;
-int last_seqno = 0;
-
-/* stats */
-double et, st;
-unsigned int rtt_base=0; // Used to keep track of the rtt
-unsigned int tempno;
 
 typedef struct{
   uint8_t start;
@@ -48,6 +17,34 @@ typedef struct{
   uint8_t normalizer;
   uint8_t coeffs[BLOCK_SIZE];
 } elimination_vector_t;
+
+//---------------- CTCP related variables ------------------//
+#define NUM_BLOCKS 2
+Coded_Block_t blocks[NUM_BLOCKS];
+uint8_t coding_wnd = CODING_WND;
+uint32_t curr_block;
+
+double dbuff[BUFFSIZE/8];
+char *buff = (char *)dbuff;
+int sockfd, rcvspace;
+int inlth,sackcnt,pkts, dups, drops,hi,maxooo;
+int debug = 0,expect=1, expected, acks, acktimeouts=0, sendack=0;
+/* holes has ascending order of missing pkts, shift left when fixed */
+#define MAXHO 1024
+int  hocnt, holes[MAXHO];
+/*implementing sack & delack */
+int sack=0;
+socklen_t srvlen;
+int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;
+int  settime=0;
+int start[3], endd[3];
+
+/* stats */
+double et,minrtt=999999., maxrtt=0, avrgrtt;
+double due,rcvt,st,et;
+
+unsigned int rtt_base=0; // Used to keep track of the rtt
+unsigned int tempno;
 
 uint8_t inv_vec[256]={
   0x00, 0x01 ,0x8d ,0xf6 ,0xcb ,0x52 ,0x7b ,0xd1 ,0xe8 ,0x4f ,0x29 ,0xc0 ,0xb0 ,0xe1 ,0xe5 ,0xc7, 
@@ -68,38 +65,29 @@ uint8_t inv_vec[256]={
   0x5b ,0x23 ,0x38 ,0x34 ,0x68 ,0x46 ,0x03 ,0x8c ,0xdd ,0x9c ,0x7d ,0xa0 ,0xcd ,0x1a ,0x41 ,0x1c 
 };
 
+
+unsigned int millisecs();
+
+
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
 void ctrlc(void);
 void err_sys(char *s);
 void bldack(Data_Pckt *msg, bool match);
+
 void normalize(uint8_t* coefficients, char*  payload, uint8_t size);
 int  shift_row(uint8_t* buf, int len);
 bool isEmpty(uint8_t* coefficients, uint8_t size);
 void initCodedBlock(uint32_t blockno);
 void unwrap(uint32_t blockno);
 void writeAndFreeBlock(uint32_t blockno);
+
 bool unmarshallData(Data_Pckt* msg, char* buf);
 int  marshallAck(Ack_Pckt msg, char* buf);
+
 double secs();
 
 #endif // ATOUSRV_H_
 
 
-//---------------- Variables no longer used -----------------------//
-//#define MAXHO 1024
-//int dups, drops, inlth, sackcnt, maxooo, hi, expect=1, expected,sendack=0
-/* holes has ascending order of missing pkts, shift left when fixed */
-//#define MAXHO 1024
-//int  hocnt, holes[MAXHO];
-/*implementing sack & delack */
-//int sack=0;
-//int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;
-//int  settime=0;
-//int start[3], endd[3];
-//double minrtt=999999., maxrtt=0, avrgrtt;
-//double due,rcvt,st,et;
-
-//---------------- Functions no longer used -----------------------//
-//unsigned int millisecs();
