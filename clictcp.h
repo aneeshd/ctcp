@@ -1,34 +1,40 @@
 #ifndef ATOUSRV_H_
 #define ATOUSRV_H_
+#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
+#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
+
+#define BUFFSIZE  65536
 
 #include <unistd.h>
 #include "util.h"
 #include "qbuffer.h"
 
-//---------------- CTCP parameters ------------------//
-#define BUFFSIZE  65536
+typedef struct{
+  uint8_t start;
+  uint8_t length;
+  uint8_t normalizer;
+  uint8_t coeffs[BLOCK_SIZE];
+} elimination_vector_t;
+
+//---------------- CTCP related variables ------------------//
 #define PORT "7890"
 #define HOST "127.0.0.1"
 #define FILE_NAME "Avatar.mov"
-
 #define NUM_BLOCKS 2
 Coded_Block_t blocks[NUM_BLOCKS];
 uint8_t coding_wnd = CODING_WND;
 uint32_t curr_block;
 
-/*************************************************************
- ************************************************************/
-
-// ------------ CTCP variables ---------------//
-FILE *rcv_file;
 struct sockaddr srv_addr;
 struct addrinfo *result;
+FILE *rcv_file;
 double dbuff[BUFFSIZE/8];
 char *buff = (char *)dbuff;
 int sockfd, rcvspace;
-int pkts, acks;
-int debug = 0;
+int pkts;
+int debug = 0, acks;
 socklen_t srvlen;
+
 int ndofs = 0;
 int old_blk_pkts = 0;
 int total_loss = 0;
@@ -37,17 +43,8 @@ double decoding_delay = 0;
 double elimination_delay = 0;
 int last_seqno = 0;
 
-/* stats */
-double et, st;
+double due,st,et;
 unsigned int rtt_base=0; // Used to keep track of the rtt
-unsigned int tempno;
-
-typedef struct{
-  uint8_t start;
-  uint8_t length;
-  uint8_t normalizer;
-  uint8_t coeffs[BLOCK_SIZE];
-} elimination_vector_t;
 
 uint8_t inv_vec[256]={
   0x00, 0x01 ,0x8d ,0xf6 ,0xcb ,0x52 ,0x7b ,0xd1 ,0xe8 ,0x4f ,0x29 ,0xc0 ,0xb0 ,0xe1 ,0xe5 ,0xc7, 
@@ -88,18 +85,20 @@ double secs();
 
 
 //---------------- Variables no longer used -----------------------//
+// int dups, drops, hi,maxooo, acktimeouts=0;
+//unsigned int tempno;
 //#define MAXHO 1024
-//int dups, drops, inlth, sackcnt, maxooo, hi, expect=1, expected,sendack=0
 /* holes has ascending order of missing pkts, shift left when fixed */
 //#define MAXHO 1024
-//int  hocnt, holes[MAXHO];
-/*implementing sack & delack */
+///*implementing sack & delack */
 //int sack=0;
+//int  hocnt, holes[MAXHO];
 //int ackdelay=0 /* usual is 200 ms */, ackheadr, sackinfo;
-//int  settime=0;
+//double et,minrtt=999999., maxrtt=0, avrgrtt;
 //int start[3], endd[3];
-//double minrtt=999999., maxrtt=0, avrgrtt;
-//double due,rcvt,st,et;
+//int  settime=0;
+//int expect=1, expected, sendack=0, sackcnt, inlth;
+//double rcvt
 
 //---------------- Functions no longer used -----------------------//
 //unsigned int millisecs();

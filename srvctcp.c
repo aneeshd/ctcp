@@ -462,27 +462,27 @@ endSession(void){
 
 	int mss = PAYLOAD_SIZE;
   gethostname(myname,sizeof(myname));
-  printf("%s => %s %f Mbs win %d\n",
-         myname,host,8.e-6*maxpkts*mss/et,rcvrwin);
-  printf("%f secs %d good bytes goodput %f KBs %f Mbs \n",
-         et,maxpkts*mss,1.e-3*maxpkts*mss/et,8.e-6*maxpkts*mss/et);
-  printf("pkts in %d  out %d  enobufs %d\n",
-         ipkts,opkts,enobufs);
-  printf("total bytes out %d   Loss rate %6.3f%%    %f Mbs \n",
+  printf("\n\n%s => %s for %f secs\n",
+         myname,host, et);
+  //printf("%f secs  %f good bytes good put %f KBs %f Mbs\n",
+  //       et,maxpkts*mss,1.e-3*maxpkts*mss/et,8.e-6*maxpkts*mss/et);
+  printf("**THRU** %f Mbs -- pkts in %d  out %d  enobufs %d \n",
+         8.e-6*(snd_una*PAYLOAD_SIZE)/et, ipkts,opkts,enobufs);
+  printf("**LOSS* total bytes out %d   Loss rate %6.3f%%    %f Mbs \n",
          opkts*mss,100.*total_loss/snd_una,8.e-6*opkts*mss/et);
-  printf("timeouts %d badacks %d\n",timeouts,badacks);
+  //printf("timeouts %d badacks %d\n",timeouts,badacks);
   if (ipkts) avrgrtt /= ipkts;
-  printf("minrtt  %f maxrtt %f avrgrtt %f\n",
+  printf("**RTT** minrtt  %f maxrtt %f avrgrtt %f\n",
          minrtt,maxrtt,avrgrtt/*,8.e6*rcvrwin/avrgrtt*/);
-  printf("rto %f  srtt %f  rttvar %f\n",rto,srtt,rttvar);
-  printf("win/rtt = %f Mbs  bwdelay = %d KB  %d segs\n",
-         8.e-6*rcvrwin*mss/avrgrtt, (int)(1.e-3*avrgrtt*opkts*mss/et),
-         (int)(avrgrtt*opkts/et));
+  printf("**RTT** rto %f  srtt %f  rttvar %f\n",rto,srtt,rttvar);
+  //printf("win/rtt = %f Mbs  bwdelay = %d KB  %d segs\n",
+  //       8.e-6*rcvrwin*mss/avrgrtt, (int)(1.e-3*avrgrtt*opkts*mss/et),
+  //       (int)(avrgrtt*opkts/et));
   printf("%f max_delta\n", max_delta);
   printf("vdecr %d v0 %d  vdelta %f\n",vdecr, v0,vdelta);
-  printf("snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d snd_max %d\n",
-         snd_nxt,(int)snd_cwnd, snd_una,snd_ssthresh,snd_max);  
-  printf("goodacks %d\n", goodacks);  
+  printf("snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d goodacks%d\n",
+         snd_nxt,(int)snd_cwnd, snd_una,snd_ssthresh, goodacks);  
+  //printf("goodacks %d\n", goodacks);  
   printf("Total idle time %f, Total coding delay %f\n", idle_total, coding_delay);  
 }
 
