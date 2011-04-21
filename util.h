@@ -6,18 +6,22 @@
 typedef int bool;
 #define TRUE 1
 #define FALSE 0
+#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
+#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
 // flags for Data_Pckt
 typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT} flag_t;
 
+//---------------- CTCP parameters ------------------//
 #define MSS 1500 // XXX: make sure that this is fine...
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 #define PAYLOAD_SIZE 1400
 // TODO: change such that we can change PAYLOAD_SIZE, BLOCK_SIZE, CODING_WIN via config file
 #define BLOCK_SIZE 128 // Maximum # of packets in a block (Default block length)
-#define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t)
-#define CODING_WND 9
+#define CODING_WND 3
 #define MAX_CWND 70
+
+#define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t)
 
 typedef int socket_t;
 typedef struct timeval timeval_t;

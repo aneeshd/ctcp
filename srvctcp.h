@@ -2,8 +2,6 @@
 #define ATOUCLI_H_
 #include "thr_pool.h"
 #include "qbuffer.h"
-#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
-#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
 // ------------ Connection parameters ---------------//
 #define BUFFSIZE    65535
