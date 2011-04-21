@@ -11,26 +11,6 @@
 #include <errno.h>
 #include "clictcp.h"
 
-#define PORT "7890"
-#define HOST "127.0.0.1"
-#define FILE_NAME "Avatar.mov"
-
-
-
-struct sockaddr srv_addr;
-struct addrinfo *result;
-int sockfd, rcvspace;
-
-int ndofs = 0;
-int old_blk_pkts = 0;
-int total_loss = 0;
-
-double idle_total = 0; // The total time the client has spent waiting for a packet
-double decoding_delay = 0;
-double elimination_delay = 0;
-
-int last_seqno = 0;
-
 void
 usage(void) {
   fprintf(stderr, "Usage: atoucli [-options]\n\
@@ -47,25 +27,22 @@ usage(void) {
  */
 void
 ctrlc(void){
-	int i;
+	//int i;
 	et = et-st;  /* elapsed time */
 	if (et==0)et=.1;
 	/* don't include first pkt in data/pkt rate */
-	printf("%d pkts  %d acks  %d bytes %f KBs %f Mbs %f secs \n",
-         pkts,acks,inlth*pkts,1.e-3*inlth*(pkts-1)/et,
-         8.e-6*inlth*(pkts-1)/et,et);
-	printf("dups %d drop|oo %d sacks %d inlth %d bytes maxseg %d maxooo %d acktouts %d\n",
-         dups,drops,sackcnt,inlth,hi,maxooo,acktimeouts);
-	for(i=0;i<hocnt;i++) printf("lost pkt %d\n",holes[i]);
-  printf("Ndofs %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);  
-  printf("Old packet count %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
+	printf("\n \n%d pkts  %d acks  %d bytes\n %f KBs %f Mbs %f secs \n",
+         pkts,acks,PAYLOAD_SIZE*pkts,1.e-3*PAYLOAD_SIZE*(pkts-1)/et,
+         8.e-6*PAYLOAD_SIZE*(pkts-1)/et,et);
+	printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
+	//for(i=0;i<hocnt;i++) printf("lost pkt %d\n",holes[i]);
+  printf("**Ndofs** %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);  
+  printf("**Old packets** %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
   printf("Total Channel loss rate %f\n", (double)total_loss/(double)last_seqno);  
-
   printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", idle_total, elimination_delay, decoding_delay);  
   fclose(rcv_file);
 	exit(0);
 }
-
 
 int
 main(int argc, char** argv){
@@ -78,16 +55,10 @@ main(int argc, char** argv){
   int rv;
 	int c;
   
-	while((c = getopt(argc, argv, "h:sd:p:b:D:f:")) != -1) { 
+	while((c = getopt(argc, argv, "h:p:b:D:f:")) != -1) { 
 	  switch (c) {
     case 'h':
       host = optarg;
-    case 's':
-      sack=1;
-      break;
-    case 'd':
-      ackdelay = atoi(optarg);  /* ms */
-      if (ackdelay < 0) ackdelay = 0;
       break;
     case 'p':
       port = optarg;
@@ -209,7 +180,7 @@ main(int argc, char** argv){
     
     bldack(msg, match);
 
-	  inlth = numbytes;
+	  //inlth = numbytes;
 
   }while(numbytes > 0);
 
@@ -644,16 +615,5 @@ secs(){
   return(time.tv_sec+ time.tv_usec*1.e-6);
 }
 
-unsigned int
-millisecs(){
-  struct timeval tv;
-	unsigned int ts;
-  
-  gettimeofday(&tv, (struct timezone *)0);
-  /*fprintf(stderr, "time of day: %u:%u--", tv.tv_sec, tv.tv_usec);*/
-	ts = ((tv.tv_sec-rtt_base) * 1000) + (tv.tv_usec / 1000);
-  /*fprintf(stderr, "%ld=%u + %u\n", ts, (tv.tv_sec-rtt_base)*1000, tv.tv_usec/1000);*/
-  return(ts);
-}
 
 
