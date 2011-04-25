@@ -9,13 +9,6 @@
 #include "util.h"
 #include "qbuffer.h"
 
-typedef struct{
-  uint8_t start;
-  uint8_t length;
-  uint8_t normalizer;
-  uint8_t coeffs[BLOCK_SIZE];
-} elimination_vector_t;
-
 //---------------- CTCP related variables ------------------//
 #define PORT "7890"
 #define HOST "127.0.0.1"
