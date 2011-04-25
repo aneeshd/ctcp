@@ -221,73 +221,79 @@ bldack(Data_Pckt *msg, bool match){
     //printf("BAD packet: The block does not exist yet.\n");    
   }else{
 
-    // Otherwise, the packet should go to one of the blocks in the memory
-    // perform the Gaussian elimination on the packet and put in proper block
-    uint8_t start = msg->start_packet;
 
     int prev_dofs = blocks[blockno%NUM_BLOCKS].dofs;
 
-    // Shift the row to make SHURE the leading coefficient is not zero
-    int shift = shift_row(msg->packet_coeff, coding_wnd);
-    start += shift;
+    // Otherwise, the packet should go to one of the blocks in the memory
+    // perform the Gaussian elimination on the packet and put in proper block
 
-    // THE while loop!
-    while(!isEmpty(msg->packet_coeff, coding_wnd)){
-      if(blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
-        // Allocate the memory for the coefficients in the matrix for this block
-        blocks[blockno%NUM_BLOCKS].rows[start] = malloc(coding_wnd);
+    // If the block is already full, skip Gaussian elimination
+    if(blocks[blockno%NUM_BLOCKS].dofs < blocks[blockno%NUM_BLOCKS].len){
 
-        // Allocate the memory for the content of the packet
-        blocks[blockno%NUM_BLOCKS].content[start] = malloc(PAYLOAD_SIZE);
+      uint8_t start = msg->start_packet;
 
-        // Set the coefficients to be all zeroes (for padding if necessary)
-        memset(blocks[blockno%NUM_BLOCKS].rows[start], 0, coding_wnd);
+      // Shift the row to make SHURE the leading coefficient is not zero
+      int shift = shift_row(msg->packet_coeff, coding_wnd);
+      start += shift;
 
-        // Normalize the coefficients and the packet contents
-        normalize(msg->packet_coeff, msg->payload, coding_wnd);
+      // THE while loop!
+      while(!isEmpty(msg->packet_coeff, coding_wnd)){
+        if(blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
+          // Allocate the memory for the coefficients in the matrix for this block
+          blocks[blockno%NUM_BLOCKS].rows[start] = malloc(coding_wnd);
 
-        // Put the coefficients into the matrix
-        memcpy(blocks[blockno%NUM_BLOCKS].rows[start], msg->packet_coeff, coding_wnd);
+          // Allocate the memory for the content of the packet
+          blocks[blockno%NUM_BLOCKS].content[start] = malloc(PAYLOAD_SIZE);
+
+          // Set the coefficients to be all zeroes (for padding if necessary)
+          memset(blocks[blockno%NUM_BLOCKS].rows[start], 0, coding_wnd);
+
+          // Normalize the coefficients and the packet contents
+          normalize(msg->packet_coeff, msg->payload, coding_wnd);
+
+          // Put the coefficients into the matrix
+          memcpy(blocks[blockno%NUM_BLOCKS].rows[start], msg->packet_coeff, coding_wnd);
         
-        // Put the payload into the corresponding place
-        memcpy(blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
+          // Put the payload into the corresponding place
+          memcpy(blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
         
-        // We got an innovative eqn
-        blocks[blockno%NUM_BLOCKS].dofs++;
-        break;
-      }else{
-        uint8_t pivot = msg->packet_coeff[0];
-        int i;
+          // We got an innovative eqn
+          blocks[blockno%NUM_BLOCKS].dofs++;
+          break;
+        }else{
+          uint8_t pivot = msg->packet_coeff[0];
+          int i;
        
-        if (debug > 9){
-          int ix;
-          for (ix = 0; ix < coding_wnd; ix++){
-            printf(" %d ", msg->packet_coeff[ix]);
-          }
-          printf("seqno %d start%d isEmpty %d \n Row coeff", msg->seqno, start, isEmpty(msg->packet_coeff, coding_wnd)==1);
+          if (debug > 9){
+            int ix;
+            for (ix = 0; ix < coding_wnd; ix++){
+              printf(" %d ", msg->packet_coeff[ix]);
+            }
+            printf("seqno %d start%d isEmpty %d \n Row coeff", msg->seqno, start, isEmpty(msg->packet_coeff, coding_wnd)==1);
         
-          for (ix = 0; ix < coding_wnd; ix++){
-            printf(" %d ",blocks[blockno%NUM_BLOCKS].rows[start][ix]);
+            for (ix = 0; ix < coding_wnd; ix++){
+              printf(" %d ",blocks[blockno%NUM_BLOCKS].rows[start][ix]);
+            }
+            printf("\n");
           }
-          printf("\n");
-        }
 
-        msg->packet_coeff[0] = 0; // TODO; check again
-        // Subtract row with index strat with the row at hand (coffecients)
-        for(i = 1; i < coding_wnd; i++){
-          msg->packet_coeff[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].rows[start][i], pivot);
-        }
+          msg->packet_coeff[0] = 0; // TODO; check again
+          // Subtract row with index strat with the row at hand (coffecients)
+          for(i = 1; i < coding_wnd; i++){
+            msg->packet_coeff[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].rows[start][i], pivot);
+          }
         
-        // Subtract row with index strat with the row at hand (content)
-        for(i = 0; i < PAYLOAD_SIZE; i++){
-         msg->payload[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].content[start][i], pivot);
-        }
+          // Subtract row with index strat with the row at hand (content)
+          for(i = 0; i < PAYLOAD_SIZE; i++){
+            msg->payload[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].content[start][i], pivot);
+          }
        
-        // Shift the row 
-        shift = shift_row(msg->packet_coeff, coding_wnd);
-        start += shift;
-      }
-    } // end while
+          // Shift the row 
+          shift = shift_row(msg->packet_coeff, coding_wnd);
+          start += shift;
+        }
+      } // end while
+    } // end if block.dof < block.len
 
     if(blocks[blockno%NUM_BLOCKS].dofs == prev_dofs){
       ndofs++;
@@ -295,53 +301,25 @@ bldack(Data_Pckt *msg, bool match){
     
     elimination_delay += getTime() - elimination_timer;
 
-
     //printf("current blk %d\t dofs %d \n ", curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
-
-    // We always try decoding the curr_block first, even if the next block is decodable, it is not useful
-    if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
-      // We have enough dofs to decode
-      // Decode!
-      // TODO Here just update curr_block, but put the unwrap and write,... into another thread
-      
-      double decoding_timer = getTime();
-      if (debug > 4){
-        printf("Starting to decode block %d ... ", curr_block);
-      }
-
-      unwrap(curr_block);
-
-
-      // Write the decoded packets into the file 
-      writeAndFreeBlock(curr_block);
-
-      // Initialize the block for next time
-      initCodedBlock(curr_block);
-
-      
-      // Increment the current block number
-      curr_block++;
-
-      decoding_delay += getTime() - decoding_timer;
-      if (debug > 4){
-        printf("Done within %f secs\n", getTime()-decoding_timer);
-      }
-    } // end if the block is done
 
   } // end else (if   curr_block <= blockno <= curr_block + NUM_BLOCKS -1 )
 
-    // Build the ack packet according to the new information
+  //------------------------------------------------------------------------------------------------------
+  
+  // Build the ack packet according to the new information
   Ack_Pckt* ack = ackPacket(msg->seqno+1, curr_block, 
                             blocks[curr_block%NUM_BLOCKS].len - blocks[curr_block%NUM_BLOCKS].dofs); 
-  ack->tstamp = msg->tstamp;
-  if (blockno == curr_block + 1){
-    ack->flag = EXT_MOD;
-  }else if (blockno < curr_block){
-    ack->flag = OLD_PKT;
+
+  if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
+    // The current block is decodable, so need to request for the next block  
+    // XXX make sure that NUM_BLOCKS is not 1, or this will break
+    ack->blockno = curr_block+1;
+    ack->dof_req =   blocks[(curr_block+1)%NUM_BLOCKS].len - blocks[(curr_block+1)%NUM_BLOCKS].dofs;
   }
 
-  // =================================================================
- 
+  ack->tstamp = msg->tstamp;
+  
   // Marshall the ack into buff
   int size = marshallAck(*ack, buff);
   srvlen = sizeof(srv_addr);
@@ -354,7 +332,39 @@ bldack(Data_Pckt *msg, bool match){
     printf("Sent an ACK: ackno %d blockno %d\n", ack->ackno, ack->blockno);
   }
 
+  //------------------------------------------------------------------------------------------------------
+
+  // We always try decoding the curr_block first, even if the next block is decodable, it is not useful
+  if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
+    // We have enough dofs to decode
+    // Decode!
+      
+    double decoding_timer = getTime();
+    if (debug > 4){
+      printf("Starting to decode block %d ... ", curr_block);
+    }
+
+    unwrap(curr_block);
+
+
+    // Write the decoded packets into the file 
+    writeAndFreeBlock(curr_block);
+
+    // Initialize the block for next time
+    initCodedBlock(curr_block);
+
+      
+    // Increment the current block number
+    curr_block++;
+
+    decoding_delay += getTime() - decoding_timer;
+    if (debug > 4){
+      printf("Done within %f secs\n", getTime()-decoding_timer);
+    }
+  } // end if the block is done
+
 }
+//========================== END Build Ack ===============================================================
 
 
 // TODO: TEST!
