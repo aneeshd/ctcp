@@ -2,10 +2,7 @@
 //// March 22nd, 2011/////
 //////////////////////////////////////
 
-
-* Erase the scoreboard dependencies in srvctcp.c
-* Make sure that the memory in clictcp for blocks content and rows is freed in terminate
-* Implement network coding
-
-
-
+* Experiment with vectorized SSE instruction for FFmult
+* RTO congestion timeout stuff... [minji]
+* Fix server restart - related to prev point
+* Dynamic coding window
