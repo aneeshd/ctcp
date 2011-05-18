@@ -1,8 +1,13 @@
-///////////////////////////////////////
-//// March 22nd, 2011/////
-//////////////////////////////////////
+////////////////////////
+//// May 18th, 2011 ////
+////////////////////////
 
-* Experiment with vectorized SSE instruction for FFmult
+* Experiment with vectorized SSE instruction for FFmult [try this - long discussion]
+* Fix bug from commit 54a88d8
 * RTO congestion timeout stuff... [minji]
 * Fix server restart - related to prev point
 * Dynamic coding window
+* Handshake
+* Multiple sources
+* Measurements - fix the grapher to measure the coded file transfer
+* If we were to do the API, we may want
