@@ -1,49 +1,54 @@
-CXX := gcc
-CFLAGS := -g -Wall
-LDFLAGS := -lm -lpthread
+VPATH	=	src
+BINDIR 	=	bin
+HERE	=	$(shell pwd)
+AT	=	@
+DOLLAR  = 	$$
 
-# Put here the name of all the binaries
-TARGETS := util \
-	md5 \
-	qbuffer \
-	thr_pool \
-	clictcp \
-	srvctcp \
 
-# Common libraries to be built and included to the products
-UTILS := util \
-	md5 \
-	qbuffer \
-	thr_pool \
+CD	=	$(AT)cd
+CP	=	$(AT)cp
+ECHO	=	@echo
+CAT	=	$(AT)cat
+IF	=	$(AT)if
+LN	=	$(AT)ln
+MKDIR	=	$(AT)mkdir
+MV	=	$(AT)mv
+SED	=	$(AT)sed
+RM	=	$(AT)rm
+TOUCH	=	$(AT)touch
+CHMOD	=	$(AT)chmod
+DATE    =       $(AT)date
+PERL	=	$(AT)perl
+MEX	=	$(AT)$(MATLAB)/bin/mex
+THRIFT	=	/usr/local/bin/thrift
+AR	=	$(AT)ar
+ARFLAGS	=	rcs
 
-SRCS := $(TARGETS:%=%.c)
 
-OBJS := $(TARGETS:%=%.o)
+CC		=	$(AT) gcc
+INCLUDES	=	-I$(HERE) -I. -I$(SRCDIR)
+CFLAGS	 	= 	-c -g -Wall $(INCLUDES)
+LDFLAGS		=	-lm -lpthread
 
-PRODUCTS := $(filter-out $(UTILS) , $(TARGETS))
-
-UTILS_PRODS := $(UTILS:%=%.o)
 
 # We start our mode with "mode" so we avoud the leading whitespace from the +=.
 NEWMODE := mode
 
-# This is the usual DEBUG mode trick. Add DEBUG=1 to the make command line to 
-# build without optimizations and with assertions ON. 
+# This is the usual DEBUG mode trick. Add DEBUG=1 to the make command line to
+# build without optimizations and with assertions ON.
 ifeq ($(DEBUG),1)
-	CFLAGS +=  -O0 -DDEBUG
+	CFLAGS  += -O0 -DDEBUG
 	NEWMODE += debug
 else
-	CFLAGS += -DNDEBUG
+	CFLAGS  += -DNDEBUG
 	NEWMODE += nodebug
 endif
 
 ifeq ($(PROF),1)
-	CFLAGS += -pg
+	CFLAGS  += -pg
 	LDFLAGS += -pg
 	NEWMODE += profile
 endif
-
-
 
 # If the new mode does'n match the old mode, write the new mode to .buildmode.
 # This forces a rebuild of all the objects files, because they depend on .buildmode.
@@ -52,36 +57,44 @@ ifneq ($(OLDMODE),$(NEWMODE))
   $(shell echo "$(NEWMODE)" > .buildmode)
 endif
 
-all: $(PRODUCTS)
+.PHONY: all
+all:
 
-# Rule for linking the .o binaries
-$(PRODUCTS): $(OBJS) .buildmode Makefile
-	$(CXX) -o $@ $(UTILS_PRODS) $@.o $(LDFLAGS) 
+.PHONY: clean
+clean:
+	$(ECHO) Cleaning...
+	$(RM) -rf $(BINDIR)
+
+.PHONY: remake
+remake: clean all
+
+
+$(BINDIR)/clictcp: $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
+	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
+	$(MKDIR) -p $(dir $@)
+	$(CC) -o $@ $@.o $(BINDIR)/libUtil.a $(LDFLAGS)
+
+$(BINDIR)/srvctcp: $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
+	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
+	$(MKDIR) -p $(dir $@)
+	$(CC) -o $@ $@.o $(BINDIR)/libUtil.a $(LDFLAGS)
+
+# Rule to make the libUtil library
+$(BINDIR)/libUtil.a: $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o
+	$(ECHO) "[\033[01;32mCC\033[22;37m] building  $@"
+	$(MKDIR) -p $(dir $@)
+	$(AR) $(ARFLAGS) $@ $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o
+
 
 # Rule for compiling c files.
-%.o :  %.c .buildmode Makefile
-	$(CXX) $(CFLAGS) -c $< -o $@
+$(BINDIR)/%.o : %.c .buildmode Makefile
+	$(ECHO) "[\033[01;34mCC\033[22;37m] compiling $<"
+	$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ $<
 
-tags: $(SRCS)
-	ctags -eR
 
-tests: test.c util.o clictcp.o srvctcp.o md5.o .buildmode Makefile
-	$(CXX) $(CFLAGS) $< util.o md5.o -o test $(LDFLAGS)
+all: $(BINDIR)/clictcp $(BINDIR)/srvctcp
 
-test-thr: thr_pool_tester.c thr_pool.o qbuffer.o .buildmode Makefile
-	$(CXX) $(CFLAGS) $< thr_pool.o qbuffer.o -o test_thr $(LDFLAGS)
-
-md5: md5driver.c md5.o
-	$(CXX) $(CFLAGS) $< md5.o -o $@ $(LDFLAGS)
-
-clean:
-	$(RM) $(TARGETS) $(OBJS) .buildmode TAGS test test_thr *.o *.d
-
-clean_logs:
-	$(RM) *.log
-
-clean_rcv:
-	$(RM) Rcv_*
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)
