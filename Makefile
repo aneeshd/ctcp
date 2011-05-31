@@ -1,5 +1,6 @@
 VPATH	=	src
 BINDIR 	=	bin
+LOGDIR	=	logs
 HERE	=	$(shell pwd)
 AT	=	@
 DOLLAR  = 	$$
@@ -64,6 +65,11 @@ all:
 clean:
 	$(ECHO) Cleaning...
 	$(RM) -rf $(BINDIR)
+
+.PHONY: rmlogs
+rmlogs:
+	$(ECHO) Erasing the logs...
+	$(RM) -rf $(LOGDIR)
 
 .PHONY: remake
 remake: clean all

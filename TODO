@@ -13,3 +13,5 @@
 * If we were to do the API, we may want
 * Try to port to Mac/Windows - Ubuntu wireless driver is crap
 * Document project -> Fix README
+* Fix usage function in clictcp
+* Fix heap error (closing twice the log file) in srvctcp
