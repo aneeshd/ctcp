@@ -75,15 +75,15 @@ rmlogs:
 remake: clean all
 
 
-$(BINDIR)/clictcp: $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
+clictcp: $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CC) -o $@ $@.o $(BINDIR)/libUtil.a $(LDFLAGS)
+	$(CC) -o $@ $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
-$(BINDIR)/srvctcp: $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
+srvctcp: $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CC) -o $@ $@.o $(BINDIR)/libUtil.a $(LDFLAGS)
+	$(CC) -o $@ $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
 # Rule to make the libUtil library
 $(BINDIR)/libUtil.a: $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o
@@ -99,7 +99,7 @@ $(BINDIR)/%.o : %.c .buildmode Makefile
 	$(CC) $(CFLAGS) -o $@ $<
 
 
-all: $(BINDIR)/clictcp $(BINDIR)/srvctcp
+all: clictcp srvctcp
 
 
 # Uncomment to debug the Makefile

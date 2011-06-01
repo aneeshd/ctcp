@@ -15,3 +15,9 @@
 * Document project -> Fix README
 * Fix usage function in clictcp
 * Fix heap error (closing twice the log file) in srvctcp
+* Fix grapher's bw computations
+* Add things to the grapher:
+  - Loss rate SLR
+  - RTT, RTO, SRTT, base rtt
+  - When a block got decode
+  - Congestion window

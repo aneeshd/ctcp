@@ -13,7 +13,7 @@
 
 //XXX: fix the usage function
 
-/*
+
 void
 usage(void) {
     fprintf(stderr, "Usage: atoucli [-options]\n\
@@ -24,7 +24,7 @@ usage(void) {
 -D ##  enable debug level\n");
     exit(0);
 }
-*/
+
 
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C

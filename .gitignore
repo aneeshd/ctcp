@@ -1,4 +1,4 @@
 *.o
-atoucli
-atousrv
 .buildmode
+clictcp
+srvctcp
