@@ -6,7 +6,7 @@
 typedef int bool;
 #define TRUE 1
 #define FALSE 0
-#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y))) 
+#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y)))
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
 // flags for Data_Pckt
@@ -21,7 +21,11 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT} flag_t;
 #define CODING_WND 3
 #define MAX_CWND 70
 
-#define ACK_SIZE sizeof(double) + sizeof(int) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t)
+#define ACK_SIZE sizeof(double) \
+    + sizeof(int)               \
+    + sizeof(uint32_t)          \
+    + sizeof(uint32_t)          \
+    + sizeof(uint8_t)
 
 typedef int socket_t;
 typedef struct timeval timeval_t;
@@ -62,7 +66,7 @@ typedef struct{
   flag_t flag;
   uint32_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
   uint32_t  blockno; // Base of the current block
-  uint8_t dof_req;  // Number of dofs left from the block 
+  uint8_t dof_req;  // Number of dofs left from the block
   //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
 } Ack_Pckt;
 

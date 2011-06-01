@@ -340,7 +340,6 @@ send_segs(socket_t sockfd){
         dof_remain[curr_block%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
     }
 
-
     while (CurrWin>=1) {
         send_one(sockfd, curr_block);
         snd_nxt++;
@@ -520,7 +519,6 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
             return; // goes back to the beginning of the while loop in main() and exits
         }
 
-//        printf("Acquired lock for block %d\n", curr_block%NUM_BLOCKS);
         pthread_mutex_lock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
 
         freeBlock(curr_block);
@@ -528,16 +526,15 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
 
         pthread_mutex_unlock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
-//        printf("Released lock for block %d\n", curr_block%NUM_BLOCKS);
 
         if (!maxblockno){
             //readBlock(curr_block+2);
             coding_job_t* job = malloc(sizeof(coding_job_t));
             job->blockno = curr_block+2;
-            job->dof_request = (int) ceil(BLOCK_SIZE*(1.04+2*slr));
-            priority_t coding_urgency = LOW;
-            addJob(&workers, &coding_job, job, &free, coding_urgency);
+            job->dof_request = ceil(BLOCK_SIZE*( 1.04 + 2*slr ));
             dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+
+            addJob(&workers, &coding_job, job, &free, LOW);
         }
 
         curr_block++;
