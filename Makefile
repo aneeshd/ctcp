@@ -65,6 +65,7 @@ all:
 clean:
 	$(ECHO) Cleaning...
 	$(RM) -rf $(BINDIR)
+	$(RM) -rf srvctcp clictcp
 
 .PHONY: rmlogs
 rmlogs:

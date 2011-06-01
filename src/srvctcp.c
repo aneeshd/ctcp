@@ -919,6 +919,7 @@ openLog(void){
 
     db = fopen(log_name, "w+");
     if(!db){
+        fprintf(stdout, "An error ocurred while trying to open the log file\n");
         perror("An error ocurred while trying to open the log file");
     }
 }
