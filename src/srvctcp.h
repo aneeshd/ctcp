@@ -58,37 +58,36 @@ int dof_remain[NUM_BLOCKS];
 
 uint32_t snd_nxt;
 uint32_t snd_una;
-unsigned int snd_max; 		/* biggest send */
-double snd_cwnd;		/* congestion-controlled window */
-unsigned int snd_ssthresh;	/* slow start threshold */
+unsigned int snd_max; /* biggest send */
+double snd_cwnd;     /* congestion-controlled window */
+unsigned int snd_ssthresh; /* slow start threshold */
 uint32_t ackno;
 unsigned int file_position; // Indicates the block number at which we are in the file at any given moment
 
 /* configurable variables */
 
 int debug;
-double tick = 0.2;		/* recvfrom timeout -- select */
-double timeout=0.5;		/* pkt timeout */
-int idle=0;                     /* successive timeouts */
-int maxidle=10;                 /* max idle before abort */
-int maxpkts=0;			/* test duration */
-int maxtime=10;                 /* test duration */
+double tick = 0.2;  /* recvfrom timeout -- select */
+double timeout=0.5; /* pkt timeout */
+int idle=0;         /* successive timeouts */
+int maxidle=10;     /* max idle before abort */
+int maxpkts=0;      /* test duration */
+int maxtime=10;     /* test duration */
 
 // TODO actual use rcvrwin!
-int rcvrwin = 20;		/* rcvr window in mss-segments */
-
-int increment = 1;   		/* cc increment */
-double multiplier = 0.5;	/* cc backoff */
-int ssincr =1;			/* slow start increment */
-double thresh_init = 1.0;      /* fraction of rcvwind for initial ssthresh*/
-int initsegs = 2;		/* slowstart initial */
+int rcvrwin = 20;         /* rcvr window in mss-segments */
+int increment = 1;        /* cc increment */
+double multiplier = 0.5;  /* cc backoff */
+int ssincr =1;            /* slow start increment */
+double thresh_init = 1.0; /* fraction of rcvwind for initial ssthresh*/
+int initsegs = 2;         /* slowstart initial */
 
 //--------------- vegas working variables ------------//
 double valpha=0.01, vbeta=0.3;  /* vegas parameters */
 double vdelta;
-double max_delta=0;  /* vegas like tracker */
-int vinss=1;   /* in vegas slow start */
-int vdecr, v0 ; /* vegas decrements or no adjusts */
+double max_delta=0;             /* vegas like tracker */
+int vinss=1;                    /* in vegas slow start */
+int vdecr, v0 ;                 /* vegas decrements or no adjusts */
 
 /* stats */
 int ipkts,opkts,badacks,timeouts,enobufs, goodacks;

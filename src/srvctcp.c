@@ -520,12 +520,15 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
             return; // goes back to the beginning of the while loop in main() and exits
         }
 
+//        printf("Acquired lock for block %d\n", curr_block%NUM_BLOCKS);
         pthread_mutex_lock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
 
         freeBlock(curr_block);
         q_free(&coded_q[curr_block%NUM_BLOCKS], &free_coded_pkt);
 
+
         pthread_mutex_unlock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
+//        printf("Released lock for block %d\n", curr_block%NUM_BLOCKS);
 
         if (!maxblockno){
             //readBlock(curr_block+2);
