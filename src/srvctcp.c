@@ -720,13 +720,24 @@ coding_job(void *a){
 
     if (block_len  == 0){
 
-        // lock the file
-        pthread_mutex_lock(&file_mutex);
-        readBlock(blockno);
-        // unlock the file
-        pthread_mutex_unlock(&file_mutex);
 
-        block_len = blocks[blockno%NUM_BLOCKS].len;
+        if( !maxblockno || maxblockno >= blockno )
+        {
+            // lock the file
+            pthread_mutex_lock(&file_mutex);
+
+            readBlock(blockno);
+
+            // unlock the file
+            pthread_mutex_unlock(&file_mutex);
+        }else{
+            goto release;
+        }
+
+        if( (block_len = blocks[blockno%NUM_BLOCKS].len) == 0){
+            goto release;
+        }
+
 
         // Compute a random permutation of the rows
 
@@ -827,6 +838,8 @@ coding_job(void *a){
 
     }
     //printf("Almost done with block %d\n", blockno);
+
+release:
 
     pthread_mutex_unlock( &blocks[blockno%NUM_BLOCKS].block_mutex );
 

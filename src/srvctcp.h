@@ -37,9 +37,9 @@ uint32_t curr_block; // Current block number
 bool done;
 Block_t blocks[NUM_BLOCKS];
 int coding_wnd = CODING_WND;
-uint32_t maxblockno = 0; // 0 denoting infty, whenever we reach the maximum block of the file, we set it
+uint32_t maxblockno = 0; // use highest blockno possible, set when we reach the end of the file
 int NextBlockOnFly = 0;
-uint32_t OnFly[MAX_CWND]; 
+uint32_t OnFly[MAX_CWND];
 int dof_req = BLOCK_SIZE;
 
 // ------------ Multithreading related variables ---------------//
@@ -52,7 +52,7 @@ pthread_mutex_t file_mutex;  // Allows locking the file while reading a block
   -does not necessarily coincide with the number of packets in coded_q)
   -need to update this whenever a coding job is added/coded packets are popped
 */
-int dof_remain[NUM_BLOCKS];  
+int dof_remain[NUM_BLOCKS];
 
 // ------------ TCP variables ---------------//
 
