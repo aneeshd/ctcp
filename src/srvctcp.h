@@ -92,7 +92,7 @@ int vdecr, v0 ;                 /* vegas decrements or no adjusts */
 /* stats */
 int ipkts,opkts,badacks,timeouts,enobufs, goodacks;
 double et,minrtt=999999., maxrtt=0, avrgrtt;
-static double rto,srtt=0,rttvar=3., h=.25, g=1.0/BLOCK_SIZE;
+static double rto,srtt=0,rttvar=3., h=.25, g=1.0/BLOCK_SIZE, beta=2;
 double due,rcvt;
 
 //---------------- Function Definitions -----------------------//
