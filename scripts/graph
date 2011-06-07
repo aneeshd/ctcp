@@ -3,29 +3,35 @@ import sys
 import matplotlib.pyplot as plt
 import math
 
-def main(args):
+def graph(log_file):
 
     times = []
     instant_BW = []
     average_BW = []
+    blockno    = []
+    snd_cwnd   = []
+    slr        = []
+    srtt       = []
+    rto        = []
 
-    mss = 1472
-    current= 0.1
-    res = 0.1
-    abw = 0
-    bw = 0
+    current = 0.1
+    mss     = 1398
+    res     = 0.2
+    abw     = 0
+    bw      = 0
 
-    f = open(args[0], 'r')
+    f = open(log_file, 'r')
     for line in f:
         values = line.split(" ")
 
-
         if values[-1] == "xmt\n":
             # The variable values is a list of the form
-            # [time, segment, xmt]
+            # [time, blockno, snd_cwnd, slr, rtt, srtt, rto, xmt]
+
+            # Compute instant and avg bw
 
             abw += mss
-            bw += mss
+            bw  += mss
 
             time = float(values[0])
 
@@ -34,6 +40,13 @@ def main(args):
 
                 instant_BW.append(8e-6*bw/res)
                 average_BW.append(8e-6*1.0*abw/current)
+
+                blockno.append(values[1])
+                snd_cwnd.append(values[2])
+                slr.append(values[3])
+                srtt.append(values[4])
+                rto.append(values[5])
+
 
                 current = res + current
                 bw = 0
@@ -48,18 +61,25 @@ def main(args):
                 average_BW.append(8e-6*1.0*abw/current)
                 average_BW.append(8e-6*1.0*abw/zero_point)
 
+                blockno.append(values[1])
+                snd_cwnd.append(values[2])
+                slr.append(values[3])
+                srtt.append(values[4])
+                rto.append(values[5])
+
+
+
 		current = zero_point + res
 		bw = 0
 
-
-
-
-
 #   print average_BW
-    plt.plot(times, instant_BW, 'r--', times, average_BW, 'g--')
+    plt.plot(times, instant_BW, 'r--', times, average_BW, 'g--', times, snd_cwnd, 'b*')
     plt.xlabel('time')
     plt.ylabel('Mbs')
     plt.show()
+
+def main(args):
+    graph(args[0])
 
 
 if __name__ == '__main__':

@@ -15,7 +15,7 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT} flag_t;
 //---------------- CTCP parameters ------------------//
 #define MSS 1500 // XXX: make sure that this is fine...
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
-#define PAYLOAD_SIZE 1400
+#define PAYLOAD_SIZE 1400 // Actual payload is 1398
 // TODO: change such that we can change PAYLOAD_SIZE, BLOCK_SIZE, CODING_WIN via config file
 #define BLOCK_SIZE 128 // Maximum # of packets in a block (Default block length)
 #define CODING_WND 3

@@ -419,7 +419,8 @@ send_one(socket_t sockfd, uint32_t blockno){
                coding_wnd);
     }
 
-    fprintf(db,"%f %d xmt\n", msg->tstamp-et, blockno);
+
+    fprintf(db,"%f %d %f %f %f %f xmt\n", msg->tstamp-et, blockno, snd_cwnd, slr, srtt, rto);
 
     // Marshall msg into buf
     int message_size = marshallData(*msg, buff);
