@@ -35,8 +35,6 @@ ctrlc(){
     et = getTime()-et;
     maxpkts=snd_max;
     endSession();
-    fclose(snd_file);
-    fclose(db);
     exit(1);
 }
 
@@ -132,8 +130,6 @@ main (int argc, char** argv){
         doit(sockfd);
         terminate(sockfd); // terminate
         endSession();
-        fclose(snd_file);
-        fclose(db);
         restart();
     }
     return 0;
@@ -341,6 +337,7 @@ send_segs(socket_t sockfd){
     }
 
     while (CurrWin>=1) {
+
         send_one(sockfd, curr_block);
         snd_nxt++;
         CurrWin--;
@@ -482,6 +479,10 @@ endSession(void){
            snd_nxt,(int)snd_cwnd, snd_una,snd_ssthresh, goodacks);
     //printf("goodacks %d\n", goodacks);
     printf("Total idle time %f, Total coding delay %f\n", idle_total, coding_delay);
+    if(snd_file) fclose(snd_file);
+    if(db)       fclose(db);
+    snd_file = NULL;
+    db       = NULL;
 }
 
 void
