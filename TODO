@@ -2,19 +2,25 @@
 //// May 18th, 2011 ////
 ////////////////////////
 
-* Experiment with vectorized SSE instruction for FFmult [try this - long discussion]
-* Fix bug from commit 54a88d8
+
+Day to Day bugs/fixes:
 * RTO congestion timeout stuff... [minji]
-* Fix server restart - related to prev point
-* Dynamic coding window
-* Handshake
-* Multiple sources
-* Measurements - fix the grapher to measure the coded file transfer
-* If we were to do the API, we may want
-* Try to port to Mac/Windows - Ubuntu wireless driver is crap
-* Document project -> Fix README
-* Fix usage function in clictcp
+* Fix server restart - related to prev point [minji]
 * Fix heap error (closing twice the log file) in srvctcp
+* Fix bug from commit 54a88d8 [done~ish] -> Still getting dof_remain = -1 when requesting extra dofs
+* Measurements - fix the grapher to measure the coded file transfer [done]
+
+
+New Big Features:
+* Multiple sources
+* Experiment with vectorized SSE instruction for FFmult [try this - long discussion]
+* Handshake
+* Dynamic coding window
+
+API/Porting:
+* Try to port to Mac/Windows - Ubuntu wireless driver is crap
+
+Grapher:
 * Fix grapher's bw computations
 * Add things to the grapher:
   - Loss rate SLR
@@ -22,12 +28,17 @@
   - When a block got decode
   - Congestion window
 
-BUGS: 
+Documentation:
+* Fix README
+* Setup redmine in plato
+* Fix usage function in clictcp
+
+BUGS:
 * Still have bug in srvctcp stalling (1).
 * srvctcp crashes with small files (2)
 
 
-
+---------------------------------------------
 
 (1)
 
