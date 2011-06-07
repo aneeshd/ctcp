@@ -300,6 +300,8 @@ terminate(socket_t sockfd){
 void
 send_segs(socket_t sockfd){
     int win = 0;
+
+    // TODO: FIX THIS
     win = snd_cwnd - (snd_nxt - snd_una);
     if (win < 1) return;  /* no available window => done */
 
@@ -501,7 +503,10 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     /* RTO calculations */
     srtt = (1-g)*srtt + g*rtt;
     rttvar = (1-h)*rttvar + h*(fabs(rtt - srtt) - rttvar);
-    rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
+    
+    rto = beta*srtt;
+    // TODO: we may no longer need RTT_DECAY... 
+    // rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
 
     if (debug > 6) {
         fprintf(db,"%f %d %f  %d %d ack\n",rcvt-et,ackno,rtt,(int)snd_cwnd,snd_ssthresh);
