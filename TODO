@@ -6,10 +6,8 @@
 Day to Day bugs/fixes:
 * RTO congestion timeout stuff... [minji]
 * Fix server restart - related to prev point [minji]
-* Fix heap error (closing twice the log file) in srvctcp
 * Fix bug from commit 54a88d8 [done~ish] -> Still getting dof_remain = -1 when requesting extra dofs
 * Measurements - fix the grapher to measure the coded file transfer [done]
-
 
 New Big Features:
 * Multiple sources
@@ -23,70 +21,25 @@ API/Porting:
 Grapher:
 * Fix grapher's bw computations
 * Add things to the grapher:
+
+  - BW
+  - Congestion Window
+
+  - Block transitions
+
+  - DOFs sent per block
+
   - Loss rate SLR
   - RTT, RTO, SRTT, base rtt
   - When a block got decode
-  - Congestion window
+
+
 
 Documentation:
 * Fix README
 * Setup redmine in plato
 * Fix usage function in clictcp
 
-BUGS:
-* Still have bug in srvctcp stalling (1).
-* srvctcp crashes with small files (2)
-
-
----------------------------------------------
-
-(1)
-
-*** CTCP $version 0.0$ ***
-config: port 7890 debug 6, Wed Jun  1 00:08:08 2011
-config: initsegs 2 tick 0.200000 timeout 0.500000
-config: maxidle 10 maxtime 0
-config: thresh_init 0.750000 ssincr 1
-config: rcvrwin 20  increment 1  multiplier 0.500000 thresh_init 0.750000
-config: alpha 0.050000 beta 0.200000
-*** Started thread id:  140026484635392***
-*** Started thread id:  140026482534144***
-*** Started thread id:  140026480432896***
-*** Started thread id:  140026478331648***
-*** Started thread id:  140026476230400***
-
-Waiting for requests...
-sending shrimp.avi
-Size 27
-The log name is logs/2011-06-1 00:08.15.log
-config: sndbuf 210000 rcvbuf 210000
-requesting more dofs: curr block 7,  dof_remain 4, dof_needed 76 dof_req 128
-Now sending block 10, cwnd 55.021773, SLR 0.000000%, SRTT 4.755785 ms
-requesting more dofs: curr block 13,  dof_remain 0, dof_needed 74 dof_req 128
-Now sending block 20, cwnd 57.339352, SLR 0.000000%, SRTT 6.409896 ms
-requesting more dofs: curr block 20,  dof_remain 1, dof_needed 72 dof_req 128
-
-
-
-
-(2)
-
-config: port 7890 debug 6, Wed Jun  1 00:09:29 2011
-config: initsegs 2 tick 0.200000 timeout 0.500000
-config: maxidle 10 maxtime 0
-config: thresh_init 0.750000 ssincr 1
-config: rcvrwin 20  increment 1  multiplier 0.500000 thresh_init 0.750000
-config: alpha 0.050000 beta 0.200000
-*** Started thread id:  140417813145344***
-*** Started thread id:  140417811044096***
-*** Started thread id:  140417808942848***
-*** Started thread id:  140417806841600***
-*** Started thread id:  140417804740352***
-
-Waiting for requests...
-^[3sending Foto.jpg
-config: sndbuf 210000 rcvbuf 210000
-This is the last block 1
-This is the last block 2
-Floating point exception
-
+Misc:
+	* Erase the repo from origin
+        * Read about tcpdump/netstat/etc try to figure out how to measure the tcp connection performance
