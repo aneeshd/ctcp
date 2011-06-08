@@ -63,15 +63,26 @@ def graph(log_file, save=True):
                 average_BW.append(8e-6*1.0*abw/zero_point)
 
                 blockno.append(values[1])
+                blockno.append(values[1])
+
+		# need to appen twice to account for zero_point
+                snd_cwnd.append(values[2])
                 snd_cwnd.append(values[2])
                 slr.append(values[3])
+                slr.append(values[3])
+                srtt.append(values[4])
                 srtt.append(values[4])
                 rto.append(values[5])
+                rto.append(values[5])
+
 
 		current = zero_point + res
 		bw = 0
 
     # print average_BW
+    print len(blockno)
+    print len(snd_cwnd)
+    print len(average_BW)
     subplot(311)
     plot(times, instant_BW, 'r--', times, average_BW, 'g--', times, snd_cwnd, 'b*')
     grid(True)
@@ -97,11 +108,12 @@ def graph(log_file, save=True):
 
 
 def main(args):
-    graph(args[0], save=True)
+    graph(args[0], save=False)
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         sys.exit("Usage: ./scripts/grapher <srvctcp_output>")
     main(sys.argv[1:])
+
 
