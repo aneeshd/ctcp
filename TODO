@@ -43,3 +43,38 @@ Documentation:
 Misc:
 	* Erase the repo from origin
         * Read about tcpdump/netstat/etc try to figure out how to measure the tcp connection performance
+
+
+BUG TRACES:
+
+leo@leo-MacBookPro:~/atou$ ./srvctcp config/vegas
+*** CTCP $version 0.0$ ***
+config: port 9999 debug 5, Wed Jun  8 16:42:26 2011
+config: initsegs 2 tick 0.200000 timeout 0.500000
+config: maxidle 10 maxtime 0
+config: thresh_init 0.750000 ssincr 1
+config: rcvrwin 20  increment 1  multiplier 0.500000 thresh_init 0.750000
+config: alpha 0.050000 beta 0.200000
+
+Waiting for requests...
+*** Started thread id:  139708360087296***
+*** Started thread id:  139708355884800***
+*** Started thread id:  139708351682304***
+*** Started thread id:  139708357986048***
+*** Started thread id:  139708353783552***
+sending shrimp.avi
+Size 27
+The log name is logs/2011-06-8 16:42.30.log
+config: sndbuf 210000 rcvbuf 210000
+requesting more dofs: curr block 1,  dof_remain 0, dof_needed 1 dof_req 2
+----> requesting more dofs: curr block 1,  dof_remain -1, dof_needed 0 dof_req 2
+requesting more dofs: curr block 4,  dof_remain 0, dof_needed 1 dof_req 2
+requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
+requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
+requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
+requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
+requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
+requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
+requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
+requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
+----> requesting more dofs: curr block 8,  dof_remain -1, dof_needed 0 dof_req 1
