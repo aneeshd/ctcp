@@ -18,7 +18,7 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT} flag_t;
 #define PAYLOAD_SIZE 1400 // Actual payload is 1398
 // TODO: change such that we can change PAYLOAD_SIZE, BLOCK_SIZE, CODING_WIN via config file
 #define BLOCK_SIZE 128 // Maximum # of packets in a block (Default block length)
-#define CODING_WND 3
+#define CODING_WND 10
 #define MAX_CWND 70
 
 #define ACK_SIZE sizeof(double) \
