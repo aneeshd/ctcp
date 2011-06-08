@@ -1,6 +1,6 @@
 #!/usr/bin/python
 import sys, os
-import matplotlib.pyplot as plt
+from   pylab import *
 import math
 
 def graph(log_file, save=True):
@@ -71,20 +71,37 @@ def graph(log_file, save=True):
 		current = zero_point + res
 		bw = 0
 
-#   print average_BW
-    plt.plot(times, instant_BW, 'r--', times, average_BW, 'g--', times, snd_cwnd, 'b*')
-    plt.xlabel('time')
-    plt.ylabel('Mbs')
-    if not os.path.exists('figs'):
-        os.mkdir('figs')
-    plt.savefig('figs/' + log_file[5:-4] + '.pdf')
+    # print average_BW
+    subplot(311)
+    plot(times, instant_BW, 'r--', times, average_BW, 'g--', times, snd_cwnd, 'b*')
+    grid(True)
+    title('CTCP Performance')
+    xlabel('time (s)')
+    ylabel('Mbs')
+
+    subplot(312)
+    plot(times, srtt, 'g-', times, rto, 'b-')
+    xlabel('time (s)')
+    ylabel('time (s)')
+
+    subplot(313)
+    plot(times, slr, 'r-')
+    xlabel('time (s)')
+
+    if save:
+        if not os.path.exists('figs'):
+            os.mkdir('figs')
+        savefig('figs/' + log_file[5:-4] + '.svg')
+    else:
+        show()
+
 
 def main(args):
-    graph(args[0])
+    graph(args[0], save=True)
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        sys.exit("Usage: ./scripts/grapher <ctcpsrv_output>")
+        sys.exit("Usage: ./scripts/grapher <srvctcp_output>")
     main(sys.argv[1:])
 
