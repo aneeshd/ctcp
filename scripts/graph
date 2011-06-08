@@ -6,7 +6,7 @@ import math
 
 def graph(log_file):
 
-    times = []
+    times      = []
     instant_BW = []
     average_BW = []
     blockno    = []
@@ -68,8 +68,6 @@ def graph(log_file):
                 srtt.append(values[4])
                 rto.append(values[5])
 
-
-
 		current = zero_point + res
 		bw = 0
 
@@ -79,7 +77,7 @@ def graph(log_file):
     plt.ylabel('Mbs')
     if not os.path.exists('figs'):
         os.mkdirs('figs')
-    plt.savefig('figs/figure1.pdf')
+    plt.savefig('figs/' + log_file[5:-4] + '.pdf')
 
 def main(args):
     graph(args[0])
