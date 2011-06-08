@@ -1,6 +1,7 @@
 VPATH	=	src
 BINDIR 	=	bin
 LOGDIR	=	logs
+FIGDIR	=	figs
 HERE	=	$(shell pwd)
 AT	=	@
 DOLLAR  = 	$$
@@ -72,9 +73,13 @@ rmlogs:
 	$(ECHO) Erasing the logs...
 	$(RM) -rf $(LOGDIR)
 
+.PHONY: rmfigs
+rmfigs:
+	$(ECHO) Erasing the figs...
+	$(RM) -rf $(FIGDIR)
+
 .PHONY: remake
 remake: clean all
-
 
 clictcp: $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
