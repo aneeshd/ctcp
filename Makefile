@@ -68,15 +68,15 @@ clean:
 	$(RM) -rf $(BINDIR)
 	$(RM) -rf srvctcp clictcp
 
-.PHONY: rmlogs
-rmlogs:
-	$(ECHO) Erasing the logs...
-	$(RM) -rf $(LOGDIR)
-
-.PHONY: rmfigs
-rmfigs:
-	$(ECHO) Erasing the figs...
-	$(RM) -rf $(FIGDIR)
+#.PHONY: rmlogs
+#rmlogs:
+#	$(ECHO) Erasing the logs...
+#	$(RM) -rf $(LOGDIR)
+#
+#.PHONY: rmfigs
+#rmfigs:
+#	$(ECHO) Erasing the figs...
+#	$(RM) -rf $(FIGDIR)
 
 .PHONY: remake
 remake: clean all
