@@ -80,24 +80,30 @@ def graph(log_file, save=True):
 		bw = 0
 
     # print average_BW
-    print len(blockno)
-    print len(snd_cwnd)
-    print len(average_BW)
-    subplot(311)
-    plot(times, instant_BW, 'r--', times, average_BW, 'g--', times, snd_cwnd, 'b*')
+    subplot(411)
+    plot(times, instant_BW, 'r--', times, average_BW, 'g--')
     grid(True)
     title('CTCP Performance')
-    xlabel('time (s)')
     ylabel('Mbs')
 
-    subplot(312)
+    # print congestion window
+    subplot(412)
+    plot(times, snd_cwnd, 'b*')
+    grid(True)
+    ylabel('Congestion window (packets)')
+
+    # print round trip time and rto
+    subplot(413)
     plot(times, srtt, 'g-', times, rto, 'b-')
-    xlabel('time (s)')
+    grid(True)
     ylabel('time (s)')
 
-    subplot(313)
+    # print loss rate
+    subplot(414)
     plot(times, slr, 'r-')
+    grid(True)
     xlabel('time (s)')
+    ylabel('loss rate')
 
     if save:
         if not os.path.exists('figs'):
