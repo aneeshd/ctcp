@@ -124,7 +124,6 @@ main (int argc, char** argv){
             err_sys("Error while trying to create/open a file");
         }
 
-
         if (debug > 3) openLog();
 
         doit(sockfd);
@@ -171,7 +170,6 @@ doit(socket_t sockfd){
         job->dof_request = (int) ceil(BLOCK_SIZE*1.1);
         priority_t coding_urgency = LOW;
         addJob(&workers, &coding_job, job, &free, coding_urgency);
-        dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
     }
 
 
@@ -317,16 +315,24 @@ send_segs(socket_t sockfd){
     //double p = total_loss/snd_una;
     double p = slr/(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
 
+
+    int ceiling = ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p));
     // The total number of dofs the we think we should be sending (for the current block) from now on
-    int dof_needed = MAX(0, (int) (ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p))) - CurrOnFly);
+    int dof_needed = MAX(0, ceiling - CurrOnFly); // This probably has a bug (casting (int) with the ceiling operate)
+
 
     if (dof_req - CurrOnFly < win){
         CurrWin = MIN(win, dof_needed);
         NextWin = win - CurrWin;
     }
 
+
+    pthread_mutex_lock( &blocks[curr_block%NUM_BLOCKS].block_mutex );
+    int dof_remain_cache = dof_remain[curr_block%NUM_BLOCKS]; // This is an instant snapshot. It still could be increasing as we release the lock
+    pthread_mutex_unlock( &blocks[curr_block%NUM_BLOCKS].block_mutex );
+
     // Check whether we have enough coded packets for current block
-    if (dof_remain[curr_block%NUM_BLOCKS] < dof_needed){
+    if (dof_remain_cache < dof_needed){
 
         printf("requesting more dofs: curr block %d,  dof_remain %d, dof_needed %d dof_req %d\n", curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req);
 
@@ -335,16 +341,20 @@ send_segs(socket_t sockfd){
         job->dof_request = MIN_DOF_REQUEST + dof_needed - dof_remain[curr_block%NUM_BLOCKS];
         priority_t coding_urgency = HIGH;
         addJob(&workers, &coding_job, job, &free, coding_urgency);
-        dof_remain[curr_block%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
     }
+
+    int CurrWin_cache = CurrWin;
 
     while (CurrWin>=1) {
 
         send_one(sockfd, curr_block);
         snd_nxt++;
         CurrWin--;
-        dof_remain[curr_block%NUM_BLOCKS]--;   // Update the internal dof counter
     }
+
+    pthread_mutex_lock( &blocks[curr_block%NUM_BLOCKS].block_mutex );
+    dof_remain[curr_block%NUM_BLOCKS] -= CurrWin_cache;   // Update the internal dof counter
+    pthread_mutex_unlock( &blocks[curr_block%NUM_BLOCKS].block_mutex );
 
     /* if (blocks[curr_block%NUM_BLOCKS].snd_nxt >= BLOCK_SIZE){
        printf("Calling for more - curr_blk %d, ack->dof_req %d,
@@ -355,24 +365,32 @@ send_segs(socket_t sockfd){
 
     if (curr_block != maxblockno){
 
+        pthread_mutex_lock( &blocks[ (curr_block+1) % NUM_BLOCKS].block_mutex );
+        int dof_remain_cache = dof_remain[ (curr_block + 1) % NUM_BLOCKS ]; // This is an instant snapshot. It still could be increasing as we release the lock
+        pthread_mutex_unlock( &blocks[ (curr_block + 1) % NUM_BLOCKS].block_mutex );
+
         // Check whether we have enough coded packets for next block
-        if (dof_remain[(curr_block+1)%NUM_BLOCKS] < NextWin){
+        if ( dof_remain_cache < NextWin){
             coding_job_t* job = malloc(sizeof(coding_job_t));
             job->blockno = curr_block+1;
             job->dof_request = MIN_DOF_REQUEST + NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
             priority_t coding_urgency = LOW;
             addJob(&workers, &coding_job, job, &free, coding_urgency);
-            dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
         }
 
+
+        int NextWin_cache = NextWin;
 
         // send from curr_block + 1
         while (NextWin>=1) {
             send_one(sockfd, curr_block+1);
             snd_nxt++;
             NextWin--;
-            dof_remain[(curr_block+1)%NUM_BLOCKS]--;   // Update the internal dof counter
         }
+
+        pthread_mutex_lock( &blocks[ (curr_block+1) % NUM_BLOCKS].block_mutex );
+        dof_remain[ (curr_block + 1) % NUM_BLOCKS ] -= NextWin_cache;
+        pthread_mutex_unlock( &blocks[ (curr_block + 1) % NUM_BLOCKS].block_mutex );
     }
 
 
@@ -392,19 +410,6 @@ send_one(socket_t sockfd, uint32_t blockno){
     // We should decide in send_segs whether we need more coded packets in the queue
     Data_Pckt *msg = (Data_Pckt*) q_pop(&coded_q[blockno%NUM_BLOCKS]);
 
-    /* // TEST ONLY
-       pthread_mutex_lock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
-
-       //fprintf(stdout, "\n queue size %d HEAD %d, TAIL %d\n",coded_q[blockno%NUM_BLOCKS].size, coded_q[blockno%NUM_BLOCKS].head, coded_q[blockno%NUM_BLOCKS].tail);
-
-       int k;
-       for (k=1; k <= coded_q[blockno%NUM_BLOCKS].size; k++){
-       Data_Pckt *tmp = (Data_Pckt*) coded_q[blockno%NUM_BLOCKS].q_[coded_q[blockno%NUM_BLOCKS].tail+k];
-       printf("tmp msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
-       }
-
-       pthread_mutex_unlock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
-    */
     // Correct the header information of the outgoing message
     msg->seqno = snd_nxt;
     msg->tstamp = getTime();
@@ -505,9 +510,9 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     /* RTO calculations */
     srtt = (1-g)*srtt + g*rtt;
     rttvar = (1-h)*rttvar + h*(fabs(rtt - srtt) - rttvar);
-    
+
     rto = beta*srtt;
-    // TODO: we may no longer need RTT_DECAY... 
+    // TODO: we may no longer need RTT_DECAY...
     // rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
 
     if (debug > 6) {
@@ -766,14 +771,13 @@ coding_job(void *a){
             dof_request = block_len;
         }
 
-
         // Generate random combination by picking rows based on order
-        int dof_ix, row;
-        for (dof_ix = 0; dof_ix < block_len; dof_ix++){
+        int dof_index, row;
+        for (dof_index = 0; dof_index < block_len; dof_index++){
             uint8_t num_packets = MIN(coding_wnd, block_len);
             Data_Pckt *msg = dataPacket(0, blockno, num_packets);
 
-            row = order[dof_ix];
+            row = order[dof_index];
 
             // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
             msg->start_packet = MIN(MAX(row%block_len - (coding_wnd-1)/2, 0), MAX(block_len - coding_wnd, 0));
@@ -791,30 +795,22 @@ coding_job(void *a){
                 msg->flag = PARTIAL_BLK;
                 msg->blk_len = block_len;
             }
-            /*
-              printf("Pushing ... block %d, row %d \t start pkt %d\n", blockno, row, msg->start_packet);
-              fprintf(stdout, "before BEFORE push  queue size %d HEAD %d, TAIL %d\n",coded_q[blockno%NUM_BLOCKS].size, coded_q[blockno%NUM_BLOCKS].head, coded_q[blockno%NUM_BLOCKS].tail);
 
-              if (coded_q[blockno%NUM_BLOCKS].size > 0){
-              int k;
-              for (k=1; k <= coded_q[blockno%NUM_BLOCKS].size; k++){
-              Data_Pckt *tmp = (Data_Pckt*) coded_q[blockno%NUM_BLOCKS].q_[coded_q[blockno%NUM_BLOCKS].tail+k];
-              printf("before BEFORE push buff msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
-              }
-              }
-            */
             q_push_back(&coded_q[blockno%NUM_BLOCKS], msg);
         }  // Done with forming the initial set of coded packets
+        dof_remain[blockno%NUM_BLOCKS] += block_len;  // Update the internal dof counter
         dof_request = MAX(0, dof_request - block_len);  // This many more to go
+
+
     }
 
     if (dof_request > 0){
         // Extra degrees of freedom are generated by picking a row randomly
 
         int i, j;
-        int dof_ix, row;
+        int dof_index, row;
 
-        for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
+        for (dof_index = 0; dof_index < dof_request; dof_index++){
 
             uint8_t num_packets = MIN(coding_wnd, block_len);
             Data_Pckt *msg = dataPacket(0, blockno, num_packets);
@@ -842,7 +838,7 @@ coding_job(void *a){
             }
             q_push_back(&coded_q[blockno%NUM_BLOCKS], msg);
         }  // Done with forming the remaining set of coded packets
-
+        dof_remain[blockno%NUM_BLOCKS] += dof_request;  // Update the internal dof counter
     }
     //printf("Almost done with block %d\n", blockno);
 
