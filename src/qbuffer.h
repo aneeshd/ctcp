@@ -24,6 +24,8 @@ typedef struct{
 } qbuffer_t;
 
 void q_init(qbuffer_t* buff, int max_size);
+int q_maxsize(qbuffer_t* buff);
+int q_remaining(qbuffer_t* buff);
 void q_push_back(qbuffer_t* buff, void* entry);
 void q_push_front(qbuffer_t* buff, void* entry);
 void* q_pop(qbuffer_t* buff);

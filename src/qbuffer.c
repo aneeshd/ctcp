@@ -16,6 +16,16 @@ static size_t modulo(ssize_t n, size_t m) {
   return (size_t) ret;
 }
 
+int
+q_maxsize(qbuffer_t* buff){
+  return buff->max_size;
+}
+
+int
+q_remaining(qbuffer_t* buff){
+  return (buff->max_size - buff->size);
+}
+
 void
 q_init(qbuffer_t* buff, int max_size){
 
