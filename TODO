@@ -78,3 +78,8 @@ requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
 requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
 requesting more dofs: curr block 8,  dof_remain 0, dof_needed 1 dof_req 1
 ----> requesting more dofs: curr block 8,  dof_remain -1, dof_needed 0 dof_req 1
+
+
+
+If this happens... nothing happens!-> BAAAD :(
+requesting more dofs: curr block 1, dof_remain 0, dof_needed 128, dof_req 128
