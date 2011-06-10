@@ -1,0 +1,12 @@
+******* 2011-06-10 #1 *******
+srvctcp gets stuck after printing the following message:
+"requesting more dofs: curr block 1, dof_remain 0, dof_needed 128, dof_req 128"
+
+Possible explanation:
+coding_job for block 1 is being handled by a worker thread, but the coded_q[block 1] is full. This leads the worker thread to wait for the main thread to pop and empty coded_q[block 1]. However, for the main thread to move on (to update "dof_remain[block 1] -= CurrWin_cache"), it needs the lock which the worker thread is holding onto. A deadlock. 
+
+Fix(?):
+coding_job no longer queues and makes coded packets according to *just* job->dof_request. It now checks to ensure that dof_request = MIN(job->dof_reuqest, q_remaining), where q_remaining is the number of slots open/remaining in the coded_q. It postpones any requests exceeding q_remaining (i.e. puts in another job in LOW priority with dof_request - q_remaining jobs). 
+
+-- Changed coding_job function. 
+-- Introduced a function to get access to the coded_q size in qbuffer. 
