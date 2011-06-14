@@ -169,9 +169,8 @@ doit(socket_t sockfd){
         coding_job_t* job = malloc(sizeof(coding_job_t));
         job->blockno = i;
         job->dof_request = (int) ceil(BLOCK_SIZE*1.1);
-        priority_t coding_urgency = LOW;
-        addJob(&workers, &coding_job, job, &free, coding_urgency);
         dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+        addJob(&workers, &coding_job, job, &free, LOW);
     }
 
 
@@ -333,9 +332,8 @@ send_segs(socket_t sockfd){
         coding_job_t* job = malloc(sizeof(coding_job_t));
         job->blockno = curr_block;
         job->dof_request = MIN_DOF_REQUEST + dof_needed - dof_remain[curr_block%NUM_BLOCKS];
-        priority_t coding_urgency = HIGH;
-        addJob(&workers, &coding_job, job, &free, coding_urgency);
         dof_remain[curr_block%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
+        addJob(&workers, &coding_job, job, &free, HIGH);
     }
 
     while (CurrWin>=1) {
@@ -360,9 +358,9 @@ send_segs(socket_t sockfd){
             coding_job_t* job = malloc(sizeof(coding_job_t));
             job->blockno = curr_block+1;
             job->dof_request = MIN_DOF_REQUEST + NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
-            priority_t coding_urgency = LOW;
-            addJob(&workers, &coding_job, job, &free, coding_urgency);
             dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
+            addJob(&workers, &coding_job, job, &free, LOW);
+
         }
 
 

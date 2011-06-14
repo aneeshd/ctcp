@@ -8,5 +8,5 @@ valpha 0.05
 vbeta 0.2
 thresh_init 0.75
 maxtime 0
-debug 5
+debug 6
 #droplist 200 200
