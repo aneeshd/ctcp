@@ -5,7 +5,7 @@
 
 // ------------ Connection parameters ---------------//
 #define BUFFSIZE    65535
-#define PORT "7890" // This is the port that the server is listenin to
+
 
 // ------------ CTCP parameters ---------------//
 #define NUM_BLOCKS 2
@@ -20,12 +20,12 @@
 
 // ------------ CTCP variables ---------------//
 FILE *db;     /* debug trace file */
-char* log_name; // Name of the log
+char* log_name = NULL; // Name of the log
 FILE *snd_file; // The file to be sent
 char *version = "$version 0.0$";
 char *configfile = "config";
-// Should make sure that 50 bytes is enough to store the port string
-char *port;
+
+char *port = "9999";  // This is the port that the server is listening to
 
 struct addrinfo *result; //This is where the info about the server is stored
 struct sockaddr cli_addr;
@@ -116,43 +116,10 @@ int marshallData(Data_Pckt msg, char* buf);
 bool unmarshallAck(Ack_Pckt* msg, char* buf);
 void duplicate(socket_t fd, int sackno);
 void restart(void);
-void openLog(void);
+void openLog(char* log_name);
 void* coding_job(void *a);
 void free_coding_job(void* a);
 void free_coded_pkt(void* a);
 
 #endif // ATOUCLI_H_
 
-
-//---------------- Variables no longer used -----------------------//
-//int dupacks;			/* consecutive dup acks recd */
-//unsigned int snd_una; 		/* last unacked */
-//unsigned int snd_fack;		/* Forward (right) most ACK */
-//unsigned int snd_recover;	/* One RTT beyond last good data, newreno */
-//int dup_thresh =3;		/* dup ACKs causing retransmit */
-//int sack = 0;			/* sack flag */
-//int fack = 0;			/* fack flag */
-//int floyd = 0;			/* Sally Floyd's aimd changes */
-//int droplist[11];  /* debuggin */
-//int burst_limit = 0;		/* most to send at once --- weak */
-//double kai = 0.;		/* Kelly scalable TCP cwnd += kai */
-//unsigned int bwe_pkt=1; // Bandwith estimate??
-//double bwertt, bwertt_max;
-//int vegas=0;                    /* vegas flag 0:off 1:last RTT  2:min rtt  */
-                                /*            3: avrg rtt  4: max rtt      */
-//int vss = 0;                    /* vegas slow start  0:exit ss  1: go to floyd*/
-//int max_ssthresh =0;            /* floyd modified slow start, ? consider frac */
-//int newreno = 0;		/* newreno flag */
-//int rampdown = 0;		/* enable wintrim */
-//int delack = 0;			/* delack flag */
-//int dup3s, dups,packs, maxack, rxmts,ooacks, cmuacks, dup_acks
-//static double delta
-//int vsscnt=0;  /* number of vegas slow start adjusts */
-//int vcnt;  /* number of rtt samples */
-//double vrttsum, vrttmax, vrttmin
-
-
-//---------------- Functions no longer used -----------------------//
-//void bwe_calc(double rtt);
-//int tcp_newreno(socket_t fd);
-//void usage(void);

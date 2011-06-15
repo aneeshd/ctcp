@@ -44,13 +44,26 @@ main (int argc, char** argv){
     struct addrinfo hints, *servinfo;
     socket_t sockfd; /* network file descriptor */
     int rv;
+    int c;
 
     srandom(getpid());
 
-    if (argc > 1) configfile = argv[1];
+    while((c = getopt(argc,argv, "c:p:l:")) != -1)
+    {
+        switch (c)
+        {
+        case 'c':
+            configfile = optarg;
+        case 'p':
+            port       = optarg;
+        case 'l':
+            log_name   = optarg;
+        }
+    }
 
-    signal(SIGINT,ctrlc);
     readConfig();
+
+    signal(SIGINT, ctrlc);
 
     if (thresh_init) {
         snd_ssthresh = thresh_init*MAX_CWND;
@@ -125,7 +138,7 @@ main (int argc, char** argv){
     }
 
 
-    if (debug > 3) openLog();
+    if (debug > 3) openLog(log_name);
 
     doit(sockfd);
     terminate(sockfd); // terminate
@@ -620,7 +633,8 @@ readConfig(void){
     char line[128], var[32];
     double val;
     time_t t;
-    port = malloc(10);
+
+
 
     fp = fopen(configfile,"r");
 
@@ -643,7 +657,6 @@ readConfig(void){
         else if (strcmp(var,"maxpkts")==0) maxpkts = val;
         else if (strcmp(var,"maxidle")==0) maxidle = val;
         else if (strcmp(var,"maxtime")==0) maxtime = val;
-        else if (strcmp(var,"port")==0) sprintf(port, "%d", (int)val);
         else if (strcmp(var,"valpha")==0) valpha = val;
         else if (strcmp(var,"vbeta")==0) vbeta = val;
         else if (strcmp(var,"sndbuf")==0) sndbuf = val;
@@ -652,9 +665,9 @@ readConfig(void){
         else printf("config unknown: %s\n",line);
     }
 
-    t=time(NULL);
+    t = time(NULL);
     printf("*** CTCP %s ***\n",version);
-    printf("config: port %s debug %d, %s",port,debug, ctime(&t));
+    printf("config: port %s debug %d, %s", port,debug, ctime(&t));
     printf("config: initsegs %d tick %f timeout %f\n", initsegs,tick,timeout);
     printf("config: maxidle %d maxtime %d\n",maxidle, maxtime);
     printf("config: thresh_init %f ssincr %d\n", thresh_init, ssincr);
@@ -914,21 +927,26 @@ freeBlock(uint32_t blockno){
 }
 
 void
-openLog(void){
-    time_t rawtime;
-    struct tm* ptm;
-    time(&rawtime);
-    ptm = localtime(&rawtime);
+openLog(char* log_name){
 
-    log_name = malloc(5*sizeof(int) + 9); // This is the size of the formatted string + 1
+    if(!log_name)
+    {
 
-    sprintf(log_name, "logs/%d-%02d-%d %02d:%02d.%02d.log",
-            ptm->tm_year + 1900,
-            ptm->tm_mon + 1,
-            ptm->tm_mday,
-            ptm->tm_hour,
-            ptm->tm_min,
-            ptm->tm_sec);
+        time_t rawtime;
+        struct tm* ptm;
+        time(&rawtime);
+        ptm = localtime(&rawtime);
+
+        log_name = malloc(5*sizeof(int) + 9); // This is the size of the formatted string + 1
+
+        sprintf(log_name, "logs/%d-%02d-%02d %02d:%02d.%02d.log",
+                ptm->tm_year + 1900,
+                ptm->tm_mon + 1,
+                ptm->tm_mday,
+                ptm->tm_hour,
+                ptm->tm_min,
+                ptm->tm_sec);
+    }
 
     printf("Size %Zd\n", strlen(log_name));
     printf("The log name is %s\n", log_name);
