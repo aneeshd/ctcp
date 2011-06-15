@@ -433,8 +433,6 @@ send_one(socket_t sockfd, uint32_t blockno){
     }
 
 
-    fprintf(db,"%f %d %f %f %f %f xmt\n", msg->tstamp-et, blockno, snd_cwnd, slr, srtt, rto);
-
     // Marshall msg into buf
     int message_size = marshallData(*msg, buff);
 
@@ -570,29 +568,28 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
                                curr_block, ackno, snd_nxt, snd_una);
         badacks++;
     } else {
-
+      fprintf(db,"%f %d %f %f %f %f xmt\n", getTime()-et, ack->blockno, snd_cwnd, slr, srtt, rto);
+          
         if (ackno <= snd_una){
             //late ack
             if (debug > 5) fprintf(stderr,
                                    "Late ack: curr block %d badack no %d snd_nxt %d snd_una %d\n",
                                    curr_block, ackno, snd_nxt, snd_una);
         } else {
-            // good ack
-            goodacks++;
+            // good ack TODO
+          goodacks++;
 
-            int losses = ackno - (snd_una +1);
-
+          int losses = ackno - (snd_una +1);
             /*
               if (losses > 0){
               printf("Loss report curr block %d ackno - snd_una %d\n", curr_block, ackno - snd_una);
               }
             */
+          total_loss += losses;
+          double loss_tmp =  pow(1-slr_mem, losses);
+          slr = loss_tmp*(1-slr_mem)*slr + (1 - loss_tmp);
 
-            total_loss += losses;
-            double loss_tmp =  pow(1-slr_mem, losses);
-            slr = loss_tmp*(1-slr_mem)*slr + (1 - loss_tmp);
-
-            snd_una = ackno;
+          snd_una = ackno;
         }
 
         dof_req = ack->dof_req;  // Updated the requested dofs for the current block
