@@ -1,4 +1,7 @@
 *.o
+*.pyc
+*.avi
+*.jpg
 .buildmode
 clictcp
 srvctcp
