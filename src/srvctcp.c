@@ -110,28 +110,28 @@ main (int argc, char** argv){
 
 
     char *file_name = malloc(1024);
-    while(1){
-        fprintf(stdout, "\nWaiting for requests...\n");
-        if((numbytes = recvfrom(sockfd, file_name, 1024, 0,
-                                &cli_addr, &clilen)) == -1){
-            //printf("%s\n", file_name);
-            err_sys("recvfrom: Failed to receive the request\n");
-        }
-
-        printf("sending %s\n", file_name);
-
-        if ((snd_file = fopen(file_name, "rb"))== NULL){
-            err_sys("Error while trying to create/open a file");
-        }
-
-
-        if (debug > 3) openLog();
-
-        doit(sockfd);
-        terminate(sockfd); // terminate
-        endSession();
-        restart();
+//    while(1){
+    fprintf(stdout, "\nWaiting for requests...\n");
+    if((numbytes = recvfrom(sockfd, file_name, 1024, 0,
+                            &cli_addr, &clilen)) == -1){
+        //printf("%s\n", file_name);
+        err_sys("recvfrom: Failed to receive the request\n");
     }
+
+    printf("sending %s\n", file_name);
+
+    if ((snd_file = fopen(file_name, "rb"))== NULL){
+        err_sys("Error while trying to create/open a file");
+    }
+
+
+    if (debug > 3) openLog();
+
+    doit(sockfd);
+    terminate(sockfd); // terminate
+    endSession();
+//    restart();
+//    }
     return 0;
 }
 
@@ -503,9 +503,9 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     /* RTO calculations */
     srtt = (1-g)*srtt + g*rtt;
     rttvar = (1-h)*rttvar + h*(fabs(rtt - srtt) - rttvar);
-    
+
     rto = beta*srtt;
-    // TODO: we may no longer need RTT_DECAY... 
+    // TODO: we may no longer need RTT_DECAY...
     // rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
 
     if (debug > 6) {
