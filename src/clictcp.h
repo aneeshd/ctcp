@@ -15,7 +15,7 @@
 #define FILE_NAME "Avatar.mov"
 #define NUM_BLOCKS 2
 Coded_Block_t blocks[NUM_BLOCKS];
-uint8_t coding_wnd = CODING_WND;
+//uint8_t coding_wnd = CODING_WND;
 uint32_t curr_block;
 
 struct sockaddr srv_addr;
