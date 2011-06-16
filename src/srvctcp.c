@@ -941,34 +941,73 @@ freeBlock(uint32_t blockno){
 void
 openLog(char* log_name){
 
-    if(!log_name)
+    char* file;
+    time_t rawtime;
+    struct tm* ptm;
+    time(&rawtime);
+    ptm = localtime(&rawtime);
+
+
+    //---------- Remake Log and Fig Directories ----------------//
+
+    if(!mkdir("logs", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+        perror("An error occurred while making the logs directory");
+    }
+
+    if(!mkdir("figs", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+        perror("An error occurred while making the figs directory");
+    }
+
+    char* dir_name = malloc(15);
+
+    sprintf(dir_name, "logs/%d-%02d-%02d",
+            ptm->tm_year + 1900,
+            ptm->tm_mon + 1,
+            ptm->tm_mday);
+
+    if(!mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+        perror("An error occurred while making the log date directory");
+    }
+
+    sprintf(dir_name, "figs/%d-%02d-%02d",
+            ptm->tm_year + 1900,
+            ptm->tm_mon + 1,
+            ptm->tm_mday);
+
+    if(!mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+        perror("An error occurred while making the fig date directory");
+    }
+
+    //------------------------------------------------//
+
+    int auto_log = !log_name;
+
+    if(auto_log)
     {
+        file = malloc(12);
+        log_name = malloc(28);
 
-        time_t rawtime;
-        struct tm* ptm;
-        time(&rawtime);
-        ptm = localtime(&rawtime);
-
-        log_name = malloc(5*sizeof(int) + 9); // This is the size of the formatted string + 1
-
-        sprintf(log_name, "logs/%d-%02d-%02d %02d:%02d.%02d.log",
-                ptm->tm_year + 1900,
-                ptm->tm_mon + 1,
-                ptm->tm_mday,
+        sprintf(file, "%02d:%02d.%02d.log",
                 ptm->tm_hour,
                 ptm->tm_min,
                 ptm->tm_sec);
+
+        sprintf(log_name, "%s/%s",
+                dir_name,
+                file );
     }
 
-    printf("Size %Zd\n", strlen(log_name));
-    printf("The log name is %s\n", log_name);
-
-    mkdir("logs", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-
     db = fopen(log_name, "w+");
+
     if(!db){
-        fprintf(stdout, "An error ocurred while trying to open the log file\n");
-        perror("An error ocurred while trying to open the log file");
+        perror("An error ocurred while opening the log file");
+    }
+
+    if(auto_log)
+    {
+        free(file);
+        free(dir_name);
+        free(log_name);
     }
 }
 
