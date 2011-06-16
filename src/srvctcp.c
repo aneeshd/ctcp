@@ -38,6 +38,16 @@ ctrlc(){
     exit(1);
 }
 
+void
+usage()
+{
+    fprintf(stderr, "Usage: srvctcp [-options] \n                   \
+      -c    configuration file to be used ex: config/vegas\n        \
+      -l    set the log name. Defaults to current datetime\n        \
+      -p    port number to listen to. Defaults to 9999\n");
+    exit(0);
+}
+
 int
 main (int argc, char** argv){
     struct sockaddr_storage;
@@ -54,10 +64,15 @@ main (int argc, char** argv){
         {
         case 'c':
             configfile = optarg;
+            break;
         case 'p':
             port       = optarg;
+            break;
         case 'l':
             log_name   = optarg;
+            break;
+        default:
+            usage();
         }
     }
 
@@ -569,7 +584,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
         badacks++;
     } else {
       fprintf(db,"%f %d %f %f %f %f xmt\n", getTime()-et, ack->blockno, snd_cwnd, slr, srtt, rto);
-          
+
         if (ackno <= snd_una){
             //late ack
             if (debug > 5) fprintf(stderr,
