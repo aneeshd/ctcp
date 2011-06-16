@@ -16,12 +16,10 @@
 
 void
 usage(void) {
-    fprintf(stderr, "Usage: atoucli [-options]\n\
-      -s   enable SACK (default reno)\n                            \
-      -d ## amount to delay ACKs (ms) (default 0, often 200)\n      \
-     -p ##	port number to receive on (default 7890)\n              \
--b ##	set socket receive buffer size (default 8192)\n                 \
--D ##  enable debug level\n");
+    fprintf(stderr, "Usage: clictcp [-options] \n                   \
+      -p    port number to receive on. Defauls to 9999\n              \
+      -b    set socket receive buffer size (default 8192)\n         \
+      -D     enable debug level\n");
     exit(0);
 }
 
