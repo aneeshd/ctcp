@@ -332,8 +332,8 @@ bldack(Data_Pckt *msg, bool match){
     }
     acks++;
 
-    free(msg->packet_coeff);
-    free(msg->payload);
+    //free(msg->packet_coeff);
+    //free(msg->payload);
 
     if (debug > 6){
         printf("Sent an ACK: ackno %d blockno %d\n", ack->ackno, ack->blockno);
