@@ -36,15 +36,18 @@ char *buff = (char *)dbuff;
 uint32_t curr_block; // Current block number
 bool done;
 Block_t blocks[NUM_BLOCKS];
-int coding_wnd = CODING_WND;
+int coding_wnd = INIT_CODING_WND;
 uint32_t maxblockno = 0; // use highest blockno possible, set when we reach the end of the file
 int NextBlockOnFly = 0;
 uint32_t OnFly[MAX_CWND];
 int dof_req = BLOCK_SIZE;
 
+double slr_wnd_map[10] = {0, 0.0002, 0.002, 0.015, 0.025, 0.042, 0.052, 0.062, 0.075, 1};
+
 // ------------ Multithreading related variables ---------------//
 qbuffer_t coded_q[NUM_BLOCKS];
 thr_pool_t workers;
+pthread_rwlock_t coding_wnd_lock; // Allows locking the coding window while reading/writing coding_wnd
 pthread_mutex_t file_mutex;  // Allows locking the file while reading a block
 /*
   Internal dof counter:
@@ -111,6 +114,7 @@ void handle_ack(socket_t fd, Ack_Pckt* ack);
 void readBlock(uint32_t blockno);
 void freeBlock(uint32_t blockno);
 void send_one(socket_t fd, unsigned int n);
+void update_coding_wnd(void);
 void advance_cwnd(void);
 int marshallData(Data_Pckt msg, char* buf);
 bool unmarshallAck(Ack_Pckt* msg, char* buf);

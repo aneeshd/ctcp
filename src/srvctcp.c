@@ -96,6 +96,9 @@ main (int argc, char** argv){
     // initialize the thread pool
     thrpool_init( &workers, THREADS );
 
+    // Initialize the coding_wnd_lock
+    pthread_rwlock_init(&coding_wnd_lock, NULL);
+
     // Initialize the file mutex and position
     pthread_mutex_init(&file_mutex, NULL);
     file_position = 1; // Initially called to read the first block
@@ -231,13 +234,12 @@ doit(socket_t sockfd){
 
             if (debug > 1){
                 fprintf(stderr,
-                        "timerxmit %6.2f blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  coding wnd %d\n",
+                        "timerxmit %6.2f blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  \n",
                         t-et,curr_block,
                         blocks[curr_block%NUM_BLOCKS].len,
                         snd_una,
                         snd_nxt,
-                        (int)snd_cwnd,
-                        coding_wnd);
+                        (int)snd_cwnd);
             }
 
             timeouts++;
@@ -329,6 +331,8 @@ send_segs(socket_t sockfd){
 
         printf("requesting more dofs: curr block %d,  dof_remain %d, dof_needed %d dof_req %d\n", curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req);
 
+        update_coding_wnd();
+        
         coding_job_t* job = malloc(sizeof(coding_job_t));
         job->blockno = curr_block;
         job->dof_request = MIN_DOF_REQUEST + dof_needed - dof_remain[curr_block%NUM_BLOCKS];
@@ -355,11 +359,13 @@ send_segs(socket_t sockfd){
 
         // Check whether we have enough coded packets for next block
         if (dof_remain[(curr_block+1)%NUM_BLOCKS] < NextWin){
-            coding_job_t* job = malloc(sizeof(coding_job_t));
-            job->blockno = curr_block+1;
-            job->dof_request = MIN_DOF_REQUEST + NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
-            dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
-            addJob(&workers, &coding_job, job, &free, LOW);
+          update_coding_wnd();
+
+          coding_job_t* job = malloc(sizeof(coding_job_t));
+          job->blockno = curr_block+1;
+          job->dof_request = MIN_DOF_REQUEST + NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
+          dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
+          addJob(&workers, &coding_job, job, &free, LOW);
 
         }
 
@@ -408,15 +414,14 @@ send_one(socket_t sockfd, uint32_t blockno){
     msg->tstamp = getTime();
 
     if (debug > 6){
-        printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d  coding wnd %d\n",
+        printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d \n",
                blockno,
                blocks[curr_block%NUM_BLOCKS].len,
                msg->seqno,
                snd_una,
                snd_nxt,
                msg->start_packet,
-               (int)snd_cwnd,
-               coding_wnd);
+               (int)snd_cwnd);
     }
 
 
@@ -527,23 +532,28 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
         freeBlock(curr_block);
         q_free(&coded_q[curr_block%NUM_BLOCKS], &free_coded_pkt);
 
-
         pthread_mutex_unlock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
 
         if (!maxblockno){
-            //readBlock(curr_block+2);
-            coding_job_t* job = malloc(sizeof(coding_job_t));
-            job->blockno = curr_block+2;
-            job->dof_request = ceil(BLOCK_SIZE*( 1.04 + 2*slr ));
-            dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+          update_coding_wnd();
 
-            addJob(&workers, &coding_job, job, &free, LOW);
+          //readBlock(curr_block+2);
+          coding_job_t* job = malloc(sizeof(coding_job_t));
+          job->blockno = curr_block+2;
+          job->dof_request = ceil(BLOCK_SIZE*( 1.04 + 2*slr ));
+          dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+
+          addJob(&workers, &coding_job, job, &free, LOW);
         }
 
         curr_block++;
 
         if (debug > 5 && curr_block%10==0){
-            printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms\n", curr_block, snd_cwnd, 100*slr, srtt*1000);
+          pthread_rwlock_rdlock(&coding_wnd_lock);  // acquire the read lock for coding_wnd
+
+          printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms Coding_wnd %d \n", curr_block, snd_cwnd, 100*slr, srtt*1000, coding_wnd);
+
+          pthread_rwlock_unlock(&coding_wnd_lock);  // acquire the read lock for coding_wnd
         }
     }
 
@@ -661,6 +671,27 @@ readConfig(void){
 
 }
 
+//----------------Dynamic Coding Window Selection--------------//
+void
+update_coding_wnd(void){
+  
+  // Acquire the exclusive lock for writing into coding_wnd
+  pthread_rwlock_wrlock(&coding_wnd_lock);
+
+  // Update the Coding Window based on SLR
+  int i;
+  for (i = 0; slr >= slr_wnd_map[i]; i++);
+
+  if (coding_wnd != i){
+    printf("Updated the coding window to %d \t Current block %d\n", i, curr_block);
+    coding_wnd = i;
+  }
+
+  // release the lock
+  pthread_rwlock_unlock(&coding_wnd_lock);
+
+}
+
 
 
 
@@ -714,7 +745,9 @@ coding_job(void *a){
     int dof_request = job->dof_request;
 
     pthread_mutex_lock(&blocks[blockno%NUM_BLOCKS].block_mutex);
-
+    
+    pthread_rwlock_rdlock(&coding_wnd_lock);  // acquire the read lock for coding_wnd
+    
     // Check whether the requested blockno is already read, if not, read it from the file
     // generate the first set of degrees of freedom according toa  random permutation
 
@@ -842,6 +875,8 @@ coding_job(void *a){
     //printf("Almost done with block %d\n", blockno);
 
 release:
+
+    pthread_rwlock_unlock(&coding_wnd_lock);
 
     pthread_mutex_unlock( &blocks[blockno%NUM_BLOCKS].block_mutex );
 
