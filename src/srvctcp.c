@@ -168,7 +168,7 @@ doit(socket_t sockfd){
     for (i=1; i <= 2; i++){
         coding_job_t* job = malloc(sizeof(coding_job_t));
         job->blockno = i;
-        job->dof_request = (int) ceil(BLOCK_SIZE*1.1);
+        job->dof_request = (int) ceil(BLOCK_SIZE*1.0);
         job->coding_wnd = INIT_CODING_WND;
         dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
         addJob(&workers, &coding_job, job, &free, LOW);
@@ -314,7 +314,7 @@ send_segs(socket_t sockfd){
     //Redundancy for transition
 
     //double p = total_loss/snd_una;
-    double p = slr/(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
+    double p = slr;///(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
 
     // The total number of dofs the we think we should be sending (for the current block) from now on
     int dof_needed = MAX(0, (int) (ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p))) - CurrOnFly);
@@ -327,7 +327,7 @@ send_segs(socket_t sockfd){
     // Check whether we have enough coded packets for current block
     if (dof_remain[curr_block%NUM_BLOCKS] < dof_needed){
 
-        printf("requesting more dofs: curr block %d,  dof_remain %d, dof_needed %d dof_req %d\n", curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req);
+      // printf("requesting more dofs: curr block %d,  dof_remain %d, dof_needed %d dof_req %d\n", curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req);
 
         coding_job_t* job = malloc(sizeof(coding_job_t));
         job->blockno = curr_block;
@@ -337,11 +337,11 @@ send_segs(socket_t sockfd){
         // Update the coding_wnd based on the slr (Use look-up table)
         int coding_wnd;
         for (coding_wnd = 0; slr >= slr_wnd_map[coding_wnd]; coding_wnd++);
-        job->coding_wnd = coding_wnd;
+        job->coding_wnd = coding_wnd+5;
 
         if (dof_req <= 3) {
           job->coding_wnd = MAX_CODING_WND;
-          printf("Requested jobs with coding window %d - number of new packets %d  \n", job->coding_wnd, job->dof_request);
+          printf("Requested jobs with coding window %d - blockno %d dof_needed %d  \n", job->coding_wnd, curr_block, dof_needed);
         }
 
         addJob(&workers, &coding_job, job, &free, HIGH);
@@ -550,7 +550,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
           //readBlock(curr_block+2);
           coding_job_t* job = malloc(sizeof(coding_job_t));
           job->blockno = curr_block+2;
-          job->dof_request = ceil(BLOCK_SIZE*( 1.04 + 2*slr ));
+          //job->dof_request = ceil(BLOCK_SIZE*( 1.04 + 2*slr ));
+          job->dof_request = BLOCK_SIZE;
           dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
 
           // Update the coding_wnd based on the slr (Use look-up table)
