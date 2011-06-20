@@ -77,6 +77,8 @@ typedef struct{
   uint8_t len;
   char** rows; // Matrix of the coefficients of the coded packets
   char** content; // Contents of the coded packets
+  int* row_len;  // maximum number of non-zeros in each row
+  int max_coding_wnd; //largest number of packets mixed together
 } Coded_Block_t;
 
 double getTime(void);
