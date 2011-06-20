@@ -829,15 +829,18 @@ coding_job(void *a){
 
         int i, j;
         int dof_ix, row;
+        uint8_t num_packets = MIN(coding_wnd, block_len);
+        int partition_size = ceil(block_len/num_packets);
 
         for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
 
-            uint8_t num_packets = MIN(coding_wnd, block_len);
             Data_Pckt *msg = dataPacket(0, blockno, num_packets);
 
-            row = random();
+            row = (random()%partition_size)*num_packets;
             // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
-            msg->start_packet = MIN(MAX(row%block_len - (coding_wnd-1)/2, 0), MAX(block_len - coding_wnd, 0));
+            msg->start_packet = MIN(row, block_len - num_packets);
+
+            //printf("selected row: %d, start packet %d \n", row, msg->start_packet);
 
             memset(msg->payload, 0, PAYLOAD_SIZE);
 
