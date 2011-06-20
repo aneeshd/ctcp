@@ -314,7 +314,7 @@ send_segs(socket_t sockfd){
     //Redundancy for transition
 
     //double p = total_loss/snd_una;
-    double p = slr;///(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
+    double p = slr/(2.0-slr);   // Compensate for server's over estimation of the loss rate caused by lost acks
 
     // The total number of dofs the we think we should be sending (for the current block) from now on
     int dof_needed = MAX(0, (int) (ceil((dof_req + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req*p) ) )/(1-p))) - CurrOnFly);
@@ -327,7 +327,7 @@ send_segs(socket_t sockfd){
     // Check whether we have enough coded packets for current block
     if (dof_remain[curr_block%NUM_BLOCKS] < dof_needed){
 
-      // printf("requesting more dofs: curr block %d,  dof_remain %d, dof_needed %d dof_req %d\n", curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req);
+      //printf("requesting more dofs: curr block %d,  dof_remain %d, dof_needed %d dof_req %d\n", curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req);
 
         coding_job_t* job = malloc(sizeof(coding_job_t));
         job->blockno = curr_block;
@@ -337,7 +337,7 @@ send_segs(socket_t sockfd){
         // Update the coding_wnd based on the slr (Use look-up table)
         int coding_wnd;
         for (coding_wnd = 0; slr >= slr_wnd_map[coding_wnd]; coding_wnd++);
-        job->coding_wnd = coding_wnd+5;
+        job->coding_wnd = coding_wnd;
 
         if (dof_req <= 3) {
           job->coding_wnd = MAX_CODING_WND;
@@ -829,12 +829,16 @@ coding_job(void *a){
 
         int i, j;
         int dof_ix, row;
-        uint8_t num_packets = MIN(coding_wnd, block_len);
-        int partition_size = ceil(block_len/num_packets);
+
+        int coding_wnd_slope = floor((MAX_CODING_WND - coding_wnd)/dof_request);
 
         for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
 
-            Data_Pckt *msg = dataPacket(0, blockno, num_packets);
+          coding_wnd += coding_wnd_slope;
+
+          uint8_t num_packets = MIN(coding_wnd, block_len);
+          int partition_size = ceil(block_len/num_packets);
+          Data_Pckt *msg = dataPacket(0, blockno, num_packets);
 
             row = (random()%partition_size)*num_packets;
             // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
