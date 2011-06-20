@@ -16,13 +16,16 @@ def graph(log_file, save=True):
     average_BW = []
     blockno    = []
     snd_cwnd   = []
+    ssthresh    = []
     slr        = []
+    slr_long   = []
     srtt       = []
     rto        = []
+    rtt        = []
 
     current = 0.1
     mss     = 1398
-    res     = 0.2
+    res     = 0.01
     abw     = 0
     bw      = 0
 
@@ -51,9 +54,12 @@ def graph(log_file, save=True):
 
                 blockno.append(values[1])
                 snd_cwnd.append(values[2])
-                slr.append(values[3])
-                srtt.append(values[4])
-                rto.append(values[5])
+                ssthresh.append(values[3])
+                slr.append(values[4])
+                slr_long.append(values[5])
+                srtt.append(values[6])
+                rto.append(values[7])
+                rtt.append(values[8])
 
 
                 current = res + current
@@ -75,12 +81,20 @@ def graph(log_file, save=True):
 		# need to appen twice to account for zero_point
                 snd_cwnd.append(values[2])
                 snd_cwnd.append(values[2])
-                slr.append(values[3])
-                slr.append(values[3])
-                srtt.append(values[4])
-                srtt.append(values[4])
-                rto.append(values[5])
-                rto.append(values[5])
+
+                ssthresh.append(values[3])
+                ssthresh.append(values[3])
+                slr.append(values[4])
+                slr.append(values[4])
+                slr_long.append(values[5])
+                slr_long.append(values[5])
+                srtt.append(values[6])
+                srtt.append(values[6])
+                rto.append(values[7])
+                rto.append(values[7])
+                rtt.append(values[8])
+                rtt.append(values[8])
+
 
 
 		current = zero_point + res
@@ -95,19 +109,19 @@ def graph(log_file, save=True):
 
     # print congestion window
     subplot(412)
-    plot(times, snd_cwnd, 'b*')
+    plot(times, snd_cwnd, 'b*', times, ssthresh, 'r-')
     grid(True)
     ylabel('Congestion window (packets)')
 
     # print round trip time and rto
     subplot(413)
-    plot(times, srtt, 'g-', times, rto, 'b-')
+    plot(times, rtt, 'b-', times, srtt, 'r-')
     grid(True)
     ylabel('time (s)')
 
     # print loss rate
     subplot(414)
-    plot(times, slr, 'r-')
+    plot(times, slr, 'r-', times, slr_long, 'b-')
     grid(True)
     xlabel('time (s)')
     ylabel('loss rate')

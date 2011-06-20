@@ -10,10 +10,12 @@
 // ------------ CTCP parameters ---------------//
 #define NUM_BLOCKS 2
 #define THREADS 5
-#define RTT_DECAY 3 // This is used as the factor to approximate the rto
+//#define RTT_DECAY 3 // This is used as the factor to approximate the rto
 #define ALPHA 2.32  // The number of std to deviate from mean to get 1% target error probability
 #define MIN_DOF_REQUEST 5
 #define SND_CWND 64
+#define SLR_LONG_INIT 0.05
+#define INIT_RTO 1
 
 /*************************************************************
  ************************************************************/
@@ -67,32 +69,32 @@ unsigned int file_position; // Indicates the block number at which we are in the
 /* configurable variables */
 
 int debug;
-double tick = 0.2;  /* recvfrom timeout -- select */
-double timeout=0.5; /* pkt timeout */
 int idle=0;         /* successive timeouts */
 int maxidle=10;     /* max idle before abort */
 int maxpkts=0;      /* test duration */
 int maxtime=10;     /* test duration */
 
+
 // TODO actual use rcvrwin!
 int rcvrwin = 20;         /* rcvr window in mss-segments */
 int increment = 1;        /* cc increment */
-double multiplier = 0.5;  /* cc backoff */
+double multiplier = 0.5;  /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
 int ssincr =1;            /* slow start increment */
-double thresh_init = 1.0; /* fraction of rcvwind for initial ssthresh*/
+// double thresh_init = 1.0; /* fraction of rcvwind for initial ssthresh*/
 int initsegs = 2;         /* slowstart initial */
 
 //--------------- vegas working variables ------------//
-double valpha=0.01, vbeta=0.3;  /* vegas parameters */
+double valpha=0.05, vbeta=0.2;  /* vegas parameters (in terms of number of packets) */
 double vdelta;
 double max_delta=0;             /* vegas like tracker */
-int vinss=1;                    /* in vegas slow start */
+int slow_start=1;                    /* in vegas slow start */
 int vdecr, v0 ;                 /* vegas decrements or no adjusts */
 
 /* stats */
 int ipkts,opkts,badacks,timeouts,enobufs, goodacks;
-double et,minrtt=999999., maxrtt=0, avrgrtt;
-static double rto,srtt=0,rttvar=3., h=.25, g=1.0/BLOCK_SIZE, beta=2;
+double start_time, total_time, maxrtt=0, avrgrtt;
+static double rto,srtt=0, minrtt = 999999;//,rttvar=3.
+static double h=.25, g=1.0/BLOCK_SIZE, beta=5;
 double due,rcvt;
 
 //---------------- Function Definitions -----------------------//

@@ -25,14 +25,17 @@ double idle_total = 0; // The total time the server has spent waiting for the ac
 double coding_delay = 0; // Total time spent on encoding
 int total_loss = 0;
 double slr = 0; // Smoothed loss rate
+double slr_long = SLR_LONG_INIT;
+double slr_longstd = 0;
 double slr_mem = 1.0/BLOCK_SIZE; // The memory of smoothing function
+double slr_longmem = 1.0/(BLOCK_SIZE*10); // Long term memory smoothing constant
 
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
 void
 ctrlc(){
-    et = getTime()-et;
+    total_time = getTime()-start_time;
     maxpkts=snd_max;
     endSession();
     exit(1);
@@ -80,8 +83,8 @@ main (int argc, char** argv){
 
     signal(SIGINT, ctrlc);
 
-    if (thresh_init) {
-        snd_ssthresh = thresh_init*MAX_CWND;
+    if (multiplier) {
+        snd_ssthresh = multiplier*MAX_CWND;
     } else {
         snd_ssthresh = 2147483647;  /* normal TCP, infinite */
     }
@@ -169,8 +172,6 @@ main (int argc, char** argv){
 int
 doit(socket_t sockfd){
     int i,r;
-    double t;
-
     i=sizeof(sndbuf);
 
     //--------------- Setting the socket options --------------------------------//
@@ -185,7 +186,7 @@ doit(socket_t sockfd){
     memset(buff,0,BUFFSIZE);        /* pretouch */
 
     /* send out initial segments, then go for it */
-    et = getTime();
+    start_time = getTime();
 
     // Initialize the OnFly vectore
     for(i=0; i < MAX_CWND; i++) OnFly[i] = 0;
@@ -208,8 +209,7 @@ doit(socket_t sockfd){
 
     // if (bwe_on) bwe_pkt = snd_nxt;
     // if (maxpkts == 0) maxpkts = 1000000000; // Default time is 10 seconds
-    rto = tick;
-    due = getTime() + timeout;  /* when una is due */
+    rto = INIT_RTO;
 
     // This is where the segments are sent
     send_segs(sockfd);
@@ -220,14 +220,15 @@ doit(socket_t sockfd){
     while(!done){
 
         idle_timer = getTime();
-        r = timedread(sockfd, tick);
+        r = timedread(sockfd, rto);
 
         idle_total += getTime() - idle_timer;
 
         if (r > 0) {  /* ack ready */
 
             // The recvfrom should be done to a separate buffer (not buff)
-            r= recvfrom(sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen); // TODO maybe we can set flags so that recvfrom has a timeout of tick seconds
+            r= recvfrom(sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen); 
+            // TODO maybe we can set flags so that recvfrom has a timeout of tick seconds
 
             // Unmarshall the ack from the buff
             unmarshallAck(ack, buff);
@@ -244,51 +245,51 @@ doit(socket_t sockfd){
 
         } else if (r < 0) {
             err_sys("select");
-        }
+        } else if (r==0) {
+          // if (maxtime && (t-et) > maxtime) maxpkts = snd_max; /*time up*/
+          // No need to do maxtime abort anymore. 
+          /* see if a packet has timedout */
+          
+          if (idle > maxidle) {
+            /* give up */
+            printf("*** idle abort ***\n");
+              maxpkts=snd_max;
+              break;
+          }
+            
+          if (debug > 1){
+            fprintf(stderr,
+                    "timerxmit %6.2f blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  coding wnd %d\n",
+                    getTime()-start_time,curr_block,
+                    blocks[curr_block%NUM_BLOCKS].len,
+                    snd_una,
+                    snd_nxt,
+                    (int)snd_cwnd,
+                    coding_wnd);
+          }
 
-        t=getTime();
-        if (maxtime && (t-et) > maxtime) maxpkts = snd_max; /*time up*/
-        /* see if a packet has timedout */
-        if (t > due) {   /* timeout */
-            if (idle > maxidle) {
-                /* give up */
-                printf("*** idle abort ***\n");
-                maxpkts=snd_max;
-                break;
-            }
-
-            if (debug > 1){
-                fprintf(stderr,
-                        "timerxmit %6.2f blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  coding wnd %d\n",
-                        t-et,curr_block,
-                        blocks[curr_block%NUM_BLOCKS].len,
-                        snd_una,
-                        snd_nxt,
-                        (int)snd_cwnd,
-                        coding_wnd);
-            }
-
-            timeouts++;
-            idle++;
-            slr = 0;
-
-            //snd_ssthresh = snd_cwnd*multiplier; /* shrink */
-
-            if (snd_ssthresh < initsegs) {
-                snd_ssthresh = initsegs;
-            }
-
-            // TODO: check vinss again
-            vinss = 1;
-            snd_cwnd = initsegs;  /* drop window */
-            snd_una = snd_nxt;
-            send_segs(sockfd);  /* resend */
-
-            due = t + timeout;
+          timeouts++;
+          idle++;
+          slr = 0;
+          // MAYBE NOT? TODO
+          //slr_long = SLR_LONG_INIT;
+          
+          snd_ssthresh = snd_cwnd*multiplier; /* shrink */
+          
+          if (snd_ssthresh < initsegs) {
+            snd_ssthresh = initsegs;
+          }
+          
+          // TODO: check vinss->slow_start again
+          slow_start = 1;
+          snd_cwnd = initsegs;  /* drop window */
+          snd_una = snd_nxt;
+          send_segs(sockfd);  /* resend */
+                     
         }
     }  /* while more pkts */
 
-    et = getTime()-et;
+    total_time = getTime()-start_time;
     free(ack);
     return 0;
 }
@@ -418,19 +419,6 @@ send_one(socket_t sockfd, uint32_t blockno){
     // We should decide in send_segs whether we need more coded packets in the queue
     Data_Pckt *msg = (Data_Pckt*) q_pop(&coded_q[blockno%NUM_BLOCKS]);
 
-    /* // TEST ONLY
-       pthread_mutex_lock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
-
-       //fprintf(stdout, "\n queue size %d HEAD %d, TAIL %d\n",coded_q[blockno%NUM_BLOCKS].size, coded_q[blockno%NUM_BLOCKS].head, coded_q[blockno%NUM_BLOCKS].tail);
-
-       int k;
-       for (k=1; k <= coded_q[blockno%NUM_BLOCKS].size; k++){
-       Data_Pckt *tmp = (Data_Pckt*) coded_q[blockno%NUM_BLOCKS].q_[coded_q[blockno%NUM_BLOCKS].tail+k];
-       printf("tmp msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
-       }
-
-       pthread_mutex_unlock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
-    */
     // Correct the header information of the outgoing message
     msg->seqno = snd_nxt;
     msg->tstamp = getTime();
@@ -485,26 +473,19 @@ endSession(void){
     int mss = PAYLOAD_SIZE;
     gethostname(myname,sizeof(myname));
     printf("\n\n%s => %s for %f secs\n",
-           myname,host, et);
-    //printf("%f secs  %f good bytes good put %f KBs %f Mbs\n",
-    //       et,maxpkts*mss,1.e-3*maxpkts*mss/et,8.e-6*maxpkts*mss/et);
+           myname,host, total_time);
     printf("**THRU** %f Mbs -- pkts in %d  out %d  enobufs %d \n",
-           8.e-6*(snd_una*PAYLOAD_SIZE)/et, ipkts,opkts,enobufs);
+           8.e-6*(snd_una*PAYLOAD_SIZE)/total_time, ipkts,opkts,enobufs);
     printf("**LOSS* total bytes out %d   Loss rate %6.3f%%    %f Mbs \n",
-           opkts*mss,100.*total_loss/snd_una,8.e-6*opkts*mss/et);
-    //printf("timeouts %d badacks %d\n",timeouts,badacks);
+           opkts*mss,100.*total_loss/snd_una,8.e-6*opkts*mss/total_time);
     if (ipkts) avrgrtt /= ipkts;
     printf("**RTT** minrtt  %f maxrtt %f avrgrtt %f\n",
            minrtt,maxrtt,avrgrtt/*,8.e6*rcvrwin/avrgrtt*/);
-    printf("**RTT** rto %f  srtt %f  rttvar %f\n",rto,srtt,rttvar);
-    //printf("win/rtt = %f Mbs  bwdelay = %d KB  %d segs\n",
-    //       8.e-6*rcvrwin*mss/avrgrtt, (int)(1.e-3*avrgrtt*opkts*mss/et),
-    //       (int)(avrgrtt*opkts/et));
+    printf("**RTT** rto %f  srtt %f \n",rto,srtt);
     printf("%f max_delta\n", max_delta);
     printf("vdecr %d v0 %d  vdelta %f\n",vdecr, v0,vdelta);
     printf("snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d goodacks%d\n",
            snd_nxt,(int)snd_cwnd, snd_una,snd_ssthresh, goodacks);
-    //printf("goodacks %d\n", goodacks);
     printf("Total idle time %f, Total coding delay %f\n", idle_total, coding_delay);
     if(snd_file) fclose(snd_file);
     if(db)       fclose(db);
@@ -528,18 +509,19 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
     /* RTO calculations */
     srtt = (1-g)*srtt + g*rtt;
-    rttvar = (1-h)*rttvar + h*(fabs(rtt - srtt) - rttvar);
 
-    rto = beta*srtt;
-    // TODO: we may no longer need RTT_DECAY...
+    //rttvar = (1-h)*rttvar + h*(fabs(rtt - srtt) - rttvar);
+    
+    rto = (1-g)*rto + g*beta*rtt;
+    // TODO: we may no longer need RTT_DECAY... or rttvar
     // rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
 
     if (debug > 6) {
-        fprintf(db,"%f %d %f  %d %d ack\n",rcvt-et,ackno,rtt,(int)snd_cwnd,snd_ssthresh);
+        fprintf(db,"%f %d %f  %d %d ack\n",rcvt-start_time,ackno,rtt,(int)snd_cwnd,snd_ssthresh);
     }
     if (ackno > snd_una){
-        vdelta = 1- (srtt/rtt);
-        if (vdelta > max_delta) max_delta = vdelta;  /* vegas delta */
+      vdelta = 1-srtt/rtt;
+      if (vdelta > max_delta) max_delta = vdelta;  /* vegas delta */
     }
     //------------- RTT calculations --------------------------//
 
@@ -583,8 +565,10 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
                                curr_block, ackno, snd_nxt, snd_una);
         badacks++;
     } else {
-      fprintf(db,"%f %d %f %f %f %f xmt\n", getTime()-et, ack->blockno, snd_cwnd, slr, srtt, rto);
 
+      // Late or Good acks count towards goodput
+      fprintf(db,"%f %d %f %d %f %f %f %f %f xmt\n", getTime()-start_time, ack->blockno, snd_cwnd, snd_ssthresh, slr, slr_long, srtt, rto, rtt);
+          
         if (ackno <= snd_una){
             //late ack
             if (debug > 5) fprintf(stderr,
@@ -603,6 +587,10 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
           total_loss += losses;
           double loss_tmp =  pow(1-slr_mem, losses);
           slr = loss_tmp*(1-slr_mem)*slr + (1 - loss_tmp);
+          loss_tmp =  pow(1-slr_longmem, losses);
+          slr_long = loss_tmp*(1-slr_longmem)*slr_long + (1 - loss_tmp);
+          // NECESSARY CONDITION: slr_longmem must be smaller than 1/2. 
+          slr_longstd = (1-slr_longmem)*slr_longstd + slr_longmem*(fabs(slr - slr_long) - slr_longstd);
 
           snd_una = ackno;
         }
@@ -610,7 +598,6 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
         dof_req = ack->dof_req;  // Updated the requested dofs for the current block
 
         idle=0;
-        due = rcvt + timeout;   /*restart timer */
         advance_cwnd();
 
         send_segs(sockfd);  /* send some if we can */
@@ -661,11 +648,8 @@ readConfig(void){
         else if (strcmp(var,"rcvrwin")==0) rcvrwin = val;
         else if (strcmp(var,"increment")==0) increment = val;
         else if (strcmp(var,"multiplier")==0) multiplier = val;
-        else if (strcmp(var,"tick")==0) tick = val;
-        else if (strcmp(var,"timeout")==0) timeout = val;
         else if (strcmp(var,"initsegs")==0) initsegs = val;
         else if (strcmp(var,"ssincr")==0) ssincr = val;
-        else if (strcmp(var,"thresh_init")==0) thresh_init = val;
         else if (strcmp(var,"maxpkts")==0) maxpkts = val;
         else if (strcmp(var,"maxidle")==0) maxidle = val;
         else if (strcmp(var,"maxtime")==0) maxtime = val;
@@ -679,12 +663,10 @@ readConfig(void){
 
     t = time(NULL);
     printf("*** CTCP %s ***\n",version);
-    printf("config: port %s debug %d, %s", port,debug, ctime(&t));
-    printf("config: initsegs %d tick %f timeout %f\n", initsegs,tick,timeout);
+    printf("config: port %s debug %d, %s",port,debug, ctime(&t));
     printf("config: maxidle %d maxtime %d\n",maxidle, maxtime);
-    printf("config: thresh_init %f ssincr %d\n", thresh_init, ssincr);
-    printf("config: rcvrwin %d  increment %d  multiplier %f thresh_init %f\n",
-           rcvrwin,increment,multiplier,thresh_init);
+    printf("config: rcvrwin %d  increment %d  multiplier %f\n",
+           rcvrwin,increment,multiplier);
     printf("config: alpha %f beta %f\n", valpha,vbeta);
 
 }
@@ -698,7 +680,7 @@ advance_cwnd(void){
     // TODO make sure ssthresh < max cwnd
     // TODO increment and decrement values should be adjusted
     /* advance cwnd according to slow-start of congestion avoidance */
-    if (snd_cwnd <= snd_ssthresh && vinss) {
+    if (snd_cwnd <= snd_ssthresh && slow_start) {
         /* slow start, expo growth */
         snd_cwnd += ssincr;
     } else{
@@ -706,6 +688,12 @@ advance_cwnd(void){
         int incr;
         incr = increment;
 
+        /*
+          Range --(1)-- valpha --(2)-- vbeta --(3)--
+          (1): increase window
+          (2): stay
+          (3): decrease window
+         */
         /* vegas active and not in recovery */
         if (vdelta > vbeta ){
             if (debug > 6){
@@ -727,8 +715,11 @@ advance_cwnd(void){
           printf("window size %d\n", (int)snd_cwnd);
           }*/
         if (snd_cwnd < initsegs) snd_cwnd = initsegs;
-        if (snd_cwnd > MAX_CWND ) snd_cwnd = MAX_CWND; // XXX
-        vinss = 0; /* no vegas ss now */
+        if (snd_cwnd > MAX_CWND) snd_cwnd = MAX_CWND; // XXX
+        slow_start = 0; /* no vegas ss now */
+    }
+    if (slr > slr_long + slr_longstd){
+      snd_cwnd -= slr;
     }
 }
 
@@ -958,16 +949,7 @@ openLog(char* log_name){
         perror("An error occurred while making the figs directory");
     }
 
-    char* dir_name = malloc(15);
-
-    sprintf(dir_name, "logs/%d-%02d-%02d",
-            ptm->tm_year + 1900,
-            ptm->tm_mon + 1,
-            ptm->tm_mday);
-
-    if(!mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-        perror("An error occurred while making the log date directory");
-    }
+    char* dir_name = malloc(20);
 
     sprintf(dir_name, "figs/%d-%02d-%02d",
             ptm->tm_year + 1900,
@@ -978,14 +960,23 @@ openLog(char* log_name){
         perror("An error occurred while making the fig date directory");
     }
 
+    sprintf(dir_name, "logs/%d-%02d-%02d",
+            ptm->tm_year + 1900,
+            ptm->tm_mon + 1,
+            ptm->tm_mday);
+
+    if(!mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+        perror("An error occurred while making the log date directory");
+    }
+
     //------------------------------------------------//
 
     int auto_log = !log_name;
 
     if(auto_log)
     {
-        file = malloc(12);
-        log_name = malloc(28);
+        file = malloc(15);
+        log_name = malloc(32);
 
         sprintf(file, "%02d:%02d.%02d.log",
                 ptm->tm_hour,
@@ -1002,6 +993,7 @@ openLog(char* log_name){
     if(!db){
         perror("An error ocurred while opening the log file");
     }
+    
 
     if(auto_log)
     {
@@ -1133,27 +1125,25 @@ restart(void){
     maxpkts = 0;
     ackno = 0;
 
-    vinss=1;   /* in vegas slow start */
+    slow_start=1;   /* in vegas slow start */
     vdecr = 0;
     v0  = 0; /* vegas decrements or no adjusts */
     vdelta = 0;
     max_delta = 0;  /* vegas like tracker */
 
+    timeouts=0;
     ipkts = 0;
     opkts = 0;
     badacks = 0;
-    timeouts = 0;
     enobufs = 0;
-    et = 0;
+    start_time = 0;
     minrtt=999999.;
     maxrtt=0;
     avrgrtt = 0;
     rto = 0;
     srtt=0;
-    rttvar=3.;
     h=.25;
     g=.125;
-    due = 0;
     rcvt = 0;
     total_loss = 0;
     slr = 0;

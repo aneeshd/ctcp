@@ -21,19 +21,13 @@ API/Porting:
 Grapher:
 * Fix grapher's bw computations
 * Add things to the grapher:
-
   - BW
   - Congestion Window
-
   - Block transitions
-
   - DOFs sent per block
-
   - Loss rate SLR
   - RTT, RTO, SRTT, base rtt
   - When a block got decode
-
-
 
 Documentation:
 * Fix README
