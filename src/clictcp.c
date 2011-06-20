@@ -139,6 +139,7 @@ main(int argc, char** argv){
     for(k = 0; k < NUM_BLOCKS; k++){
         blocks[k].rows = malloc(BLOCK_SIZE*sizeof(char*));
         blocks[k].content = malloc(BLOCK_SIZE*sizeof(char*));
+        blocks[k].row_len = malloc(BLOCK_SIZE*sizeof(int));
         initCodedBlock(k);
     }
 
@@ -231,31 +232,33 @@ bldack(Data_Pckt *msg, bool match){
             uint8_t start = msg->start_packet;
 
             // Shift the row to make SHURE the leading coefficient is not zero
-            int shift = shift_row(msg->packet_coeff, coding_wnd);
+            int shift = shift_row(msg->packet_coeff, msg->num_packets);
             start += shift;
 
             // THE while loop!
-            while(!isEmpty(msg->packet_coeff, coding_wnd)){
+            while(!isEmpty(msg->packet_coeff, msg->num_packets)){
                 if(blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
                     // Allocate the memory for the coefficients in the matrix for this block
-                    blocks[blockno%NUM_BLOCKS].rows[start] = malloc(coding_wnd);
+                    blocks[blockno%NUM_BLOCKS].rows[start] = malloc(msg->num_packets);
+                    blocks[blockno%NUM_BLOCKS].row_len[start] = msg->num_packets;
 
                     // Allocate the memory for the content of the packet
                     blocks[blockno%NUM_BLOCKS].content[start] = malloc(PAYLOAD_SIZE);
 
                     // Set the coefficients to be all zeroes (for padding if necessary)
-                    memset(blocks[blockno%NUM_BLOCKS].rows[start], 0, coding_wnd);
+                    memset(blocks[blockno%NUM_BLOCKS].rows[start], 0, msg->num_packets);
 
                     // Normalize the coefficients and the packet contents
-                    normalize(msg->packet_coeff, msg->payload, coding_wnd);
+                    normalize(msg->packet_coeff, msg->payload, msg->num_packets);
 
                     // Put the coefficients into the matrix
-                    memcpy(blocks[blockno%NUM_BLOCKS].rows[start], msg->packet_coeff, coding_wnd);
+                    memcpy(blocks[blockno%NUM_BLOCKS].rows[start], msg->packet_coeff, msg->num_packets);
 
                     // Put the payload into the corresponding place
                     memcpy(blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
 
                     // We got an innovative eqn
+                    blocks[blockno%NUM_BLOCKS].max_coding_wnd = msg->num_packets;
                     blocks[blockno%NUM_BLOCKS].dofs++;
                     break;
                 }else{
@@ -264,12 +267,12 @@ bldack(Data_Pckt *msg, bool match){
 
                     if (debug > 9){
                         int ix;
-                        for (ix = 0; ix < coding_wnd; ix++){
+                        for (ix = 0; ix < msg->num_packets; ix++){
                             printf(" %d ", msg->packet_coeff[ix]);
                         }
-                        printf("seqno %d start%d isEmpty %d \n Row coeff", msg->seqno, start, isEmpty(msg->packet_coeff, coding_wnd)==1);
+                        printf("seqno %d start%d isEmpty %d \n Row coeff", msg->seqno, start, isEmpty(msg->packet_coeff, msg->num_packets)==1);
 
-                        for (ix = 0; ix < coding_wnd; ix++){
+                        for (ix = 0; ix < msg->num_packets; ix++){
                             printf(" %d ",blocks[blockno%NUM_BLOCKS].rows[start][ix]);
                         }
                         printf("\n");
@@ -277,7 +280,7 @@ bldack(Data_Pckt *msg, bool match){
 
                     msg->packet_coeff[0] = 0; // TODO; check again
                     // Subtract row with index strat with the row at hand (coffecients)
-                    for(i = 1; i < coding_wnd; i++){
+                    for(i = 1; i < blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
                         msg->packet_coeff[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].rows[start][i], pivot);
                     }
 
@@ -287,7 +290,7 @@ bldack(Data_Pckt *msg, bool match){
                     }
 
                     // Shift the row
-                    shift = shift_row(msg->packet_coeff, coding_wnd);
+                    shift = shift_row(msg->packet_coeff, msg->num_packets);
                     start += shift;
                 }
             } // end while
@@ -325,6 +328,9 @@ bldack(Data_Pckt *msg, bool match){
         err_sys("bldack: sendto");
     }
     acks++;
+
+    //free(msg->packet_coeff);
+    //free(msg->payload);
 
     if (debug > 6){
         printf("Sent an ACK: ackno %d blockno %d\n", ack->ackno, ack->blockno);
@@ -416,10 +422,12 @@ void
 initCodedBlock(uint32_t blockno){
     blocks[blockno%NUM_BLOCKS].dofs = 0;
     blocks[blockno%NUM_BLOCKS].len  = BLOCK_SIZE; // this may change once we get packets
+    blocks[blockno%NUM_BLOCKS].max_coding_wnd = 0;
 
     int i;
     for(i = 0; i < BLOCK_SIZE; i++){
         blocks[blockno%NUM_BLOCKS].rows[i]    = NULL;
+        blocks[blockno%NUM_BLOCKS].row_len[i]    = 0;
         blocks[blockno%NUM_BLOCKS].content[i] = NULL;
     }
 }
@@ -429,9 +437,9 @@ unwrap(uint32_t blockno){
     int row;
     int offset;
     int byte;
-    //prettyPrint(blocks[blockno%NUM_BLOCKS].rows, coding_wnd);
+    //prettyPrint(blocks[blockno%NUM_BLOCKS].rows, MAX_CODING_WND);
     for(row = blocks[blockno%NUM_BLOCKS].len-2; row >= 0; row--){
-        for(offset = 1; offset < coding_wnd; offset++){
+        for(offset = 1; offset <  blocks[blockno%NUM_BLOCKS].row_len[row]; offset++){
             if(blocks[blockno%NUM_BLOCKS].rows[row][offset] == 0)
                 continue;
             for(byte = 0; byte < PAYLOAD_SIZE; byte++){
@@ -505,6 +513,7 @@ unmarshallData(Data_Pckt* msg, char* buf){
 
     //  msg->packet_coeff = malloc(MIN(coding_wnd, blocks[msg->blockno%NUM_BLOCKS].len - msg->start_packet));
 
+    int coding_wnd = MAX(msg->num_packets, blocks[msg->blockno%NUM_BLOCKS].max_coding_wnd);
     msg->packet_coeff = malloc(coding_wnd);
 
     // Padding with zeroes
@@ -515,6 +524,8 @@ unmarshallData(Data_Pckt* msg, char* buf){
         memcpy(&msg->packet_coeff[i], buf+index, (part = sizeof(msg->packet_coeff[i])));
         index += part;
     }
+
+    msg->num_packets = coding_wnd; 
 
 
     msg->payload = malloc(PAYLOAD_SIZE);

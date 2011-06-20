@@ -18,7 +18,6 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT} flag_t;
 #define PAYLOAD_SIZE 1400 // Actual payload is 1398
 // TODO: change such that we can change PAYLOAD_SIZE, BLOCK_SIZE, CODING_WIN via config file
 #define BLOCK_SIZE 128 // Maximum # of packets in a block (Default block length)
-#define CODING_WND 3
 #define MAX_CWND 70
 
 #define ACK_SIZE sizeof(double) \
@@ -59,6 +58,7 @@ typedef struct{ // TODO: this datastructure can store the dof's and other state 
 typedef struct{
   uint32_t blockno;
   int dof_request;
+  int coding_wnd; 
 } coding_job_t;
 
 typedef struct{
@@ -75,6 +75,8 @@ typedef struct{
   uint8_t len;
   char** rows; // Matrix of the coefficients of the coded packets
   char** content; // Contents of the coded packets
+  int* row_len;  // maximum number of non-zeros in each row
+  int max_coding_wnd; //largest number of packets mixed together
 } Coded_Block_t;
 
 double getTime(void);
