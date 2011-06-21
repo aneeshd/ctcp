@@ -264,6 +264,7 @@ doit(socket_t sockfd){
           idle++;
           slr = 0;
           //slr_long = SLR_LONG_INIT;
+          rto = 2*rto; // Exponential back-off
           
           snd_ssthresh = snd_cwnd*multiplier; /* shrink */
           
@@ -515,7 +516,12 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
     /* RTO calculations */
     srtt = (1-g)*srtt + g*rtt; 
-    rto = (1-g)*rto + g*beta*rtt;
+
+    if (rtt > rto/beta){
+      rto = (1-g)*rto + g*beta*rtt;
+    }else {
+      rto = (1-g/5)*rto + g/5*beta*rtt;
+    }
 
     if (debug > 6) {
         fprintf(db,"%f %d %f  %d %d ack\n",rcvt-start_time,ackno,rtt,(int)snd_cwnd,snd_ssthresh);

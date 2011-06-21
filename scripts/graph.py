@@ -23,7 +23,7 @@ def graph(log_file, save=True):
     rto        = []
     rtt        = []
 
-    current = 0.1
+    current = 0.03
     mss     = 1398
     res     = 0.01
     abw     = 0
@@ -115,7 +115,7 @@ def graph(log_file, save=True):
 
     # print round trip time and rto
     subplot(413)
-    plot(times, rtt, 'b-', times, srtt, 'r-')
+    plot(times, rtt, 'b-', times, srtt, 'r-', times, rto, 'g-')
     grid(True)
     ylabel('time (s)')
 
@@ -143,6 +143,7 @@ def graph(log_file, save=True):
         F.set_size_inches( (DefaultSize[0]*2, DefaultSize[1]*2) )
 
         F.savefig(fig_path, orientation='portrait', papertype='letter')
+        show()
     else:
         show()
 
