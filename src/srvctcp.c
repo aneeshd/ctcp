@@ -354,9 +354,10 @@ send_segs(socket_t sockfd){
         dof_remain[curr_block%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
       
         // Update the coding_wnd based on the slr (Use look-up table)
-        int coding_wnd;
+        /*int coding_wnd;
         for (coding_wnd = 0; slr >= slr_wnd_map[coding_wnd]; coding_wnd++);
-        job->coding_wnd = coding_wnd;
+        job->coding_wnd = coding_wnd;*/
+        job->coding_wnd = INIT_CODING_WND;
 
         if (dof_req <= 3) {
           job->coding_wnd = MAX_CODING_WND;
@@ -393,9 +394,10 @@ send_segs(socket_t sockfd){
           dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
 
           // Update the coding_wnd based on the slr (Use look-up table)
-          int coding_wnd;
+          /*int coding_wnd;
           for (coding_wnd = 0; slr >= slr_wnd_map[coding_wnd]; coding_wnd++);
-          job->coding_wnd = coding_wnd;
+          job->coding_wnd = coding_wnd;*/
+          job->coding_wnd = INIT_CODING_WND;
      
           addJob(&workers, &coding_job, job, &free, LOW);
         }
@@ -930,14 +932,15 @@ readBlock(uint32_t blockno){
         // Insert this pointer into the blocks datastructure
         blocks[blockno%NUM_BLOCKS].content[blocks[blockno%NUM_BLOCKS].len] = tmp;
         blocks[blockno%NUM_BLOCKS].len++;
+        if(feof(snd_file)){
+          maxblockno = blockno;
+          printf("This is the last block %d\n", maxblockno);
+        }    
     }
 
     file_position = blockno + 1;  // Advance the counter
 
-    if(feof(snd_file)){
-        maxblockno = blockno;
-        printf("This is the last block %d\n", maxblockno);
-    }
+
 }
 
 
