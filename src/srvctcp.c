@@ -203,7 +203,7 @@ doit(socket_t sockfd){
         coding_job_t* job = malloc(sizeof(coding_job_t));
         job->blockno = i;
         job->dof_request = (int) ceil(BLOCK_SIZE*1.0);
-        job->coding_wnd = INIT_CODING_WND;
+        job->coding_wnd = 1; //INIT_CODING_WND;  TODO: remove comment if stable
         dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
         addJob(&workers, &coding_job, job, &free, LOW);
     }
@@ -564,9 +564,9 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
           dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
 
           // Update the coding_wnd based on the slr (Use look-up table)
-          int coding_wnd;
-          for (coding_wnd = 0; slr >= slr_wnd_map[coding_wnd]; coding_wnd++);
-          job->coding_wnd = coding_wnd;
+          /*int coding_wnd;
+            for (coding_wnd = 0; slr >= slr_wnd_map[coding_wnd]; coding_wnd++);*/
+          job->coding_wnd = 1;//coding_wnd;  TODO: remove comment if stable
 
           addJob(&workers, &coding_job, job, &free, LOW);
         }

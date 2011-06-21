@@ -11,7 +11,7 @@
 #define NUM_BLOCKS 2
 #define THREADS 5
 #define ALPHA 2.32  // The number of std to deviate from mean to get 1% target error probability
-#define MIN_DOF_REQUEST 5
+#define MIN_DOF_REQUEST 0
 #define SND_CWND 64
 #define SLR_LONG_INIT 0.05
 #define INIT_RTO 1
