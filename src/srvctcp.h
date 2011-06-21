@@ -10,7 +10,6 @@
 // ------------ CTCP parameters ---------------//
 #define NUM_BLOCKS 2
 #define THREADS 5
-//#define RTT_DECAY 3 // This is used as the factor to approximate the rto
 #define ALPHA 2.32  // The number of std to deviate from mean to get 1% target error probability
 #define MIN_DOF_REQUEST 5
 #define SND_CWND 64
@@ -77,7 +76,6 @@ int debug;
 int idle=0;         /* successive timeouts */
 int maxidle=10;     /* max idle before abort */
 int maxpkts=0;      /* test duration */
-int maxtime=10;     /* test duration */
 
 
 // TODO actual use rcvrwin!

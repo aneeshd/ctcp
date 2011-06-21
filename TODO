@@ -4,12 +4,11 @@
 
 
 Day to Day bugs/fixes:
-* RTO congestion timeout stuff... [minji]
 * Fix server restart - related to prev point [minji]
-* Fix bug from commit 54a88d8 [done~ish] -> Still getting dof_remain = -1 when requesting extra dofs
 * Measurements - fix the grapher to measure the coded file transfer [done]
 
 New Big Features:
+* TCP dump/ tcptrace
 * Multiple sources
 * Experiment with vectorized SSE instruction for FFmult [try this - long discussion]
 * Handshake
@@ -21,12 +20,8 @@ API/Porting:
 Grapher:
 * Fix grapher's bw computations
 * Add things to the grapher:
-  - BW
-  - Congestion Window
   - Block transitions
   - DOFs sent per block
-  - Loss rate SLR
-  - RTT, RTO, SRTT, base rtt
   - When a block got decode
 
 Documentation:

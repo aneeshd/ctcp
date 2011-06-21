@@ -129,7 +129,6 @@ main (int argc, char** argv){
 
     // Initialize the file mutex and position
     pthread_mutex_init(&file_mutex, NULL);
-    file_position = 1; // Initially called to read the first block
 
     // Initialize the block mutexes and queue of coded packets and counters
     int i;
@@ -141,28 +140,28 @@ main (int argc, char** argv){
 
 
     char *file_name = malloc(1024);
-//    while(1){
-    fprintf(stdout, "\nWaiting for requests...\n");
-    if((numbytes = recvfrom(sockfd, file_name, 1024, 0,
-                            &cli_addr, &clilen)) == -1){
+    while(1){
+      fprintf(stdout, "\nWaiting for requests...\n");
+      if((numbytes = recvfrom(sockfd, file_name, 1024, 0,
+                              &cli_addr, &clilen)) == -1){
         //printf("%s\n", file_name);
         err_sys("recvfrom: Failed to receive the request\n");
-    }
-
-    printf("sending %s\n", file_name);
-
-    if ((snd_file = fopen(file_name, "rb"))== NULL){
+      }
+      
+      printf("sending %s\n", file_name);
+      
+      if ((snd_file = fopen(file_name, "rb"))== NULL){
         err_sys("Error while trying to create/open a file");
+      }
+      
+      
+      if (debug > 3) openLog(log_name);
+      
+      doit(sockfd);
+      terminate(sockfd); // terminate
+      endSession();
+      restart();
     }
-
-
-    if (debug > 3) openLog(log_name);
-
-    doit(sockfd);
-    terminate(sockfd); // terminate
-    endSession();
-//    restart();
-//    }
     return 0;
 }
 
@@ -193,6 +192,12 @@ doit(socket_t sockfd){
 
     done = FALSE;
     curr_block = 1;
+    maxblockno = 0;
+    file_position = 1; // Initially called to read the first block
+    snd_nxt = snd_una = 1;
+    snd_cwnd = initsegs;
+    rto = INIT_RTO;
+
     // read and code the first two blocks
     for (i=1; i <= 2; i++){
         coding_job_t* job = malloc(sizeof(coding_job_t));
@@ -202,15 +207,6 @@ doit(socket_t sockfd){
         dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
         addJob(&workers, &coding_job, job, &free, LOW);
     }
-
-
-    snd_nxt = snd_una = 1;
-    // snd_cwnd = SND_CWND;
-    snd_cwnd = initsegs;
-
-    // if (bwe_on) bwe_pkt = snd_nxt;
-    // if (maxpkts == 0) maxpkts = 1000000000; // Default time is 10 seconds
-    rto = INIT_RTO;
 
     // This is where the segments are sent
     send_segs(sockfd);
@@ -243,14 +239,10 @@ doit(socket_t sockfd){
             ipkts++;
 
             handle_ack(sockfd, ack);
-
         } else if (r < 0) {
             err_sys("select");
         } else if (r==0) {
-          // if (maxtime && (t-et) > maxtime) maxpkts = snd_max; /*time up*/
-          // No need to do maxtime abort anymore. 
-          /* see if a packet has timedout */
-          
+          /* see if a packet has timedout */        
           if (idle > maxidle) {
             /* give up */
             printf("*** idle abort ***\n");
@@ -271,26 +263,23 @@ doit(socket_t sockfd){
           timeouts++;
           idle++;
           slr = 0;
-          // MAYBE NOT? TODO
           //slr_long = SLR_LONG_INIT;
           
           snd_ssthresh = snd_cwnd*multiplier; /* shrink */
           
           if (snd_ssthresh < initsegs) {
             snd_ssthresh = initsegs;
-          }
-          
-          // TODO: check vinss->slow_start again
+          }          
           slow_start = 1;
           snd_cwnd = initsegs;  /* drop window */
           snd_una = snd_nxt;
-          send_segs(sockfd);  /* resend */
-                     
+          send_segs(sockfd);  /* resend */                     
         }
     }  /* while more pkts */
 
     total_time = getTime()-start_time;
     free(ack);
+
     return 0;
 }
 
@@ -393,6 +382,7 @@ send_segs(socket_t sockfd){
 
     if (curr_block != maxblockno){
 
+      //printf("dof_Remain(next block) %d Nextwin %d\n", dof_remain[(curr_block+1)%NUM_BLOCKS], NextWin);
         // Check whether we have enough coded packets for next block
         if (dof_remain[(curr_block+1)%NUM_BLOCKS] < NextWin){
  
@@ -524,13 +514,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     avrgrtt += rtt;
 
     /* RTO calculations */
-    srtt = (1-g)*srtt + g*rtt;
-
-    //rttvar = (1-h)*rttvar + h*(fabs(rtt - srtt) - rttvar);
-    
+    srtt = (1-g)*srtt + g*rtt; 
     rto = (1-g)*rto + g*beta*rtt;
-    // TODO: we may no longer need RTT_DECAY... or rttvar
-    // rto = srtt + RTT_DECAY*rttvar;  /* may want to force it > 1 */
 
     if (debug > 6) {
         fprintf(db,"%f %d %f  %d %d ack\n",rcvt-start_time,ackno,rtt,(int)snd_cwnd,snd_ssthresh);
@@ -545,6 +530,14 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
         if(maxblockno && ack->blockno > maxblockno){
             done = TRUE;
             printf("THIS IS THE LAST ACK\n");
+
+            pthread_mutex_lock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
+            
+            freeBlock(curr_block);
+            q_free(&coded_q[curr_block%NUM_BLOCKS], &free_coded_pkt);
+            
+            pthread_mutex_unlock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
+
             return; // goes back to the beginning of the while loop in main() and exits
         }
 
@@ -590,6 +583,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
       // Late or Good acks count towards goodput
       fprintf(db,"%f %d %f %d %f %f %f %f %f xmt\n", getTime()-start_time, ack->blockno, snd_cwnd, snd_ssthresh, slr, slr_long, srtt, rto, rtt);
+
+      idle = 0; // Late or good acks should stop the "idle" count for max-idle abort.
           
         if (ackno <= snd_una){
             //late ack
@@ -619,7 +614,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
         dof_req = ack->dof_req;  // Updated the requested dofs for the current block
 
-        idle=0;
+        //idle=0;
         advance_cwnd();
 
         send_segs(sockfd);  /* send some if we can */
@@ -674,7 +669,6 @@ readConfig(void){
         else if (strcmp(var,"ssincr")==0) ssincr = val;
         else if (strcmp(var,"maxpkts")==0) maxpkts = val;
         else if (strcmp(var,"maxidle")==0) maxidle = val;
-        else if (strcmp(var,"maxtime")==0) maxtime = val;
         else if (strcmp(var,"valpha")==0) valpha = val;
         else if (strcmp(var,"vbeta")==0) vbeta = val;
         else if (strcmp(var,"sndbuf")==0) sndbuf = val;
@@ -686,7 +680,6 @@ readConfig(void){
     t = time(NULL);
     printf("*** CTCP %s ***\n",version);
     printf("config: port %s debug %d, %s",port,debug, ctime(&t));
-    printf("config: maxidle %d maxtime %d\n",maxidle, maxtime);
     printf("config: rcvrwin %d  increment %d  multiplier %f\n",
            rcvrwin,increment,multiplier);
     printf("config: alpha %f beta %f\n", valpha,vbeta);
@@ -1147,34 +1140,36 @@ void
 restart(void){
     // Print to the db file to differentiate traces
     fprintf(stdout, "\n\n*************************************\n****** Starting New Connection ******\n*************************************\n");
-    done = FALSE;
-    file_position = 1; // Initially called to read the first block
+
     snd_max = 0; /* biggest send */
     maxpkts = 0;
     ackno = 0;
-
     slow_start=1;   /* in vegas slow start */
+    start_time = 0; 
+    vdelta = 0;
+    enobufs = 0;
+    idle = 0;
+    slr = 0;
+    slr_long = SLR_LONG_INIT;
+
+
+    // Statistics // 
     vdecr = 0;
     v0  = 0; /* vegas decrements or no adjusts */
-    vdelta = 0;
-    max_delta = 0;  /* vegas like tracker */
-
     timeouts=0;
     ipkts = 0;
     opkts = 0;
     badacks = 0;
-    enobufs = 0;
-    start_time = 0;
+    max_delta = 0;  /* vegas like tracker */
     minrtt=999999.;
     maxrtt=0;
     avrgrtt = 0;
-    rto = 0;
     srtt=0;
     h=.25;
     g=.125;
     rcvt = 0;
     total_loss = 0;
-    slr = 0;
+
 }
 
 

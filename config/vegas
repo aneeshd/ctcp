@@ -6,6 +6,5 @@
 valpha 0.05
 vbeta 0.2
 multiplier 0.75
-maxtime 0
 debug 6
 #droplist 200 200
