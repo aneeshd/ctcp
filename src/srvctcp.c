@@ -16,27 +16,12 @@
 
 #include "srvctcp.h"
 
-int sndbuf = MSS*MAX_CWND;  /* udp send buff, bigger than mss */
-int rcvbuf = MSS*MAX_CWND;  /* udp recv buff for ACKs*/
-int numbytes;
-
-
-double idle_total = 0; // The total time the server has spent waiting for the acks
-double coding_delay = 0; // Total time spent on encoding
-int total_loss = 0;
-double slr = 0; // Smoothed loss rate
-double slr_long = SLR_LONG_INIT;
-double slr_longstd = 0;
-double slr_mem = 1.0/BLOCK_SIZE; // The memory of smoothing function
-double slr_longmem = 1.0/(BLOCK_SIZE*10); // Long term memory smoothing constant
-
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
 void
 ctrlc(){
     total_time = getTime()-start_time;
-    maxpkts=snd_max;
     endSession();
     exit(1);
 }
@@ -79,15 +64,10 @@ main (int argc, char** argv){
         }
     }
 
-    readConfig();
+    readConfig();    // Read config file
+    initialize();    // Initialize global variables and threads
 
     signal(SIGINT, ctrlc);
-
-    if (multiplier) {
-        snd_ssthresh = multiplier*MAX_CWND;
-    } else {
-        snd_ssthresh = 2147483647;  /* normal TCP, infinite */
-    }
 
     // Setup the hints struct
     memset(&hints, 0, sizeof hints);
@@ -124,21 +104,6 @@ main (int argc, char** argv){
 
     freeaddrinfo(servinfo);
 
-    // initialize the thread pool
-    thrpool_init( &workers, THREADS );
-
-    // Initialize the file mutex and position
-    pthread_mutex_init(&file_mutex, NULL);
-
-    // Initialize the block mutexes and queue of coded packets and counters
-    int i;
-    for(i = 0; i < NUM_BLOCKS; i++){
-        pthread_mutex_init( &blocks[i].block_mutex, NULL );
-        q_init(&coded_q[i], 2*BLOCK_SIZE);
-        dof_remain[i] = 0;
-    }
-
-
     char *file_name = malloc(1024);
     while(1){
       fprintf(stdout, "\nWaiting for requests...\n");
@@ -157,10 +122,10 @@ main (int argc, char** argv){
       
       if (debug > 3) openLog(log_name);
       
+      restart();
       doit(sockfd);
       terminate(sockfd); // terminate
       endSession();
-      restart();
     }
     return 0;
 }
@@ -181,22 +146,8 @@ doit(socket_t sockfd){
     printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
     //---------------------------------------------------------------------------//
 
-    /* init control variables */
-    memset(buff,0,BUFFSIZE);        /* pretouch */
-
     /* send out initial segments, then go for it */
     start_time = getTime();
-
-    // Initialize the OnFly vectore
-    for(i=0; i < MAX_CWND; i++) OnFly[i] = 0;
-
-    done = FALSE;
-    curr_block = 1;
-    maxblockno = 0;
-    file_position = 1; // Initially called to read the first block
-    snd_nxt = snd_una = 1;
-    snd_cwnd = initsegs;
-    rto = INIT_RTO;
 
     // read and code the first two blocks
     for (i=1; i <= 2; i++){
@@ -246,8 +197,7 @@ doit(socket_t sockfd){
           if (idle > maxidle) {
             /* give up */
             printf("*** idle abort ***\n");
-              maxpkts=snd_max;
-              break;
+            break;
           }
             
           if (debug > 1){
@@ -375,12 +325,6 @@ send_segs(socket_t sockfd){
         dof_remain[curr_block%NUM_BLOCKS]--;   // Update the internal dof counter
     }
 
-    /* if (blocks[curr_block%NUM_BLOCKS].snd_nxt >= BLOCK_SIZE){
-       printf("Calling for more - curr_blk %d, ack->dof_req %d,
-       Flag==EXT %d snd_nxt - snd_una %d NextBlockOnFly %d snd_CWND %f\n",
-       curr_block, ack->dof_req, ack->flag == EXT_MOD,
-       snd_nxt - snd_una, NextBlockOnFly, snd_cwnd);
-       }  */
 
     if (curr_block != maxblockno){
 
@@ -489,13 +433,13 @@ endSession(void){
            opkts*mss,100.*total_loss/snd_una,8.e-6*opkts*mss/total_time);
     if (ipkts) avrgrtt /= ipkts;
     printf("**RTT** minrtt  %f maxrtt %f avrgrtt %f\n",
-           minrtt,maxrtt,avrgrtt/*,8.e6*rcvrwin/avrgrtt*/);
+           minrtt,maxrtt,avrgrtt);
     printf("**RTT** rto %f  srtt %f \n",rto,srtt);
     printf("%f max_delta\n", max_delta);
     printf("vdecr %d v0 %d  vdelta %f\n",vdecr, v0,vdelta);
     printf("snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d goodacks%d\n",
            snd_nxt,(int)snd_cwnd, snd_una,snd_ssthresh, goodacks);
-    printf("Total idle time %f, Total coding delay %f\n", idle_total, coding_delay);
+    printf("Total idle time %f\n", idle_total);
     if(snd_file) fclose(snd_file);
     if(db)       fclose(db);
     snd_file = NULL;
@@ -652,45 +596,58 @@ err_sys(char* s){
 
 void
 readConfig(void){
-    /* read config if there, keyword value */
-    FILE *fp;
-    char line[128], var[32];
-    double val;
-    time_t t;
+  // Initialize the default values of config variables
+  
+  rcvrwin    = 20;          /* rcvr window in mss-segments */
+  increment  = 1;           /* cc increment */
+  multiplier = 0.5;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
+  initsegs   = 10;          /* slowstart initial */
+  ssincr     = 1;           /* slow start increment */
+  maxpkts    = 0;           /* test duration */
+  maxidle    = 10;          /* max idle before abort */
+  valpha     = 0.05;        /* vegas parameter */
+  vbeta      = 0.2;         /* vegas parameter */
+  sndbuf     = MSS*MAX_CWND;/* UDP send buff, bigger than mss */
+  rcvbuf     = MSS*MAX_CWND;/* UDP recv buff for ACKs*/
+  debug      = 5           ;/* Debug level */
 
+  /* read config if there, keyword value */
+  FILE *fp;
+  char line[128], var[32];
+  double val;
+  time_t t;
 
+  fp = fopen(configfile,"r");
 
-    fp = fopen(configfile,"r");
+  if (fp == NULL) {
+    printf("ctcp unable to open %s\n",configfile);
+    return;
+  }
 
-    if (fp == NULL) {
-        printf("ctcp unable to open %s\n",configfile);
-        return;
-    }
+  while (fgets(line, sizeof (line), fp) != NULL) {
+    sscanf(line,"%s %lf",var,&val);
+    if (*var == '#') continue;
+    else if (strcmp(var,"rcvrwin")==0) rcvrwin = val;
+    else if (strcmp(var,"increment")==0) increment = val;
+    else if (strcmp(var,"multiplier")==0) multiplier = val;
+    else if (strcmp(var,"initsegs")==0) initsegs = val;
+    else if (strcmp(var,"ssincr")==0) ssincr = val;
+    else if (strcmp(var,"maxpkts")==0) maxpkts = val;
+    else if (strcmp(var,"maxidle")==0) maxidle = val;
+    else if (strcmp(var,"valpha")==0) valpha = val;
+    else if (strcmp(var,"vbeta")==0) vbeta = val;
+    else if (strcmp(var,"sndbuf")==0) sndbuf = val;
+    else if (strcmp(var,"rcvbuf")==0) rcvbuf = val;
+    else if (strcmp(var,"debug")==0) debug = val;
+    else printf("config unknown: %s\n",line);
+  }
 
-    while (fgets(line, sizeof (line), fp) != NULL) {
-        sscanf(line,"%s %lf",var,&val);
-        if (*var == '#') continue;
-        else if (strcmp(var,"rcvrwin")==0) rcvrwin = val;
-        else if (strcmp(var,"increment")==0) increment = val;
-        else if (strcmp(var,"multiplier")==0) multiplier = val;
-        else if (strcmp(var,"initsegs")==0) initsegs = val;
-        else if (strcmp(var,"ssincr")==0) ssincr = val;
-        else if (strcmp(var,"maxpkts")==0) maxpkts = val;
-        else if (strcmp(var,"maxidle")==0) maxidle = val;
-        else if (strcmp(var,"valpha")==0) valpha = val;
-        else if (strcmp(var,"vbeta")==0) vbeta = val;
-        else if (strcmp(var,"sndbuf")==0) sndbuf = val;
-        else if (strcmp(var,"rcvbuf")==0) rcvbuf = val;
-        else if (strcmp(var,"debug")==0) debug = val;
-        else printf("config unknown: %s\n",line);
-    }
-
-    t = time(NULL);
-    printf("*** CTCP %s ***\n",version);
-    printf("config: port %s debug %d, %s",port,debug, ctime(&t));
-    printf("config: rcvrwin %d  increment %d  multiplier %f\n",
-           rcvrwin,increment,multiplier);
-    printf("config: alpha %f beta %f\n", valpha,vbeta);
+  t = time(NULL);
+  printf("*** CTCP %s ***\n",version);
+  printf("config: port %s debug %d, %s",port,debug, ctime(&t));
+  printf("config: rcvrwin %d  increment %d  multiplier %f\n",
+         rcvrwin,increment,multiplier);
+  printf("config: alpha %f beta %f\n", valpha,vbeta);
 
 }
 
@@ -1154,40 +1111,93 @@ unmarshallAck(Ack_Pckt* msg, char* buf){
     return match;
 }
 
+// Initialize the global objects (called only once)
+void
+initialize(void){
+  int i;
+
+  // initialize the thread pool
+  thrpool_init( &workers, THREADS );
+  
+  // Initialize the file mutex and position
+  pthread_mutex_init(&file_mutex, NULL);
+    
+  // Initialize the block mutexes and queue of coded packets and counters
+  for(i = 0; i < NUM_BLOCKS; i++){
+    pthread_mutex_init( &blocks[i].block_mutex, NULL );
+    q_init(&coded_q[i], 2*BLOCK_SIZE);
+  }
+
+}
+
+
+// Initialize all of the global variables except the ones read from config file
 void
 restart(void){
     // Print to the db file to differentiate traces
     fprintf(stdout, "\n\n*************************************\n****** Starting New Connection ******\n*************************************\n");
 
-    snd_max = 0; /* biggest send */
-    maxpkts = 0;
-    ackno = 0;
-    slow_start=1;   /* in vegas slow start */
-    start_time = 0; 
-    vdelta = 0;
-    enobufs = 0;
-    idle = 0;
-    slr = 0;
-    slr_long = SLR_LONG_INIT;
+    int i,j;
+
+    for(i = 0; i < NUM_BLOCKS; i++){
+      dof_remain[i] = 0;
+    }
+
+    memset(buff,0,BUFFSIZE);        /* pretouch */
 
 
-    // Statistics // 
-    vdecr = 0;
-    v0  = 0; /* vegas decrements or no adjusts */
-    timeouts=0;
-    ipkts = 0;
-    opkts = 0;
-    badacks = 0;
-    max_delta = 0;  /* vegas like tracker */
-    minrtt=999999.;
-    maxrtt=0;
-    avrgrtt = 0;
-    srtt=0;
-    h=.25;
-    g=.125;
-    rcvt = 0;
-    total_loss = 0;
+    for (i=0; i < MAX_CONNECT; i++){
+      dof_req[i] = BLOCK_SIZE;
+      for(j=0; j < MAX_CWND; j++) OnFly[i][j] = 0;
 
+      snd_nxt[i]  = 1;
+      snd_una[i]  = 1;
+      snd_cwnd[i] = initsegs;
+     
+      if (multiplier) {
+        snd_ssthresh[i] = multiplier*MAX_CWND;
+      } else {
+        snd_ssthresh[i] = 2147483647;  /* normal TCP, infinite */
+      }
+
+      // Statistics // 
+      idle[i]       = 0;
+      vdelta[i]     = 0;    /* Vegas delta */
+      max_delta[i]  = 0;
+      slow_start[i] = 1;    /* in vegas slow start */
+      vdecr[i]      = 0;
+      v0[i]         = 0;    /* vegas decrements or no adjusts */
+
+
+      minrtt[i]     = 999999.;
+      maxrtt[i]     = 0;
+      avrgrtt[i]    = 0;
+      srtt[i]       = 0;
+      rto[i]        = INIT_RTO;
+
+      slr[i]        = 0;
+      slr_long[i]   = SLR_LONG_INIT;
+      slr_longstd[i]= 0;
+      total_loss[i] = 0;
+    }
+
+
+
+    //--------------------------------------------------------
+    done = FALSE;
+    curr_block = 1;
+    maxblockno = 0;
+    file_position = 1; // Initially called to read the first block
+
+    timeouts   = 0;
+    ipkts      = 0;
+    opkts      = 0;
+    badacks    = 0;
+    goodacks   = 0;
+    enobufs    = 0;
+    start_time = 0;
+    rcvt       = 0;
+    idle_total = 0;
 }
 
 
