@@ -16,7 +16,6 @@
 #define SLR_LONG_INIT 0.05
 #define INIT_RTO 1
 
-#define MAX_CODING_WND 128
 #define INIT_CODING_WND 5
 
 

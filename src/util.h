@@ -15,10 +15,11 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT} flag_t;
 //---------------- CTCP parameters ------------------//
 #define MSS 1500 // XXX: make sure that this is fine...
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
-#define PAYLOAD_SIZE 1400 // Actual payload is 1398
-// TODO: change such that we can change PAYLOAD_SIZE, BLOCK_SIZE, CODING_WIN via config file
+// TODO: change such that we can change MSS, BLOCK_SIZE, CODING_WIN via config file
+
 #define BLOCK_SIZE 128 // Maximum # of packets in a block (Default block length)
 #define MAX_CWND 70
+#define MAX_CODING_WND 128
 
 #define ACK_SIZE sizeof(double) \
     + sizeof(int)               \
@@ -26,6 +27,16 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT} flag_t;
     + sizeof(uint32_t)          \
     + sizeof(uint8_t)
 
+#define PAYLOAD_SIZE (MSS \
+- (sizeof(double) \
+   + sizeof(flag_t) \
+   + sizeof(uint32_t) \
+   + sizeof(uint32_t) \
+   + sizeof(uint8_t) \
+   + sizeof(uint8_t) \
+   + sizeof(uint8_t) \
+   + MAX_CODING_WND*sizeof(uint8_t) ) ) 
+  
 typedef int socket_t;
 typedef struct timeval timeval_t;
 

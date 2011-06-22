@@ -1046,7 +1046,16 @@ marshallData(Data_Pckt msg, char* buf){
     int partial_blk_flg = 0;
     if (msg.flag == PARTIAL_BLK) partial_blk_flg = sizeof(msg.blk_len);
 
-    int size = PAYLOAD_SIZE + sizeof(double) + sizeof(flag_t) + sizeof(msg.seqno) + sizeof(msg.blockno) + (partial_blk_flg) + sizeof(msg.start_packet) + sizeof(msg.num_packets) + msg.num_packets*sizeof(msg.packet_coeff); // the total size in bytes of the current packet
+    // the total size in bytes of the current packet
+    int size = PAYLOAD_SIZE 
+      + sizeof(double) 
+      + sizeof(flag_t) 
+      + sizeof(msg.seqno) 
+      + sizeof(msg.blockno) 
+      + (partial_blk_flg) 
+      + sizeof(msg.start_packet) 
+      + sizeof(msg.num_packets) 
+      + msg.num_packets*sizeof(msg.packet_coeff); 
 
     //Set to zeroes before starting
     memset(buf, 0, size);
