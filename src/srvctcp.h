@@ -50,6 +50,7 @@ double slr_long[MAX_CONNECT];             // slr with longer memory
 double slr_longstd[MAX_CONNECT];          // Standard Deviation of slr_long
 int total_loss[MAX_CONNECT];              
 
+int path_id = 0;
 
 //----------------------------------------------------------------//
 FILE *db;     /* debug trace file */
