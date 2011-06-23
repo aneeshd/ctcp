@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include "util.h"
 #include "qbuffer.h"
+#include <sys/poll.h>
 
 //---------------- DEFAULT CONNECTION PARAMETERS ------------------//
 #define BUFFSIZE  65536
@@ -25,7 +26,7 @@ socklen_t srvlen;
 Coded_Block_t blocks[NUM_BLOCKS];
 uint32_t curr_block;
 // MULTIPLE SUBSTREAMS
-int substreams;
+int substreams=3;
 int sockfd[MAX_SUBSTREAMS];
 
 

@@ -46,7 +46,7 @@ main(int argc, char** argv){
     char *file_name = FILE_NAME;
     char *port = PORT;
     char *host = HOST;
-    int numbytes[MAX_SUBSTREAMS];
+    int numbytes;//[MAX_SUBSTREAMS];
     int k; // for loop counter
     int rv;
 
@@ -92,25 +92,32 @@ main(int argc, char** argv){
         return 1;
     }
     // TODO need to loop through to find interfaces number of connections
-    substreams = 1; // Check that substreamds <= MAX_SUBSTREAMS
+    //substreams = 1; // Check that substreamds <= MAX_SUBSTREAMS
    
     // loop through all the results and bind to the first possible
-    for(k = 0; k<substreams; k++){
-      for(result = servinfo; result != NULL; result = result->ai_next) {
-        if((sockfd[k] = socket(result->ai_family,
-                               result->ai_socktype,
-                               result->ai_protocol)) == -1){
-          perror("atoucli: failed to initialize socket");
-          continue;
-        }
-        break;
+    //for(k = 0; k<substreams; k++){
+
+    k=0;
+    for(result = servinfo; result != NULL; result = result->ai_next) {
+      
+      if((sockfd[k] = socket(result->ai_family,
+                             result->ai_socktype,
+                             result->ai_protocol)) == -1){
+        perror("atoucli: failed to initialize socket");
+        continue;
       }
-      servinfo = result->ai_next;
-    }
+      for (k=1; k<substreams; k++){
+        sockfd[k] = socket(result->ai_family,
+                           result->ai_socktype,
+                           result->ai_protocol);
+      }
+      
+      break;        
+    }  
 
     // If we got here, it means that we couldn't initialize the socket.
     if(result  == NULL){
-        err_sys("atoucli: failed to bind to socket");
+      err_sys("atoucli: failed to bind to socket");
     }
     freeaddrinfo(servinfo);
 
@@ -122,7 +129,7 @@ main(int argc, char** argv){
 
     // Send request to the server.
     // TODO do we only send request through the first substream???
-    if((numbytes[0] = sendto(sockfd[0], file_name, (strlen(file_name)+1)*sizeof(char), 0,
+    if((numbytes = sendto(sockfd[0], file_name, (strlen(file_name)+1)*sizeof(char), 0,
                           result->ai_addr, result->ai_addrlen)) == -1){
       err_sys("sendto: Request failed");
     }
@@ -151,53 +158,67 @@ main(int argc, char** argv){
         initCodedBlock(k);
     }
 
+    // READING FROM MULTIPLE SOCKET
+    struct pollfd read_set[substreams];
+    for(k=0; k<substreams; k++){
+      read_set[k].fd = sockfd[k];
+      read_set[k].events = POLLIN;
+    }
+
+
 
     Data_Pckt *msg = malloc(sizeof(Data_Pckt));
     double idle_timer;
-    int nb = 0;
-    int curr_substream = 0;
+    int curr_substream=0;
+    int ready;
     do{
+      idle_timer = getTime();
+      // value -1 blocks until something is ready to read
+      ready = poll(read_set, substreams, -1); 
+      
+      if(ready == -1){
+        perror("poll"); 
+      }else if (ready == 0){
+        printf("Timeout occurred during poll! Should not happen with -1\n");
+      }else{
         srvlen = sizeof srv_addr; // TODO: this is not necessary -> remove
-         
-        for(curr_substream=0; curr_substream<substreams; curr_substream++){
-          idle_timer = getTime();
-          if((numbytes[curr_substream] = recvfrom(sockfd[curr_substream], buff, MSS, 0,
-                                                  &srv_addr, &srvlen)) == -1){
-            err_sys("recvfrom");
-          }
-          
-          if(numbytes[curr_substream] <= 0) break;
-          
-          idle_total += getTime() - idle_timer;
-          
-          pkts++;
-          end_time = secs();  /* last read */
-          if (start_time == 0) start_time = end_time;  /* first pkt time */
-          
-          // Unmarshall the packet
-          bool match = unmarshallData(msg, buff);
-          if(msg->flag == FIN_CLI){
-            break;
-          }
-          
-          if (debug > 6){
-            printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
-          }
-          
-          if (debug > 6 && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno);
-          
-          bldack(msg, match, curr_substream);
-        }
+        //printf("ready! %d\n", ready);
 
+        do{
+          if(read_set[curr_substream].revents & POLLIN){
+            //printf("reading substream %d\n", curr_substream);
+            if((numbytes = recvfrom(sockfd[curr_substream], buff, MSS, 0,
+                                    &srv_addr, &srvlen)) == -1){
+              err_sys("recvfrom");
+            }
+            if(numbytes <= 0) break;
+            
+            idle_total += getTime() - idle_timer;
+
+            pkts++;
+            end_time = secs();  /* last read */
+            if (start_time == 0) start_time = end_time;  /* first pkt time */
+            
+            // Unmarshall the packet
+            bool match = unmarshallData(msg, buff);
+            if(msg->flag == FIN_CLI){
+              break;
+            }
+            if (debug > 6){
+              printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
+            }
+            if (debug > 6 && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno);
+            
+            bldack(msg, match, curr_substream);
+            ready -= 1;
+          }
+          curr_substream +=1;
+          if(curr_substream == substreams) curr_substream = 0;
+        }while(ready>0);
+      }
         // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..? 
         // NOTE that the ones that are not active can be zero, or any value. 
-        nb = numbytes[0];
-        for(k=1; k<substreams; k++){
-          if (nb < numbytes[k])
-            nb = numbytes[k];
-        }
-
-    }while(nb > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc 
+    }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc 
 
     ctrlc();
 
@@ -212,7 +233,7 @@ err_sys(char *s){
 }
 
 void
-bldack(Data_Pckt *msg, bool match, int substream){
+bldack(Data_Pckt *msg, bool match, int curr_substream){
     double elimination_timer = getTime();
     uint32_t blockno = msg->blockno;    //The block number of incoming packet
 
@@ -337,7 +358,7 @@ bldack(Data_Pckt *msg, bool match, int substream){
     // Marshall the ack into buff
     int size = marshallAck(*ack, buff);
     srvlen = sizeof(srv_addr);
-    if(sendto(sockfd[substream],buff, size, 0, &srv_addr, srvlen) == -1){
+    if(sendto(sockfd[curr_substream],buff, size, 0, &srv_addr, srvlen) == -1){
         err_sys("bldack: sendto");
     }
     acks++;
