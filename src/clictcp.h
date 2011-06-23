@@ -1,33 +1,38 @@
 #ifndef ATOUSRV_H_
 #define ATOUSRV_H_
-#define MIN(x,y) (y)^(((x) ^ (y)) &  - ((x) < (y)))
-#define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
-
-#define BUFFSIZE  65536
-
 #include <unistd.h>
 #include "util.h"
 #include "qbuffer.h"
+#include <sys/poll.h>
 
-//---------------- CTCP related variables ------------------//
+//---------------- DEFAULT CONNECTION PARAMETERS ------------------//
+#define BUFFSIZE  65536
 #define PORT "9999"
 #define HOST "127.0.0.1"
 #define FILE_NAME "Avatar.mov"
-#define NUM_BLOCKS 2
-Coded_Block_t blocks[NUM_BLOCKS];
-//uint8_t coding_wnd = CODING_WND;
-uint32_t curr_block;
 
 struct sockaddr srv_addr;
 struct addrinfo *result;
 FILE *rcv_file;
 double dbuff[BUFFSIZE/8];
 char *buff = (char *)dbuff;
-int sockfd, rcvspace;
-int pkts;
-int debug = 0, acks;
+int rcvspace;
 socklen_t srvlen;
 
+//---------------- CTCP PARAMETERS ------------------//
+#define NUM_BLOCKS 2
+#define MAX_SUBSTREAMS 5
+
+Coded_Block_t blocks[NUM_BLOCKS];
+uint32_t curr_block;
+// MULTIPLE SUBSTREAMS
+int substreams=3;
+int sockfd[MAX_SUBSTREAMS];
+
+
+//---------------- STATISTICS & ACCOUTING ------------------//
+int pkts, acks;
+int debug = 0;
 int ndofs = 0;
 int old_blk_pkts = 0;
 int total_loss = 0;
@@ -35,8 +40,8 @@ double idle_total = 0; // The total time the client has spent waiting for a pack
 double decoding_delay = 0;
 double elimination_delay = 0;
 int last_seqno = 0;
+double start_time,end_time;
 
-double due,st,et;
 unsigned int rtt_base=0; // Used to keep track of the rtt
 
 uint8_t inv_vec[256]={
@@ -63,7 +68,7 @@ uint8_t inv_vec[256]={
  */
 void ctrlc(void);
 void err_sys(char *s);
-void bldack(Data_Pckt *msg, bool match);
+void bldack(Data_Pckt *msg, bool match, int substream);
 void normalize(uint8_t* coefficients, char*  payload, uint8_t size);
 int  shift_row(uint8_t* buf, int len);
 bool isEmpty(uint8_t* coefficients, uint8_t size);

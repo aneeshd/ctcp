@@ -25,21 +25,19 @@ usage(void) {
  */
 void
 ctrlc(void){
-    //int i;
-    et = et-st;  /* elapsed time */
-    if (et==0)et=.1;
-    /* don't include first pkt in data/pkt rate */
-    printf("\n \n%d pkts  %d acks  %d bytes\n %f KBs %f Mbs %f secs \n",
-           pkts,acks,PAYLOAD_SIZE*pkts,1.e-3*PAYLOAD_SIZE*(pkts-1)/et,
-           8.e-6*PAYLOAD_SIZE*(pkts-1)/et,et);
-    printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
-    //for(i=0;i<hocnt;i++) printf("lost pkt %d\n",holes[i]);
-    printf("**Ndofs** %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);
-    printf("**Old packets** %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
-    printf("Total Channel loss rate %f\n", (double)total_loss/(double)last_seqno);
-    printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", idle_total, elimination_delay, decoding_delay);
-    fclose(rcv_file);
-    exit(0);
+  end_time = end_time-start_time;  /* elapsed time */
+  if (end_time==0)end_time=.1;
+  /* don't include first pkt in data/pkt rate */
+  printf("\n \n%d pkts  %d acks  %d bytes\n %f KBs %f Mbs %f secs \n",
+         pkts,acks,PAYLOAD_SIZE*pkts,1.e-3*PAYLOAD_SIZE*(pkts-1)/end_time,
+         8.e-6*PAYLOAD_SIZE*(pkts-1)/end_time,end_time);
+  printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
+  printf("**Ndofs** %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);
+  printf("**Old packets** %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
+  printf("Total Channel loss rate %f\n", (double)total_loss/(double)last_seqno);
+  printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", idle_total, elimination_delay, decoding_delay);
+  fclose(rcv_file);
+  exit(0);
 }
 
 int
@@ -48,11 +46,11 @@ main(int argc, char** argv){
     char *file_name = FILE_NAME;
     char *port = PORT;
     char *host = HOST;
-    int numbytes;
-    struct addrinfo hints, *servinfo;
+    int numbytes;//[MAX_SUBSTREAMS];
+    int k; // for loop counter
     int rv;
-    int c;
 
+    int c;
     while((c = getopt(argc, argv, "h:p:b:D:f:")) != -1) {
         switch (c) {
         case 'h':
@@ -81,6 +79,10 @@ main(int argc, char** argv){
     printf("dest %s\n", dst_file_name);
     rcv_file = fopen(dst_file_name,  "wb");
 
+
+
+
+    struct addrinfo hints, *servinfo;
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC; // This works for buth IPv4 and IPv6
     hints.ai_socktype = SOCK_DGRAM;
@@ -89,44 +91,58 @@ main(int argc, char** argv){
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
     }
-
+    // TODO need to loop through to find interfaces number of connections
+    //substreams = 1; // Check that substreamds <= MAX_SUBSTREAMS
+   
     // loop through all the results and bind to the first possible
+    //for(k = 0; k<substreams; k++){
+
+    k=0;
     for(result = servinfo; result != NULL; result = result->ai_next) {
-        if((sockfd = socket(result->ai_family,
-                            result->ai_socktype,
-                            result->ai_protocol)) == -1){
-            perror("atoucli: failed to initialize socket");
-            continue;
-        }
-        break;
-    }
+      
+      if((sockfd[k] = socket(result->ai_family,
+                             result->ai_socktype,
+                             result->ai_protocol)) == -1){
+        perror("atoucli: failed to initialize socket");
+        continue;
+      }
+      for (k=1; k<substreams; k++){
+        sockfd[k] = socket(result->ai_family,
+                           result->ai_socktype,
+                           result->ai_protocol);
+      }
+      
+      break;        
+    }  
 
     // If we got here, it means that we couldn't initialize the socket.
     if(result  == NULL){
-        err_sys("atoucli: failed to bind to socket");
+      err_sys("atoucli: failed to bind to socket");
     }
-
     freeaddrinfo(servinfo);
+
+
+
 
     signal(SIGINT, (__sighandler_t) ctrlc);
 
+
     // Send request to the server.
-    fprintf(stdout, "Sending request\n");
-    if((numbytes = sendto(sockfd, file_name, (strlen(file_name)+1)*sizeof(char), 0,
+    // TODO do we only send request through the first substream???
+    if((numbytes = sendto(sockfd[0], file_name, (strlen(file_name)+1)*sizeof(char), 0,
                           result->ai_addr, result->ai_addrlen)) == -1){
-        err_sys("sendto: Request failed");
+      err_sys("sendto: Request failed");
     }
-    fprintf(stdout, "Request sent\n");
+    fprintf(stdout, "Request sent for %s\n", file_name);
 
 
-    if (!rcvspace){
-        rcvspace = MSS*MAX_CWND;
-    }
+    if (!rcvspace) rcvspace = MSS*MAX_CWND;
 
     optlen = sizeof(rcvspace);
-    setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
-    getsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (char *) &rlth, (socklen_t*)&optlen);
-
+    for(k=0; k<substreams; k++){
+      setsockopt(sockfd[k],SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
+      getsockopt(sockfd[k], SOL_SOCKET, SO_RCVBUF, (char *) &rlth, (socklen_t*)&optlen);
+    }
     printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
     memset(buff,0,BUFFSIZE);        /* pretouch */
@@ -135,7 +151,6 @@ main(int argc, char** argv){
 
 
     // Initialize the blocks
-    int k;
     for(k = 0; k < NUM_BLOCKS; k++){
         blocks[k].rows = malloc(BLOCK_SIZE*sizeof(char*));
         blocks[k].content = malloc(BLOCK_SIZE*sizeof(char*));
@@ -143,45 +158,67 @@ main(int argc, char** argv){
         initCodedBlock(k);
     }
 
+    // READING FROM MULTIPLE SOCKET
+    struct pollfd read_set[substreams];
+    for(k=0; k<substreams; k++){
+      read_set[k].fd = sockfd[k];
+      read_set[k].events = POLLIN;
+    }
+
+
+
     Data_Pckt *msg = malloc(sizeof(Data_Pckt));
     double idle_timer;
-
-
+    int curr_substream=0;
+    int ready;
     do{
+      idle_timer = getTime();
+      // value -1 blocks until something is ready to read
+      ready = poll(read_set, substreams, -1); 
+      
+      if(ready == -1){
+        perror("poll"); 
+      }else if (ready == 0){
+        printf("Timeout occurred during poll! Should not happen with -1\n");
+      }else{
         srvlen = sizeof srv_addr; // TODO: this is not necessary -> remove
-        // TODO: should be reading only a packet or multiple packets at a time, need to know the packet size in advance...
+        //printf("ready! %d\n", ready);
 
-        idle_timer = getTime();
-        if((numbytes = recvfrom(sockfd, buff, MSS, 0,
-                                &srv_addr, &srvlen)) == -1){
-            err_sys("recvfrom");
-        }
+        do{
+          if(read_set[curr_substream].revents & POLLIN){
+            //printf("reading substream %d\n", curr_substream);
+            if((numbytes = recvfrom(sockfd[curr_substream], buff, MSS, 0,
+                                    &srv_addr, &srvlen)) == -1){
+              err_sys("recvfrom");
+            }
+            if(numbytes <= 0) break;
+            
+            idle_total += getTime() - idle_timer;
 
-        if(numbytes <= 0) break;
-
-        idle_total += getTime() - idle_timer;
-
-        pkts++;
-        et = secs();  /* last read */
-        if (st == 0) st = et;  /* first pkt time */
-
-        // Unmarshall the packet
-        bool match = unmarshallData(msg, buff);
-        if(msg->flag == FIN_CLI){
-            break;
-        }
-
-        if (debug > 6){
-            printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
-        }
-
-        if (debug > 6 && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno);
-
-        bldack(msg, match);
-
-        //inlth = numbytes;
-
-    }while(numbytes > 0);
+            pkts++;
+            end_time = secs();  /* last read */
+            if (start_time == 0) start_time = end_time;  /* first pkt time */
+            
+            // Unmarshall the packet
+            bool match = unmarshallData(msg, buff);
+            if(msg->flag == FIN_CLI){
+              break;
+            }
+            if (debug > 6){
+              printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
+            }
+            if (debug > 6 && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno);
+            
+            bldack(msg, match, curr_substream);
+            ready -= 1;
+          }
+          curr_substream +=1;
+          if(curr_substream == substreams) curr_substream = 0;
+        }while(ready>0);
+      }
+        // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..? 
+        // NOTE that the ones that are not active can be zero, or any value. 
+    }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc 
 
     ctrlc();
 
@@ -196,9 +233,8 @@ err_sys(char *s){
 }
 
 void
-bldack(Data_Pckt *msg, bool match){
+bldack(Data_Pckt *msg, bool match, int curr_substream){
     double elimination_timer = getTime();
-
     uint32_t blockno = msg->blockno;    //The block number of incoming packet
 
     // Update the incoming block lenght
@@ -219,8 +255,6 @@ bldack(Data_Pckt *msg, bool match){
     }else if (blockno >= curr_block + NUM_BLOCKS){
         //printf("BAD packet: The block does not exist yet.\n");
     }else{
-
-
         int prev_dofs = blocks[blockno%NUM_BLOCKS].dofs;
 
         // Otherwise, the packet should go to one of the blocks in the memory
@@ -279,12 +313,12 @@ bldack(Data_Pckt *msg, bool match){
                     }
 
                     msg->packet_coeff[0] = 0; // TODO; check again
-                    // Subtract row with index strat with the row at hand (coffecients)
+                    // Subtract row with index start with the row at hand (coffecients)
                     for(i = 1; i < blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
                         msg->packet_coeff[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].rows[start][i], pivot);
                     }
 
-                    // Subtract row with index strat with the row at hand (content)
+                    // Subtract row with index start with the row at hand (content)
                     for(i = 0; i < PAYLOAD_SIZE; i++){
                         msg->payload[i] ^= FFmult(blocks[blockno%NUM_BLOCKS].content[start][i], pivot);
                     }
@@ -324,7 +358,7 @@ bldack(Data_Pckt *msg, bool match){
     // Marshall the ack into buff
     int size = marshallAck(*ack, buff);
     srvlen = sizeof(srv_addr);
-    if(sendto(sockfd,buff, size, 0, &srv_addr, srvlen) == -1){
+    if(sendto(sockfd[curr_substream],buff, size, 0, &srv_addr, srvlen) == -1){
         err_sys("bldack: sendto");
     }
     acks++;
@@ -338,10 +372,9 @@ bldack(Data_Pckt *msg, bool match){
 
     //------------------------------------------------------------------------------------------------------
 
-    // We always try decoding the curr_block first, even if the next block is decodable, it is not useful
+    // Always try decoding the curr_block first, even if the next block is decodable, it is not useful
     if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
-        // We have enough dofs to decode
-        // Decode!
+        // We have enough dofs to decode, DECODE!
 
         double decoding_timer = getTime();
         if (debug > 4){
@@ -350,13 +383,11 @@ bldack(Data_Pckt *msg, bool match){
 
         unwrap(curr_block);
 
-
         // Write the decoded packets into the file
         writeAndFreeBlock(curr_block);
 
         // Initialize the block for next time
         initCodedBlock(curr_block);
-
 
         // Increment the current block number
         curr_block++;
@@ -464,21 +495,17 @@ writeAndFreeBlock(uint32_t blockno){
 
         // Convert to host order
         len = ntohs(len);
-        //len = PAYLOAD_SIZE - 2;
-        //printf("(%d) Writing a packet of length %d\n", i, len);
-
-
         // Write the contents of the decode block into the file
         fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
 
         // TODO remove the if condition (This is to avoid seg fault for the last block)
-        if (blocks[blockno%NUM_BLOCKS].len == BLOCK_SIZE){
+        //if (blocks[blockno%NUM_BLOCKS].len == BLOCK_SIZE){
             // Free the content
             //    free(blocks[blockno%NUM_BLOCKS].content[i]);
 
             // Free the matrix
             free(blocks[blockno%NUM_BLOCKS].rows[i]);
-        }
+            //}
     }
 }
 
