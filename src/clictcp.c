@@ -122,18 +122,30 @@ main(int argc, char** argv){
     freeaddrinfo(servinfo);
 
 
-
-
     signal(SIGINT, (__sighandler_t) ctrlc);
 
 
     // Send request to the server.
-    // TODO do we only send request through the first substream???
+    // TODO do we only send request through the first substream??? YES!!!
     if((numbytes = sendto(sockfd[0], file_name, (strlen(file_name)+1)*sizeof(char), 0,
                           result->ai_addr, result->ai_addrlen)) == -1){
       err_sys("sendto: Request failed");
     }
-    fprintf(stdout, "Request sent for %s\n", file_name);
+    fprintf(stdout, "Request sent for %s on the first socket\n", file_name);
+
+    // Send a SYN packet for any new connection
+    for (k = 1; k < substreams; k++){
+      Ack_Pckt* SYN_pkt = ackPacket(0, 0, 0);
+      SYN_pkt->tstamp = 0;
+      SYN_pkt->flag = SYN;
+      int size = marshallAck(*SYN_pkt, buff);
+     
+      if((numbytes = sendto(sockfd[k], buff, size, 0,
+                            result->ai_addr, result->ai_addrlen)) == -1){
+        err_sys("sendto: Request failed");
+      }
+      printf("New connection request sent to server on socket %d\n", k+1);
+    }
 
 
     if (!rcvspace) rcvspace = MSS*MAX_CWND;

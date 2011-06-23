@@ -5,7 +5,7 @@
 
 // ------------ Connection parameters ---------------//
 #define BUFFSIZE    65535
-#define MAX_CONNECT 2
+#define MAX_CONNECT 5
 
 // ------------ CTCP parameters ---------------//
 #define NUM_BLOCKS 2

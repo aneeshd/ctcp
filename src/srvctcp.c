@@ -203,6 +203,9 @@ doit(socket_t sockfd){
 
             printf("Request for a new path: Client port %d\n", ((struct sockaddr_in*)&cli_addr)->sin_port);
 
+            // Initially send a few packets to keep it going
+            send_segs(sockfd);
+            continue;        // Go back to the beginning of the while loop
           }
         } else{
           // Use the cli_addr to find the right path_id for this Ack
@@ -211,7 +214,7 @@ doit(socket_t sockfd){
           while (sockaddr_cmp(&cli_addr, &cli_addr_storage[path_id]) != 0){
             path_id = (path_id + 1)%max_path_id;
           }
-
+          //printf("path_id %d \t", path_id);
         }
 
         /*-----------------------------------------------------------------*/
@@ -465,18 +468,24 @@ endSession(void){
   gethostname(myname,sizeof(myname));
   printf("\n\n%s => %s for %f secs\n",
          myname,host, total_time);
-  printf("**THRU** %f Mbs -- pkts in %d  out %d  enobufs %d \n",
-         8.e-6*(snd_una[path_id]*PAYLOAD_SIZE)/total_time, ipkts,opkts,enobufs);
-  printf("**LOSS* total bytes out %d   Loss rate %6.3f%%    %f Mbs \n",
-         opkts*mss,100.*total_loss[path_id]/snd_una[path_id],8.e-6*opkts*mss/total_time);
-  if (ipkts) avrgrtt[path_id] /= ipkts;
-  printf("**RTT** minrtt  %f maxrtt %f avrgrtt %f\n",
-         minrtt[path_id],maxrtt[path_id],avrgrtt[path_id]);
-  printf("**RTT** rto %f  srtt %f \n",rto[path_id],srtt[path_id]);
-  printf("%f max_delta\n", max_delta[path_id]);
-  printf("vdecr %d v0 %d  vdelta %f\n",vdecr[path_id], v0[path_id],vdelta[path_id]);
-  printf("snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d goodacks%d\n",
-         snd_nxt[path_id],(int)snd_cwnd[path_id], snd_una[path_id],snd_ssthresh[path_id], goodacks);
+
+
+  for (path_id = 0; path_id < max_path_id; path_id++){
+    printf("******* Priniting Statistics for path   %d   ******** \n ", path_id);
+    printf("**THRU** %f Mbs -- pkts in %d  out %d  enobufs %d \n",
+           8.e-6*(snd_una[path_id]*PAYLOAD_SIZE)/total_time, ipkts,opkts,enobufs);
+    printf("**LOSS* total bytes out %d   Loss rate %6.3f%%    %f Mbs \n",
+           opkts*mss,100.*total_loss[path_id]/snd_una[path_id],8.e-6*opkts*mss/total_time);
+    if (ipkts) avrgrtt[path_id] /= ipkts;
+    printf("**RTT** minrtt  %f maxrtt %f avrgrtt %f\n",
+           minrtt[path_id],maxrtt[path_id],avrgrtt[path_id]);
+    printf("**RTT** rto %f  srtt %f \n",rto[path_id],srtt[path_id]);
+    printf("%f max_delta\n", max_delta[path_id]);
+    printf("vdecr %d v0 %d  vdelta %f\n",vdecr[path_id], v0[path_id],vdelta[path_id]);
+    printf("snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d goodacks%d\n\n",
+           snd_nxt[path_id],(int)snd_cwnd[path_id], snd_una[path_id],snd_ssthresh[path_id], goodacks);
+  }
+
   printf("Total idle time %f\n", idle_total);
   if(snd_file) fclose(snd_file);
   if(db)       fclose(db);
