@@ -50,8 +50,10 @@ double slr_long[MAX_CONNECT];             // slr with longer memory
 double slr_longstd[MAX_CONNECT];          // Standard Deviation of slr_long
 int total_loss[MAX_CONNECT];              
 
-int path_id = 0;
+int path_id;                              // Connection identifier
+int max_path_id;                          // total_number of paths so far 
 
+struct sockaddr cli_addr_storage[MAX_CONNECT];
 //----------------------------------------------------------------//
 FILE *db;     /* debug trace file */
 char* log_name = NULL; // Name of the log
@@ -136,6 +138,7 @@ void* coding_job(void *a);
 void free_coding_job(void* a);
 void free_coded_pkt(void* a);
 void initialize(void);
+int sockaddr_cmp(struct sockaddr* addr1, struct sockaddr* addr2);
 
 #endif // ATOUCLI_H_
 
