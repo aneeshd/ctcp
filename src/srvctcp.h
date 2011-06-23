@@ -28,6 +28,7 @@ const double beta            = 2.5;                 // rto range compared to rtt
 // ------------ MultiPath variables ---------------//
 uint32_t OnFly[MAX_CONNECT][MAX_CWND];
 int dof_req[MAX_CONNECT];
+int dof_req_latest;                       /* Latest information about dofs of the current block */
 uint32_t snd_nxt[MAX_CONNECT];
 uint32_t snd_una[MAX_CONNECT];
 double snd_cwnd[MAX_CONNECT];             /* congestion-controlled window */

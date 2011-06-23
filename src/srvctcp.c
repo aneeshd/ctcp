@@ -200,6 +200,9 @@ doit(socket_t sockfd){
 
             // add the client address info to the client lookup table
             cli_addr_storage[path_id] = cli_addr;
+
+            printf("Request for a new path: Client port %d\n", ((struct sockaddr_in*)&cli_addr)->sin_port);
+
           }
         } else{
           // Use the cli_addr to find the right path_id for this Ack
@@ -208,6 +211,7 @@ doit(socket_t sockfd){
           while (sockaddr_cmp(&cli_addr, &cli_addr_storage[path_id]) != 0){
             path_id = (path_id + 1)%max_path_id;
           }
+
         }
 
         /*-----------------------------------------------------------------*/
@@ -224,7 +228,8 @@ doit(socket_t sockfd){
         /* see if a packet has timedout */        
         if (idle[path_id] > maxidle) {
           /* give up */
-          printf("*** idle abort ***\n");
+          printf("*** idle abort *** on path %d\n", path_id);
+          // TODO Need to remove the path from cli_addr_storage-
           break;
         }
             
@@ -253,6 +258,11 @@ doit(socket_t sockfd){
         snd_cwnd[path_id] = initsegs;  /* drop window */
         snd_una[path_id] = snd_nxt[path_id];
         send_segs(sockfd);  /* resend */                     
+
+        // Update the path_id so that we timeout based on another path, and try every path in a round
+        // Avoids getting stuck if the current path dies and packets/acks on other paths are lost
+        path_id = (path_id + 1)%max_path_id;
+
       }
     }  /* while more pkts */
 
@@ -314,9 +324,9 @@ send_segs(socket_t sockfd){
   double p = slr[path_id]/(2.0-slr[path_id]);   // Compensate for server's over estimation of the loss rate caused by lost acks
 
   // The total number of dofs the we think we should be sending (for the current block) from now on
-  int dof_needed = MAX(0, (int) (ceil((dof_req[path_id] + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req[path_id]*p) ) )/(1-p))) - CurrOnFly);
+  int dof_needed = MAX(0, (int) (ceil((dof_req_latest + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req_latest*p) ) )/(1-p))) - CurrOnFly);
 
-  if (dof_req[path_id] - CurrOnFly < win){
+  if (dof_req_latest - CurrOnFly < win){
     CurrWin = MIN(win, dof_needed);
     NextWin = win - CurrWin;
   }
@@ -337,7 +347,7 @@ send_segs(socket_t sockfd){
       job->coding_wnd = coding_wnd;*/
     job->coding_wnd = INIT_CODING_WND;
 
-    if (dof_req[path_id] <= 3) {
+    if (dof_req_latest <= 3) {
       job->coding_wnd = MAX_CODING_WND;
       printf("Requested jobs with coding window %d - blockno %d dof_needed %d  \n", job->coding_wnd, curr_block, dof_needed);
     }
@@ -544,7 +554,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       addJob(&workers, &coding_job, job, &free, LOW);
     }
 
-    curr_block++;
+    curr_block++;                      // Update the current block identifier
+    dof_req_latest = ack->dof_req;     // reset the dof counter for the current block
 
     if (debug > 5 && curr_block%10==0){
       printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms \n", curr_block, snd_cwnd[path_id], 100*slr[path_id], srtt[path_id]*1000);
@@ -592,6 +603,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     }
 
     dof_req[path_id] = ack->dof_req;  // Updated the requested dofs for the current block
+    dof_req_latest = MIN(dof_req_latest, dof_req[path_id]);
+
 
     advance_cwnd();
 
@@ -1211,6 +1224,7 @@ restart(void){
 
   for (i=0; i < MAX_CONNECT; i++){
     dof_req[i] = BLOCK_SIZE;
+    dof_req_latest = BLOCK_SIZE;
     for(j=0; j < MAX_CWND; j++) OnFly[i][j] = 0;
 
     snd_nxt[i]  = 1;
@@ -1245,7 +1259,7 @@ restart(void){
   }
 
   path_id         = 0;     // client identifier
-  max_path_id     = 0;     // Total number of paths (clients) at any time
+  max_path_id     = 1;     // Total number of paths (clients) at any time
 
 
 
