@@ -16,6 +16,7 @@
 
 #include "srvctcp.h"
 
+
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
@@ -186,7 +187,7 @@ doit(socket_t sockfd){
         unmarshallAck(ack, buff);
 
         if (debug > 6){
-          printf("Got an ACK: ackno %d blockno %d -- RTT est %f \n", ack->ackno, ack->blockno, getTime()-ack->tstamp);
+          printf("Got an ACK: ackno %d blockno %d dof_req %d -- RTT est %f \n", ack->ackno, ack->blockno, ack->dof_req, getTime()-ack->tstamp);
         }
 
         /* ---- Decide if the ack is a request for new connections ------- */
@@ -211,10 +212,12 @@ doit(socket_t sockfd){
           // Use the cli_addr to find the right path_id for this Ack
           // Start searching through other possibilities in the cli_addr_storage
 
+
           while (sockaddr_cmp(&cli_addr, &cli_addr_storage[path_id]) != 0){
             path_id = (path_id + 1)%max_path_id;
           }
           //printf("path_id %d \t", path_id);
+
         }
 
         /*-----------------------------------------------------------------*/
@@ -225,6 +228,8 @@ doit(socket_t sockfd){
         ipkts++;
 
         handle_ack(sockfd, ack);
+
+
       } else if (r < 0) {
         err_sys("select");
       } else if (r==0) {
@@ -311,11 +316,12 @@ send_segs(socket_t sockfd){
   if (win < 1) return;  /* no available window => done */
 
   int CurrOnFly = 0;
-  int i;
-  for(i = snd_una[path_id]; i < snd_nxt[path_id]; i++){
-    CurrOnFly += (OnFly[path_id][i%MAX_CWND] == curr_block);
+  int i,j;
+  for (j = 0; j < max_path_id; j++){
+    for(i = snd_una[j]; i < snd_nxt[j]; i++){
+      CurrOnFly += (OnFly[j][i%MAX_CWND] == curr_block);
+    }
   }
-
 
   int CurrWin = win;
   int NextWin = 0;
@@ -442,6 +448,7 @@ send_one(socket_t sockfd, uint32_t blockno){
 
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
 
+    
   if(numbytes != message_size){
     err_sys("write");
   }
@@ -618,6 +625,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     advance_cwnd();
 
     send_segs(sockfd);  /* send some if we can */
+
 
   } // end else goodack
 }
