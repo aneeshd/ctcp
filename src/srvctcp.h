@@ -21,7 +21,7 @@
 const double slr_wnd_map[10] = {0, 0.0002, 0.002, 0.015, 0.025, 0.042, 0.052, 0.062, 0.075, 1};
 const double slr_mem         = 1.0/BLOCK_SIZE;      // The memory of smoothing function
 const double slr_longmem     = 1.0/(BLOCK_SIZE*10); // Long term memory smoothing constant
-const double g               = 1.0/BLOCK_SIZE;      // Memory for updating slr, rto
+const double g               = 1.0/(BLOCK_SIZE/5);      // Memory for updating slr, rto
 const double beta            = 2.5;                 // rto range compared to rtt
 
 

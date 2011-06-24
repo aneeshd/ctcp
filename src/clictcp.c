@@ -214,7 +214,7 @@ main(int argc, char** argv){
             // Unmarshall the packet
             bool match = unmarshallData(msg, buff);
             if(msg->flag == FIN_CLI){
-              break;
+              ctrlc();
             }
             if (debug > 6){
               printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
