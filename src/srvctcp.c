@@ -212,7 +212,7 @@ doit(socket_t sockfd){
           // Use the cli_addr to find the right path_id for this Ack
           // Start searching through other possibilities in the cli_addr_storage
 
-
+          
           while (sockaddr_cmp(&cli_addr, &cli_addr_storage[path_id]) != 0){
             path_id = (path_id + 1)%max_path_id;
           }
@@ -243,8 +243,10 @@ doit(socket_t sockfd){
             
         if (debug > 1){
           fprintf(stderr,
-                  "timerxmit %6.2f blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  \n",
-                  getTime()-start_time,curr_block,
+                  "timerxmit %6.2f \t on path_id %d \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  \n",
+                  getTime()-start_time,
+                  path_id,
+                  curr_block,
                   blocks[curr_block%NUM_BLOCKS].len,
                   snd_una[path_id],
                   snd_nxt[path_id],
@@ -748,13 +750,14 @@ advance_cwnd(void){
       if (incr !=0){
       printf("window size %d\n", (int)snd_cwnd[path_id]);
       }*/
-    if (snd_cwnd[path_id] < initsegs) snd_cwnd[path_id] = initsegs;
-    if (snd_cwnd[path_id] > MAX_CWND) snd_cwnd[path_id] = MAX_CWND; // XXX
     slow_start[path_id] = 0; /* no vegas ss now */
   }
   if (slr[path_id] > slr_long[path_id] + slr_longstd[path_id]){
-    snd_cwnd[path_id] -= slr[path_id];
+    snd_cwnd[path_id] -= slr[path_id]/2;
   }
+
+  if (snd_cwnd[path_id] < initsegs) snd_cwnd[path_id] = initsegs;
+  if (snd_cwnd[path_id] > MAX_CWND) snd_cwnd[path_id] = MAX_CWND; // XXX
 }
 
 //---------------WORKER FUNCTION ----------------------------------
