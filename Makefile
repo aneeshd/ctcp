@@ -67,6 +67,7 @@ clean:
 	$(ECHO) Cleaning...
 	$(RM) -rf $(BINDIR)
 	$(RM) -rf srvctcp clictcp
+	$(RM) -rf demoServer demoClient
 
 #.PHONY: rmlogs
 #rmlogs:
@@ -98,15 +99,25 @@ $(BINDIR)/libUtil.a: $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BIND
 	$(AR) $(ARFLAGS) $@ $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o
 
 
+demoServer: $(BINDIR)/demoServer.o .buildmode Makefile
+	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
+	$(MKDIR) -p $(dir $@)
+	$(CC) -o $@ $< $(LDFLAGS) -lreadline
+
+demoClient: $(BINDIR)/demoClient.o .buildmode Makefile
+	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
+	$(MKDIR) -p $(dir $@)
+	$(CC) -o $@ $< $(LDFLAGS) -lreadline
+
 # Rule for compiling c files.
 $(BINDIR)/%.o : %.c .buildmode Makefile
 	$(ECHO) "[\033[01;34mCC\033[22;37m] compiling $<"
 	$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $<
 
-
 all: clictcp srvctcp
 
+demo: demoClient demoServer
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)
