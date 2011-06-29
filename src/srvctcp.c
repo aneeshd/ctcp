@@ -352,7 +352,7 @@ send_segs(socket_t sockfd){
   // Check whether we have enough coded packets for current block
   if (dof_remain[curr_block%NUM_BLOCKS] < dof_needed){
 
-    //printf("requesting more dofs: curr block %d,  dof_remain %d, dof_needed %d dof_req[path_id] %d\n", curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req[path_id]);
+    //printf("requesting more dofs: curr path_id %d curr block %d,  dof_remain %d, dof_needed %d dof_req_latest %d\n", path_id, curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req_latest);
 
     coding_job_t* job = malloc(sizeof(coding_job_t));
     job->blockno = curr_block;
@@ -379,6 +379,7 @@ send_segs(socket_t sockfd){
     snd_nxt[path_id]++;
     CurrWin--;
     dof_remain[curr_block%NUM_BLOCKS]--;   // Update the internal dof counter
+
   }
 
 
@@ -544,35 +545,31 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
   //------------- RTT calculations --------------------------//
 
   if (ack->blockno > curr_block){
-    if(maxblockno && ack->blockno > maxblockno){
-      done = TRUE;
-      printf("THIS IS THE LAST ACK\n");
-
-      pthread_mutex_lock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
-            
-      freeBlock(curr_block);
-      q_free(&coded_q[curr_block%NUM_BLOCKS], &free_coded_pkt);
-            
-      pthread_mutex_unlock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
-
-      return; // goes back to the beginning of the while loop in main() and exits
-    }
 
     pthread_mutex_lock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
 
     freeBlock(curr_block);
     q_free(&coded_q[curr_block%NUM_BLOCKS], &free_coded_pkt);
 
-    pthread_mutex_unlock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
+    curr_block++;                      // Update the current block identifier
+
+    pthread_mutex_unlock(&blocks[(curr_block-1)%NUM_BLOCKS].block_mutex);
+
+
+    if(maxblockno && ack->blockno > maxblockno){
+      done = TRUE;
+      printf("THIS IS THE LAST ACK\n");
+      return; // goes back to the beginning of the while loop in main() and exits
+    }
 
     if (!maxblockno){
 
-      //readBlock(curr_block+2);
+      //readBlock(curr_block+1);
       coding_job_t* job = malloc(sizeof(coding_job_t));
-      job->blockno = curr_block+2;
+      job->blockno = curr_block+1;
       //job->dof_request = ceil(BLOCK_SIZE*( 1.04 + 2*slr[path_id] ));
       job->dof_request = BLOCK_SIZE;
-      dof_remain[(curr_block+2)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+      dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
 
       // Update the coding_wnd based on the slr (Use look-up table)
       /*int coding_wnd;
@@ -582,7 +579,6 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
       addJob(&workers, &coding_job, job, &free, LOW);
     }
 
-    curr_block++;                      // Update the current block identifier
     dof_req_latest = ack->dof_req;     // reset the dof counter for the current block
 
     if (debug > 5 && curr_block%10==0){
@@ -607,8 +603,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     if (ackno <= snd_una[path_id]){
       //late ack
       if (debug > 5) fprintf(stderr,
-                             "Late ack: curr block %d badack no %d snd_nxt %d snd_una %d\n",
-                             curr_block, ackno, snd_nxt[path_id], snd_una[path_id]);
+                             "Late ack: curr block %d ack-blockno %d badack no %d snd_nxt %d snd_una %d\n",
+                             curr_block, ack->blockno, ackno, snd_nxt[path_id], snd_una[path_id]);
     } else {
       // good ack TODO
       goodacks++;
@@ -629,9 +625,11 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
 
       snd_una[path_id] = ackno;
     }
-
-    dof_req[path_id] = ack->dof_req;  // Updated the requested dofs for the current block
-    dof_req_latest = MIN(dof_req_latest, dof_req[path_id]);
+ 
+    // Updated the requested dofs for the current block 
+    // The MIN is to avoid outdated infromation by out of order ACKs or ACKs on different paths
+    //dof_req[path_id] = MIN(ack->dof_req, dof_req[path_id]); 
+    dof_req_latest = MIN(dof_req_latest, ack->dof_req);
 
 
     advance_cwnd();
@@ -782,6 +780,15 @@ coding_job(void *a){
 
   pthread_mutex_lock(&blocks[blockno%NUM_BLOCKS].block_mutex);
     
+  // Check if the blockno is already done
+    if( blockno < curr_block ){
+      if (debug > 5){
+        printf("Coding job request for old block - curr_block %d blockno %d dof_request %d \n\n", curr_block,  blockno, dof_request);
+      }
+      goto release;
+    }
+
+
   // Check whether the requested blockno is already read, if not, read it from the file
   // generate the first set of degrees of freedom according toa  random permutation
 
@@ -824,7 +831,7 @@ coding_job(void *a){
 
     // Make sure this never happens!
     if (dof_request < block_len){
-      printf("Error: the initially requested dofs are less than the block length - blockno %d dof_request %d block_len %d\n\n\n",  blockno, dof_request, block_len);
+      printf("Error: the initially requested dofs are less than the block length - blockno %d dof_request %d block_len %d\n\n\n\n\n",  blockno, dof_request, block_len);
       dof_request = block_len;
     }
 
@@ -923,7 +930,6 @@ coding_job(void *a){
 }
 
 //----------------END WORKER ---------------------------------------
-
 
 // Free Handler for the coded packets in coded_q
 void
