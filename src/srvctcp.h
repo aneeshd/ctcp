@@ -27,12 +27,45 @@ const double beta            = 2.5;                 // rto range compared to rtt
 
 
 // ------------ MultiPath variables ---------------//
+/*
+typedef struct{
+  unit32_t OnFly[MAX_CNWD];
+  int dof_req;
+  double last_ack_time;
+  unit32_t snd_nxt;
+  unit32_t snd_una;
+  double snd_cwnd;                     
+  unsigned int snd_ssthresh;
+  int idle;
+  double vdelta;
+  double max_delta;
+  int slow_start;
+  int vdecr;
+  int v0;
+  double minrtt;
+  double maxrtt;
+  double avrgrtt;
+  double srtt;
+  double rto;
+  double slr;
+  double slr_long;
+  double slr_longstd;
+  int total_loss;
+  struct sockaddr cli_addr;  
+} Substream_path;
+*/
+
+int dof_req_latest;                       /* Latest information about dofs of the current block */
+int max_path_id;                          // total_number of paths so far
+//Substream_path active_paths[MAX_CONNECT];             // indicates (1/0) whether a path is alive
+
 uint32_t OnFly[MAX_CONNECT][MAX_CWND];
 int dof_req[MAX_CONNECT];
-int dof_req_latest;                       /* Latest information about dofs of the current block */
+
+double last_ack_time[MAX_CONNECT];
 uint32_t snd_nxt[MAX_CONNECT];
 uint32_t snd_una[MAX_CONNECT];
-double snd_cwnd[MAX_CONNECT];             /* congestion-controlled window */
+double snd_cwnd[MAX_CONNECT];             
 unsigned int snd_ssthresh[MAX_CONNECT];   /* slow start threshold */
 int idle[MAX_CONNECT];                    /* successive timeouts */
 
@@ -52,10 +85,8 @@ double slr_long[MAX_CONNECT];             // slr with longer memory
 double slr_longstd[MAX_CONNECT];          // Standard Deviation of slr_long
 int total_loss[MAX_CONNECT];              
 
-int path_id;                              // Connection identifier
-int max_path_id;                          // total_number of paths so far 
-
 struct sockaddr cli_addr_storage[MAX_CONNECT];
+
 //----------------------------------------------------------------//
 FILE *db;     /* debug trace file */
 char* log_name = NULL; // Name of the log
@@ -109,7 +140,6 @@ int rcvbuf;                      /* udp recv buff for ACKs*/
 //------------------Statistics----------------------------------//
 int ipkts,opkts,badacks,timeouts,enobufs, goodacks;
 double start_time, total_time;
-double rcvt;
 double idle_total; // The total time the server has spent waiting for the acks
 
 
@@ -122,15 +152,16 @@ void endSession(void);
 void terminate(socket_t fd);
 void readConfig(void);
 int doit( socket_t fd);
-void send_segs(socket_t fd);
+void timeout(socket_t fd, int path);
+void send_segs(socket_t fd, int path_id);
 void err_sys(char* s);
 socket_t timedread(socket_t fd, double t);
-void handle_ack(socket_t fd, Ack_Pckt* ack);
+void handle_ack(socket_t fd, Ack_Pckt* ack, int path_id);
 void readBlock(uint32_t blockno);
 void freeBlock(uint32_t blockno);
-void send_one(socket_t fd, unsigned int n);
+void send_one(socket_t fd, unsigned int n, int path_id);
 void update_coding_wnd(void);
-void advance_cwnd(void);
+void advance_cwnd(int path_id);
 int marshallData(Data_Pckt msg, char* buf);
 bool unmarshallAck(Ack_Pckt* msg, char* buf);
 void duplicate(socket_t fd, int sackno);

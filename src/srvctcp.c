@@ -141,6 +141,8 @@ main (int argc, char** argv){
 int
 doit(socket_t sockfd){
     int i,r;
+    int path_id = 0;                              // Connection identifier
+
     i=sizeof(sndbuf);
 
     //--------------- Setting the socket options --------------------------------//
@@ -165,7 +167,7 @@ doit(socket_t sockfd){
     }
 
     // This is where the segments are sent
-    send_segs(sockfd);
+    send_segs(sockfd, path_id);
 
     Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
     double idle_timer;
@@ -179,15 +181,12 @@ doit(socket_t sockfd){
       }
       
       r = timedread(sockfd, rto_max + RTO_BIAS);
-      
       idle_total += getTime() - idle_timer;
 
       if (r > 0) {  /* ack ready */
         
         // The recvfrom should be done to a separate buffer (not buff)
         r= recvfrom(sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen); 
-        // TODO maybe we can set flags so that recvfrom has a timeout of tick seconds
-
         // Unmarshall the ack from the buff
         unmarshallAck(ack, buff);
 
@@ -210,7 +209,8 @@ doit(socket_t sockfd){
             printf("Request for a new path: Client port %d\n", ((struct sockaddr_in*)&cli_addr)->sin_port);
 
             // Initially send a few packets to keep it going
-            send_segs(sockfd);
+            last_ack_time[path_id] = getTime();
+            send_segs(sockfd, path_id);
             continue;        // Go back to the beginning of the while loop
           }
         } else{
@@ -229,57 +229,24 @@ doit(socket_t sockfd){
             
             
         if (r <= 0) err_sys("read");
-        rcvt = getTime();
+        double rcvt = getTime();
         ipkts++;
+        
+        last_ack_time[path_id] = rcvt;
+        handle_ack(sockfd, ack, path_id);
 
-        handle_ack(sockfd, ack);
-
+        for (i = 1; i < max_path_id; i++){
+          if(rcvt - last_ack_time[(path_id+i)%max_path_id] > rto[(path_id + i)%max_path_id] + RTO_BIAS){
+            timeout(sockfd, (path_id + i)%max_path_id);
+          }
+        }
+        path_id = (path_id + 1)%max_path_id; // return the path_id to what it used to be before looping. 
 
       } else if (r < 0) {
         err_sys("select");
       } else if (r==0) {
-        /* see if a packet has timedout */        
-        if (idle[path_id] > maxidle) {
-          /* give up */
-          printf("*** idle abort *** on path %d\n", path_id);
-          // TODO Need to remove the path from cli_addr_storage-
-          break;
-        }
-            
-        if (debug > 1){
-          fprintf(stderr,
-                  "timerxmit %6.2f \t on path_id %d \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  \n",
-                  getTime()-start_time,
-                  path_id,
-                  curr_block,
-                  blocks[curr_block%NUM_BLOCKS].len,
-                  snd_una[path_id],
-                  snd_nxt[path_id],
-                  (int)snd_cwnd[path_id]);
-        }
-
-        timeouts++;
-        idle[path_id]++;
-        slr[path_id] = 0;
-        //slr_long[path_id] = SLR_LONG_INIT;
-        rto[path_id] = 2*rto[path_id]; // Exponential back-off
-          
-        snd_ssthresh[path_id] = snd_cwnd[path_id]*multiplier; /* shrink */
-          
-        if (snd_ssthresh[path_id] < initsegs) {
-          snd_ssthresh[path_id] = initsegs;
-        }          
-        slow_start[path_id] = 1;
-        snd_cwnd[path_id] = initsegs;  /* drop window */
-        snd_una[path_id] = snd_nxt[path_id];
-
-        cli_addr = cli_addr_storage[path_id];   // Make sure we are sending on the right path
-        send_segs(sockfd);  /* resend */                     
-
-        // Update the path_id so that we timeout based on another path, and try every path in a round
-        // Avoids getting stuck if the current path dies and packets/acks on other paths are lost
+        timeout(sockfd, path_id);
         path_id = (path_id + 1)%max_path_id;
-
       }
     }  /* while more pkts */
 
@@ -290,8 +257,56 @@ doit(socket_t sockfd){
 }
 
 void
+timeout(socket_t sockfd, int path_id){
+        /* see if a packet has timedout */        
+  //if (idle[path_id] > maxidle) {
+  //  /* give up */
+  //  printf("*** idle abort *** on path %d\n", path_id);
+  //  // removing the path from connections
+
+  //   // TODO TODO Need to remove the path from cli_addr_storage-
+  //  break;
+  //}
+  
+  if (debug > 1){
+    fprintf(stderr,
+            "timerxmit %6.2f \t on path_id %d \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  \n",
+            getTime()-start_time,
+            path_id,
+            curr_block,
+            blocks[curr_block%NUM_BLOCKS].len,
+            snd_una[path_id],
+            snd_nxt[path_id],
+            (int)snd_cwnd[path_id]);
+  }
+  
+  timeouts++;
+  idle[path_id]++;
+  slr[path_id] = 0;
+  //slr_long[path_id] = SLR_LONG_INIT;
+  rto[path_id] = 2*rto[path_id]; // Exponential back-off
+  
+  snd_ssthresh[path_id] = snd_cwnd[path_id]*multiplier; /* shrink */
+  
+  if (snd_ssthresh[path_id] < initsegs) {
+    snd_ssthresh[path_id] = initsegs;
+  }          
+  slow_start[path_id] = 1;
+  snd_cwnd[path_id] = initsegs;  /* drop window */
+  snd_una[path_id] = snd_nxt[path_id];
+  
+  cli_addr = cli_addr_storage[path_id];   // Make sure we are sending on the right path
+  send_segs(sockfd, path_id);  /* resend */                     
+  
+  // Update the path_id so that we timeout based on another path, and try every path in a round
+  // Avoids getting stuck if the current path dies and packets/acks on other paths are lost
+  
+}
+
+void
 terminate(socket_t sockfd){
-  Data_Pckt *msg = dataPacket(snd_nxt[path_id], curr_block, 0);
+  // TODO path_id = 0??
+  Data_Pckt *msg = dataPacket(snd_nxt[0], curr_block, 0);
   msg->tstamp = getTime();
 
   // FIN_CLI
@@ -317,7 +332,7 @@ terminate(socket_t sockfd){
 }
 
 void
-send_segs(socket_t sockfd){
+send_segs(socket_t sockfd, int path_id){
   int win = 0;
 
   // TODO: FIX THIS
@@ -375,7 +390,7 @@ send_segs(socket_t sockfd){
 
   while (CurrWin>=1) {
 
-    send_one(sockfd, curr_block);
+    send_one(sockfd, curr_block, path_id);
     snd_nxt[path_id]++;
     CurrWin--;
     dof_remain[curr_block%NUM_BLOCKS]--;   // Update the internal dof counter
@@ -406,7 +421,7 @@ send_segs(socket_t sockfd){
 
     // send from curr_block + 1
     while (NextWin>=1) {
-      send_one(sockfd, curr_block+1);
+      send_one(sockfd, curr_block+1, path_id);
       snd_nxt[path_id]++;
       NextWin--;
       dof_remain[(curr_block+1)%NUM_BLOCKS]--;   // Update the internal dof counter
@@ -418,7 +433,7 @@ send_segs(socket_t sockfd){
 
 
 void
-send_one(socket_t sockfd, uint32_t blockno){
+send_one(socket_t sockfd, uint32_t blockno, int path_id){
   // Send coded packet from block number blockno
 
   if (debug > 6){
@@ -455,6 +470,16 @@ send_one(socket_t sockfd, uint32_t blockno){
   do{
     if((numbytes = sendto(sockfd, buff, message_size, 0,
                           &cli_addr, clilen)) == -1){
+      printf("Sending... on path_id %d. blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d   port %d \n",
+             path_id,
+             blockno,
+             blocks[curr_block%NUM_BLOCKS].len,
+             msg->seqno,
+             snd_una[path_id],
+             snd_nxt[path_id],
+             msg->start_packet,
+             (int)snd_cwnd[path_id],
+             ((struct sockaddr_in*)&cli_addr)->sin_port  );
       perror("atousrv: sendto");
       exit(1);
     }
@@ -489,7 +514,7 @@ endSession(void){
   printf("\n\n%s => %s for %f secs\n",
          myname,host, total_time);
 
-
+  int path_id;
   for (path_id = 0; path_id < max_path_id; path_id++){
     printf("******* Priniting Statistics for path   %d   ******** \n ", path_id);
     printf("**THRU** %f Mbs -- pkts in %d  out %d  enobufs %d \n",
@@ -514,9 +539,10 @@ endSession(void){
 }
 
 void
-handle_ack(socket_t sockfd, Ack_Pckt *ack){
+handle_ack(socket_t sockfd, Ack_Pckt *ack, int path_id){
   double rtt;
   uint32_t ackno = ack->ackno;
+  double rcvt = last_ack_time[path_id];
   if (debug > 8 )printf("ack rcvd %d\n",ackno);
 
   //------------- RTT calculations --------------------------//
@@ -632,9 +658,9 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
     dof_req_latest = MIN(dof_req_latest, ack->dof_req);
 
 
-    advance_cwnd();
+    advance_cwnd(path_id);
 
-    send_segs(sockfd);  /* send some if we can */
+    send_segs(sockfd, path_id);  /* send some if we can */
 
 
   } // end else goodack
@@ -719,7 +745,7 @@ readConfig(void){
 
 
 void
-advance_cwnd(void){
+advance_cwnd(int path_id){
   // TODO check bwe_pkt, different slopes for increasing and decreasing?
   // TODO make sure ssthresh < max cwnd
   // TODO increment and decrement values should be adjusted
@@ -1263,6 +1289,7 @@ restart(void){
     dof_req_latest = BLOCK_SIZE;
     for(j=0; j < MAX_CWND; j++) OnFly[i][j] = 0;
 
+    last_ack_time[i] = 0;
     snd_nxt[i]  = 1;
     snd_una[i]  = 1;
     snd_cwnd[i] = initsegs;
@@ -1294,7 +1321,7 @@ restart(void){
     total_loss[i] = 0;
   }
 
-  path_id         = 0;     // client identifier
+  //path_id         = 0;     // client identifier
   max_path_id     = 1;     // Total number of paths (clients) at any time
 
 
@@ -1312,7 +1339,6 @@ restart(void){
   goodacks   = 0;
   enobufs    = 0;
   start_time = 0;
-  rcvt       = 0;
   idle_total = 0;
 }
 
