@@ -10,9 +10,10 @@
 // ------------ CTCP parameters ---------------//
 #define NUM_BLOCKS 2
 #define THREADS 5
-#define ALPHA 2.32  // The number of std to deviate from mean to get 1% target error probability
+#define ALPHA 2.32           // The number of std to deviate from mean to get 1% target error probability
 #define MIN_DOF_REQUEST 0
 #define SLR_LONG_INIT 0.05
+#define RTO_BIAS 0.10      // (seconds) Bias the time-out timer
 #define INIT_RTO 1
 #define INIT_CODING_WND 5
 

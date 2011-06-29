@@ -173,7 +173,12 @@ doit(socket_t sockfd){
     while(!done){
 
       idle_timer = getTime();
-      r = timedread(sockfd, rto[path_id]);
+      double rto_max = rto[0];
+      for (i=1; i < max_path_id; i++){
+        if (rto[i] > rto_max) rto_max = rto[i];
+      }
+      
+      r = timedread(sockfd, rto_max + RTO_BIAS);
       
       idle_total += getTime() - idle_timer;
 
@@ -267,6 +272,8 @@ doit(socket_t sockfd){
         slow_start[path_id] = 1;
         snd_cwnd[path_id] = initsegs;  /* drop window */
         snd_una[path_id] = snd_nxt[path_id];
+
+        cli_addr = cli_addr_storage[path_id];   // Make sure we are sending on the right path
         send_segs(sockfd);  /* resend */                     
 
         // Update the path_id so that we timeout based on another path, and try every path in a round
@@ -426,15 +433,18 @@ send_one(socket_t sockfd, uint32_t blockno){
   msg->seqno = snd_nxt[path_id];
   msg->tstamp = getTime();
 
+
   if (debug > 6){
-    printf("Sending.... blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d \n",
+    printf("Sending... on path_id %d. blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d   port %d \n",
+           path_id,
            blockno,
            blocks[curr_block%NUM_BLOCKS].len,
            msg->seqno,
            snd_una[path_id],
            snd_nxt[path_id],
            msg->start_packet,
-           (int)snd_cwnd[path_id]);
+           (int)snd_cwnd[path_id],
+           ((struct sockaddr_in*)&cli_addr)->sin_port  );
   }
 
 
@@ -583,9 +593,9 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack){
   if (ackno > snd_nxt[path_id]
       || ack->blockno != curr_block) {
     /* bad ack */
-    if (debug > 5) fprintf(stderr,
-                           "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d\n",
-                           curr_block, ackno, snd_nxt[path_id], snd_una[path_id]);
+    if (debug > 4) fprintf(stderr,
+                           "path_id %d Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d cli.port %d, cli_storage[path_id].port %d\n\n",
+                           path_id, curr_block, ackno, snd_nxt[path_id], snd_una[path_id],  ((struct sockaddr_in*)&cli_addr)->sin_port,  ((struct sockaddr_in*)&cli_addr_storage[path_id])->sin_port);
     badacks++;
   } else {
 
@@ -659,7 +669,7 @@ readConfig(void){
   rcvrwin    = 20;          /* rcvr window in mss-segments */
   increment  = 1;           /* cc increment */
   multiplier = 0.5;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
-  initsegs   = 10;          /* slowstart initial */
+  initsegs   = 2;          /* slowstart initial */
   ssincr     = 1;           /* slow start increment */
   maxpkts    = 0;           /* test duration */
   maxidle    = 10;          /* max idle before abort */
@@ -814,7 +824,7 @@ coding_job(void *a){
 
     // Make sure this never happens!
     if (dof_request < block_len){
-      printf("Error: the initially requested dofs are less than the block length\n");
+      printf("Error: the initially requested dofs are less than the block length - blockno %d dof_request %d block_len %d\n\n\n",  blockno, dof_request, block_len);
       dof_request = block_len;
     }
 
