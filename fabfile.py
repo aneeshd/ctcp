@@ -14,7 +14,8 @@ code_dir = '~/repos/demo_ctcp'
 
 info = { 'ctcp'       : '18.62.16.187',
          'plato'      : '173.166.96.226',
-         'leo'        : '127.0.0.1'
+         'leo'        : '127.0.0.1',
+	 'ali'        : '127.0.0.1'
          }
 
 q = Queue.Queue()
@@ -56,7 +57,7 @@ class ThreadRunServer(threading.Thread):
                                                                                  'log'   : log_name,
                                                                                  'port'  : self.port_}
 
-        local(execute)
+        local(execute, capture=False)
         q.put(log_name)
 
 def start_client(localIP, file, port, remake):
