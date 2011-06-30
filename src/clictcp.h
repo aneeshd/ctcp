@@ -27,7 +27,7 @@ Coded_Block_t blocks[NUM_BLOCKS];
 uint32_t curr_block;
 
 // MULTIPLE SUBSTREAMS
-int substreams = 3;
+int substreams = 1;
 int sockfd[MAX_SUBSTREAMS];
 
 
