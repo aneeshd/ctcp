@@ -125,8 +125,8 @@ main (int argc, char** argv){
         }
 
         printf("Echo sent\n");
-        free(echoString);
-        free(tmp);
+        //free(echoString);
+        //free(tmp);
     }
 
     return 0;
