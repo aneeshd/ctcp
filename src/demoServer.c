@@ -19,17 +19,39 @@
 #define PORT "8888"
 #define BUFSIZE 500
 
+char*
+get_ip_str(const struct sockaddr *sa, char *s, size_t maxlen)
+{
+  switch(sa->sa_family) {
+  case AF_INET:
+    inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr),
+              s, maxlen);
+    break;
+
+  case AF_INET6:
+    inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr),
+              s, maxlen);
+    break;
+
+  default:
+    strncpy(s, "Unknown AF", maxlen);
+    return NULL;
+  }
+
+  return s;
+}
+
 int
 main (int argc, char** argv){
     struct addrinfo hints, *servinfo;
     struct addrinfo *result; //This is where the info about the server is stored
     struct sockaddr cliAddr;
     socklen_t cliAddrLen = sizeof cliAddr;
-    int sockfd;
-    int rv;
-
-    char buff[BUFSIZE];
-    int numbytes;
+    int       sockfd;
+    int       rv;
+    char      ip[INET6_ADDRSTRLEN] = {0};
+    char      buff[BUFSIZE];
+    int       numbytes;
 
     printf("Starting Demo Server\n");
 
@@ -47,7 +69,6 @@ main (int argc, char** argv){
 
     // Loop through all the results and connect to the first possible
     for(result = servinfo; result != NULL; result = result->ai_next) {
-
         if((sockfd = socket(result->ai_family,
                             result->ai_socktype,
                             result->ai_protocol)) == -1){
@@ -80,14 +101,22 @@ main (int argc, char** argv){
             perror("DemoServer: recvfrom failed\n");
         }
 
-        printf("Got %s\n", buff);
+        char* tmp = malloc(numbytes);
+
+        snprintf(tmp, numbytes+1, "%s", buff);
+
+        printf("Got %s from %s\n", tmp,
+               get_ip_str(&cliAddr, ip, INET6_ADDRSTRLEN));
+
         printf("Echoing...\n");
 
-        int len = numbytes + 13;
+        int len = strlen(tmp) + 7;
         char* echoString = malloc(len);
 
-        snprintf(echoString, len, "***Echo***: %s", buff);
-        printf("The echoString is %s\n", echoString);
+        snprintf(echoString, len, "Echo: %s", tmp);
+
+//        snprintf(echoString, len, "Echo: %s from %s", buff, get_ip_str(&cliAddr, ip, INET6_ADDRSTRLEN));
+//        printf("The echoString is %s\n", echoString);
 
         if((numbytes = sendto(sockfd, echoString, len, 0,
                               &cliAddr, cliAddrLen)) == -1)
@@ -96,6 +125,7 @@ main (int argc, char** argv){
         }
 
         free(echoString);
+        free(tmp);
     }
 
     return 0;
