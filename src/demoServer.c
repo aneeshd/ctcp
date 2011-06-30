@@ -124,6 +124,7 @@ main (int argc, char** argv){
             perror("DemoServer: sento failed\n");
         }
 
+        printf("Echo sent\n");
         free(echoString);
         free(tmp);
     }
