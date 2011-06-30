@@ -1,8 +1,10 @@
 #ifndef ATOUCLI_H_
 #define ATOUCLI_H_
+
+#include <stdint.h>
+#include "util.h"
 #include "thr_pool.h"
 #include "qbuffer.h"
-
 // ------------ Connection parameters ---------------//
 #define BUFFSIZE    65535
 #define MAX_CONNECT 5
@@ -17,7 +19,6 @@
 #define INIT_RTO 1
 #define INIT_CODING_WND 5
 
-/**************************************************/
 //---------------Constants -----------------------//
 const double slr_wnd_map[10] = {0, 0.0002, 0.002, 0.015, 0.025, 0.042, 0.052, 0.062, 0.075, 1};
 const double slr_mem         = 1.0/BLOCK_SIZE;      // The memory of smoothing function
@@ -25,67 +26,35 @@ const double slr_longmem     = 1.0/(BLOCK_SIZE*10); // Long term memory smoothin
 const double g               = 1.0/(BLOCK_SIZE/5);      // Memory for updating slr, rto
 const double beta            = 2.5;                 // rto range compared to rtt
 
-
 // ------------ MultiPath variables ---------------//
-/*
+
 typedef struct{
-  unit32_t OnFly[MAX_CNWD];
+  uint32_t OnFly[MAX_CWND];
   int dof_req;
   double last_ack_time;
-  unit32_t snd_nxt;
-  unit32_t snd_una;
+  uint32_t snd_nxt;
+  uint32_t snd_una;
   double snd_cwnd;                     
-  unsigned int snd_ssthresh;
-  int idle;
+  unsigned int snd_ssthresh;                // slow start threshold
+  int idle;                                 // successive timeouts 
   double vdelta;
-  double max_delta;
-  int slow_start;
-  int vdecr;
-  int v0;
+  int slow_start;                           // in slow start
+  double srtt;
+  double rto;
+  double slr;                               // Smoothed loss rate
+  double slr_long;                          // slr with longer memory
+  double slr_longstd;                       // Standard Deviation of slr_long
+  struct sockaddr cli_addr;
+  int total_loss;
   double minrtt;
   double maxrtt;
   double avrgrtt;
-  double srtt;
-  double rto;
-  double slr;
-  double slr_long;
-  double slr_longstd;
-  int total_loss;
-  struct sockaddr cli_addr;  
-} Substream_path;
-*/
+  int vdecr;                                // vegas decrements or no adjusts 
+  int v0;
+  double max_delta;                         // vegas like tracker 
+} Substream_Path;
 
 int dof_req_latest;                       /* Latest information about dofs of the current block */
-int max_path_id;                          // total_number of paths so far
-//Substream_path active_paths[MAX_CONNECT];             // indicates (1/0) whether a path is alive
-
-uint32_t OnFly[MAX_CONNECT][MAX_CWND];
-int dof_req[MAX_CONNECT];
-
-double last_ack_time[MAX_CONNECT];
-uint32_t snd_nxt[MAX_CONNECT];
-uint32_t snd_una[MAX_CONNECT];
-double snd_cwnd[MAX_CONNECT];             
-unsigned int snd_ssthresh[MAX_CONNECT];   /* slow start threshold */
-int idle[MAX_CONNECT];                    /* successive timeouts */
-
-double vdelta[MAX_CONNECT];
-double max_delta[MAX_CONNECT];            /* vegas like tracker */
-int slow_start[MAX_CONNECT];              /* in vegas slow start */
-int vdecr[MAX_CONNECT], v0[MAX_CONNECT];  /* vegas decrements or no adjusts */
-
-double minrtt[MAX_CONNECT];
-double maxrtt[MAX_CONNECT];
-double avrgrtt[MAX_CONNECT];
-double srtt[MAX_CONNECT];
-double rto[MAX_CONNECT];
-
-double slr[MAX_CONNECT];                  // Smoothed loss rate
-double slr_long[MAX_CONNECT];             // slr with longer memory
-double slr_longstd[MAX_CONNECT];          // Standard Deviation of slr_long
-int total_loss[MAX_CONNECT];              
-
-struct sockaddr cli_addr_storage[MAX_CONNECT];
 
 //----------------------------------------------------------------//
 FILE *db;     /* debug trace file */
@@ -108,7 +77,6 @@ bool done;
 Block_t blocks[NUM_BLOCKS];
 uint32_t maxblockno; // use highest blockno possible, set when we reach the end of the file
 int numbytes;
-
 
 // ------------ Multithreading related variables ---------------//
 qbuffer_t coded_q[NUM_BLOCKS];
@@ -147,28 +115,33 @@ double idle_total; // The total time the server has spent waiting for the acks
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
-void ctrlc();
-void endSession(void);
-void terminate(socket_t fd);
-void readConfig(void);
+
+
+void endSession(Substream_Path** paths, int num);
+void removePath(Substream_Path** paths, int dead_index, int num_active);
+void init_stream(Substream_Path *sp);
+
 int doit( socket_t fd);
-void timeout(socket_t fd, int path);
-void send_segs(socket_t fd, int path_id);
-void err_sys(char* s);
+void terminate(socket_t fd);
+int timeout(socket_t fd, Substream_Path *sp);
+void send_segs(socket_t fd, Substream_Path *sp, int cof);
 socket_t timedread(socket_t fd, double t);
-void handle_ack(socket_t fd, Ack_Pckt* ack, int path_id);
+int handle_ack(socket_t fd, Ack_Pckt* ack, Substream_Path *sp);
 void readBlock(uint32_t blockno);
 void freeBlock(uint32_t blockno);
-void send_one(socket_t fd, unsigned int n, int path_id);
-void update_coding_wnd(void);
-void advance_cwnd(int path_id);
+void send_one(socket_t fd, unsigned int n, Substream_Path *sp);
+double advance_cwnd(double cwnd, unsigned int ssthresh, int slow_start, double vdelta, double slr, double slr_long, double slr_longstd);
+void ctrlc();
+void readConfig(void);
+void err_sys(char* s);
+//void update_coding_wnd(void);
 int marshallData(Data_Pckt msg, char* buf);
 bool unmarshallAck(Ack_Pckt* msg, char* buf);
-void duplicate(socket_t fd, int sackno);
+//void duplicate(socket_t fd, int sackno);
 void restart(void);
 void openLog(char* log_name);
 void* coding_job(void *a);
-void free_coding_job(void* a);
+//void free_coding_job(void* a);
 void free_coded_pkt(void* a);
 void initialize(void);
 int sockaddr_cmp(struct sockaddr* addr1, struct sockaddr* addr2);
