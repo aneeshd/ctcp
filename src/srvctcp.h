@@ -120,6 +120,7 @@ double idle_total; // The total time the server has spent waiting for the acks
 void endSession(Substream_Path** paths, int num);
 void removePath(Substream_Path** paths, int dead_index, int num_active);
 void init_stream(Substream_Path *sp);
+int countCurrOnFly(Substream_Path** paths, int block, int num_active);
 
 int doit( socket_t fd);
 void terminate(socket_t fd);
@@ -130,19 +131,19 @@ int handle_ack(socket_t fd, Ack_Pckt* ack, Substream_Path *sp);
 void readBlock(uint32_t blockno);
 void freeBlock(uint32_t blockno);
 void send_one(socket_t fd, unsigned int n, Substream_Path *sp);
-double advance_cwnd(double cwnd, unsigned int ssthresh, int slow_start, double vdelta, double slr, double slr_long, double slr_longstd);
+void advance_cwnd(Substream_Path *sp);
 void ctrlc();
 void readConfig(void);
 void err_sys(char* s);
-//void update_coding_wnd(void);
+
 int marshallData(Data_Pckt msg, char* buf);
 bool unmarshallAck(Ack_Pckt* msg, char* buf);
-//void duplicate(socket_t fd, int sackno);
+
 void restart(void);
 void openLog(char* log_name);
 void* coding_job(void *a);
-//void free_coding_job(void* a);
 void free_coded_pkt(void* a);
+
 void initialize(void);
 int sockaddr_cmp(struct sockaddr* addr1, struct sockaddr* addr2);
 
