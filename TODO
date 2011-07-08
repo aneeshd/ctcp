@@ -1,14 +1,22 @@
 ////////////////////////
-//// June 24th, 2011 ////
+//// July 8th, 2011 ////
 ////////////////////////
 
 
 Day to Day bugs/fixes:
-* make FINCLI work -- client terminate
+* Test dev_multiserver with multiple paths -- Add path setup through config - merge back into dev
+* Fix the "invalid argument" issue of the select call - Happens when a connection dies - ICMP reject
+* Fix grapher for multiple paths
+
 
 New Big Features:
-* TCP dump/ tcptrace
 * Multiple sources
+  - Automatic discovery of interfaces' Ip address
+  - Systematic iptables update using libiptc library
+  - Find out gateway information programmatically maybe using DHCP?
+  - Automatic path establishment and clean up - both on server and client
+
+* Test Vertical Hand-off -- should work given the above 
 * Experiment with vectorized SSE instruction for FFmult [try this - long discussion]
 * Handshake
 
@@ -28,7 +36,7 @@ Documentation:
 * Fix usage function in clictcp
 
 Misc:
-	* Erase the repo from origin
-        * Read about tcpdump/netstat/etc try to figure out how to measure the tcp connection performance
+
+
 
 
