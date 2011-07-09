@@ -14,6 +14,8 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT, SYN} flag_t;
 
 //---------------- CTCP parameters ------------------//
 #define MSS 1500 // XXX: make sure that this is fine...
+#define UDP_HEADER_SIZE 8 // We have to take into account the UDP header 
+
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 // TODO: change such that we can change MSS, BLOCK_SIZE, CODING_WIN via config file
 
@@ -28,7 +30,8 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT, SYN} flag_t;
     + sizeof(uint8_t)
 
 #define PAYLOAD_SIZE (MSS \
-- (sizeof(double) \
+  - UDP_HEADER_SIZE \
+  - (sizeof(double) \
    + sizeof(flag_t) \
    + sizeof(uint32_t) \
    + sizeof(uint32_t) \

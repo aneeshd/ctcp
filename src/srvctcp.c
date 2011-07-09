@@ -344,8 +344,10 @@ timeout(socket_t sockfd, Substream_Path *subpath){
   
   if (debug > 1){
     fprintf(stderr,
-            "timerxmit %6.2f \t on \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  \n",
+            "timerxmit %6.2f \t on %s:%d \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  \n",
             getTime()-start_time,
+            inet_ntoa(((struct sockaddr_in*) &subpath->cli_addr)->sin_addr),
+            ((struct sockaddr_in*) &subpath->cli_addr)->sin_port,
             curr_block,
             blocks[curr_block%NUM_BLOCKS].len,
             subpath->snd_una,

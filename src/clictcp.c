@@ -13,10 +13,12 @@
 
 void
 usage(void) {
-    fprintf(stderr, "Usage: clictcp [-options] \n                   \
-      -p    port number to receive on. Defauls to 9999\n              \
-      -b    set socket receive buffer size (default 8192)\n         \
-      -D     enable debug level\n");
+    fprintf(stderr, "Usage: clictcp [-options]             \n\
+\t -p   port number to receive on. Defauls to 9999                \n\
+\t -b   set socket receive buffer size (default 8192)               \n\
+\t -D   enable debug level                                                \n\
+\t -i   specify the interface (IP address) to bind to               \n\
+\t -s   number of additional substreams (established over the main interface)\n");
     exit(0);
 }
 
@@ -50,35 +52,50 @@ main(int argc, char** argv){
     int k; // for loop counter
     int rv;
 
+    int substreams = 0;
+    char* local_addr[MAX_SUBSTREAMS];
+    local_addr[0] = NULL;
+
     int c;
-    while((c = getopt(argc, argv, "h:p:b:D:f:")) != -1) {
+    while((c = getopt(argc, argv, "h:p:b:D:f:i:s:")) != -1) {
         switch (c) {
         case 'h':
-            host = optarg;
-            break;
+          host = optarg;
+          break;
         case 'p':
-            port = optarg;
-            break;
+          port = optarg;
+          break;
         case 'b':
-            rcvspace = atoi(optarg);
-            break;
+          rcvspace = atoi(optarg);
+          break;
         case 'D':
-            debug = atoi(optarg);
-            break;
+          debug = atoi(optarg);
+          break;
         case 'f':
-            file_name = optarg;
-            break;
+          file_name = optarg;
+          break;
+        case 'i':
+          if (substreams < MAX_SUBSTREAMS){
+            local_addr[substreams] = optarg;
+            substreams++;
+          }
+          break;
+        case 's':
+          substreams = MIN(substreams + atoi(optarg), MAX_SUBSTREAMS);
+          break;
         default:
-            usage();
+          usage();
         }
+    }
+
+    if (substreams == 0){
+      substreams = 1;   // The default number of substreams
     }
 
     // Open the file where the contents of the file transfer will be stored
     char dst_file_name[100] = "Rcv_";
     strcat(dst_file_name, file_name);
-    printf("dest %s\n", dst_file_name);
     rcv_file = fopen(dst_file_name,  "wb");
-
 
 
 
@@ -92,15 +109,10 @@ main(int argc, char** argv){
         return 1;
     }
     // TODO need to loop through to find interfaces number of connections
-    //substreams = 1; // Check that substreamds <= MAX_SUBSTREAMS
-   
-    // loop through all the results and bind to the first possible
-    //for(k = 0; k<substreams; k++){
 
-    k=0;
     for(result = servinfo; result != NULL; result = result->ai_next) {
       
-      if((sockfd[k] = socket(result->ai_family,
+      if((sockfd[0] = socket(result->ai_family,
                              result->ai_socktype,
                              result->ai_protocol)) == -1){
         perror("atoucli: failed to initialize socket");
@@ -122,11 +134,38 @@ main(int argc, char** argv){
     freeaddrinfo(servinfo);
 
 
+
+    //-------------- BIND to proper local address ----------------------
+    // Only bind if the interface IP address is specified through the command line
+    struct addrinfo *result_cli, *cli_info;
+    k = 0;
+    while (local_addr[k] != NULL){
+      
+      if((rv = getaddrinfo(local_addr[k], "9999", &hints, &cli_info)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        return 1;
+      }
+
+      for(result_cli = cli_info; result_cli != NULL; result_cli = result_cli->ai_next) {
+        printf("IP address trying to bind to %s \n", inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
+     
+        if (bind(sockfd[k], result_cli->ai_addr, result_cli->ai_addrlen) == -1) {
+          close(sockfd[k]);
+          err_sys("atousrv: can't bind local address");
+          continue;
+        }
+      }
+        
+    }
+
+    //--------------DONE Binding-----------------------------------------
+    
+
     signal(SIGINT, (__sighandler_t) ctrlc);
 
 
     // Send request to the server.
-    // TODO do we only send request through the first substream??? YES!!!
+    // We only send request (with the file name) through the first substream
     if((numbytes = sendto(sockfd[0], file_name, (strlen(file_name)+1)*sizeof(char), 0,
                           result->ai_addr, result->ai_addrlen)) == -1){
       err_sys("sendto: Request failed");
@@ -160,7 +199,7 @@ main(int argc, char** argv){
     memset(buff,0,BUFFSIZE);        /* pretouch */
 
     curr_block = 1;
-
+    
 
     // Initialize the blocks
     for(k = 0; k < NUM_BLOCKS; k++){
@@ -176,7 +215,6 @@ main(int argc, char** argv){
       read_set[k].fd = sockfd[k];
       read_set[k].events = POLLIN;
     }
-
 
 
     Data_Pckt *msg = malloc(sizeof(Data_Pckt));
@@ -224,7 +262,7 @@ main(int argc, char** argv){
             bldack(msg, match, curr_substream);
             ready -= 1;
           }
-          curr_substream +=1;
+          curr_substream++;
           if(curr_substream == substreams) curr_substream = 0;
         }while(ready>0);
       }
