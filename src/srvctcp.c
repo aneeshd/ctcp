@@ -116,15 +116,15 @@ main (int argc, char** argv){
       }
 
       printf("sending %s\n", file_name);
-      
+
       if ((snd_file = fopen(file_name, "rb"))== NULL){
         err_sys("Error while trying to create/open a file");
       }
-      
+
       if (debug > 3) openLog(log_name);
 
       // TODO TODO change restart
-      restart();      
+      restart();
       doit(sockfd);
     }
     return 0;
@@ -146,14 +146,13 @@ doit(socket_t sockfd){
   int num_active=1;                              // Connection identifier
   int path_index=0;
 
-
   Substream_Path *stream = malloc(sizeof(Substream_Path));
   init_stream(stream);
   // Save the client address as the primary client
   // cli_addr set the main loop...
   stream->cli_addr = cli_addr;
   active_paths[path_index] = stream;
-  
+
   i=sizeof(sndbuf);
 
   //--------------- Setting the socket options --------------------------------//
@@ -176,7 +175,7 @@ doit(socket_t sockfd){
     dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
     addJob(&workers, &coding_job, job, &free, LOW);
   }
-    
+
   // First send_seg: CurrOnFly = 0
   send_segs(sockfd, active_paths[path_index], CurrOnFly);
 
@@ -189,21 +188,21 @@ doit(socket_t sockfd){
     for (i=0; i < num_active; i++){
       if (active_paths[i]->rto > rto_max) rto_max = active_paths[i]->rto;
     }
-      
+
     r = timedread(sockfd, rto_max + RTO_BIAS);
     idle_total += getTime() - idle_timer;
 
     if (r > 0){  /* ack ready */
-        
+
       // The recvfrom should be done to a separate buffer (not buff)
-      r= recvfrom(sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen); 
+      r= recvfrom(sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen);
       unmarshallAck(ack, buff);
 
       if (debug > 6){
-        printf("Got an ACK: ackno %d blockno %d dof_req %d -- RTT est %f \n", 
-               ack->ackno, 
-               ack->blockno, 
-               ack->dof_req, 
+        printf("Got an ACK: ackno %d blockno %d dof_req %d -- RTT est %f \n",
+               ack->ackno,
+               ack->blockno,
+               ack->dof_req,
                getTime()-ack->tstamp);
       }
 
@@ -212,8 +211,8 @@ doit(socket_t sockfd){
       if (ack->flag == SYN){
         if (num_active < MAX_CONNECT){
 
-          // Compute CurrOnFly, then send. 
-          CurrOnFly = countCurrOnFly(active_paths, curr_block, num_active);          
+          // Compute CurrOnFly, then send.
+          CurrOnFly = countCurrOnFly(active_paths, curr_block, num_active);
           active_paths[num_active] = malloc(sizeof(Substream_Path));
           init_stream(active_paths[num_active]);
           // add the client address info to the client lookup table
@@ -237,7 +236,7 @@ doit(socket_t sockfd){
         //printf("path_id %d \t", path_id);
       }
       /*-----------------------------------------------------------------*/
-            
+
       if (r <= 0) err_sys("read");
 
       double rcvt = getTime();
@@ -245,18 +244,18 @@ doit(socket_t sockfd){
       active_paths[path_index]->last_ack_time = rcvt;
 
       if(handle_ack(sockfd, ack, active_paths[path_index])==1){
-        // Compute CurrOnFly, then send. 
+        // Compute CurrOnFly, then send.
         CurrOnFly = countCurrOnFly(active_paths, curr_block, num_active);
         send_segs(sockfd, active_paths[path_index], CurrOnFly);
       }
-        
+
       // Check all the other paths, and see if any of them timed-out.
       for (i = 1; i < num_active; i++){
         path_index = (path_index+i)%num_active;
         if(rcvt - active_paths[path_index]->last_ack_time > active_paths[path_index]->rto + RTO_BIAS){
           if (timeout(sockfd, active_paths[path_index])==TRUE){
             // Path timed out, but still alive
-            // Compute CurrOnFly, then send. 
+            // Compute CurrOnFly, then send.
             CurrOnFly = countCurrOnFly(active_paths, curr_block, num_active);
             send_segs(sockfd, active_paths[path_index], CurrOnFly);
           }else{
@@ -274,14 +273,14 @@ doit(socket_t sockfd){
       for (i = 1; i<num_active; i++){
         if (timeout(sockfd, active_paths[i])==TRUE){
           // Path timed out, but still alive
-          // Compute CurrOnFly, then send. 
+          // Compute CurrOnFly, then send.
           CurrOnFly = countCurrOnFly(active_paths, curr_block, num_active);
           send_segs(sockfd, active_paths[i], CurrOnFly);
         }else{
           // Path is dead and is being removed
           removePath(active_paths, i, num_active);
           num_active--;
-          i--;          
+          i--;
         }
       }
     }
@@ -292,16 +291,16 @@ doit(socket_t sockfd){
   }  /* while more pkts */
   total_time = getTime()-start_time;
   free(ack);
-  
+
   terminate(sockfd); // terminate
   endSession(active_paths, num_active);
-  
-  
+
+
   for(i=1; i<num_active; i++){
     free(active_paths[i]);
   }
   free(active_paths);
-  
+
   return 0;
 }
 
@@ -334,14 +333,14 @@ removePath(Substream_Path** paths, int dead_index, int num_active){
  */
 int
 timeout(socket_t sockfd, Substream_Path *subpath){
-        /* see if a packet has timedout */        
+        /* see if a packet has timedout */
   if (subpath->idle > maxidle) {
     /* give up */
     printf("*** idle abort *** on path \n");
     // removing the path from connections
     return FALSE;
   }
-  
+
   if (debug > 1){
     fprintf(stderr,
             "timerxmit %6.2f \t on %s:%d \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  \n",
@@ -355,27 +354,27 @@ timeout(socket_t sockfd, Substream_Path *subpath){
             (int)subpath->snd_cwnd);
   }
 
-  // THIS IS A GLOBAL COUNTER FOR STATISTICS ONLY. 
+  // THIS IS A GLOBAL COUNTER FOR STATISTICS ONLY.
   timeouts++;
 
   subpath->idle++;
   subpath->slr = 0;
   //slr_long[path_id] = SLR_LONG_INIT;
   subpath->rto = 2*subpath->rto; // Exponential back-off
-  
+
   subpath->snd_ssthresh = subpath->snd_cwnd*multiplier; /* shrink */
-  
+
   if (subpath->snd_ssthresh < initsegs) {
     subpath->snd_ssthresh = initsegs;
-  }          
+  }
   subpath->slow_start = 1;
   subpath->snd_cwnd = initsegs;  /* drop window */
   subpath->snd_una = subpath->snd_nxt;
-  
+
   return TRUE;
   // Update the path_id so that we timeout based on another path, and try every path in a round
   // Avoids getting stuck if the current path dies and packets/acks on other paths are lost
-  
+
 }
 
 void
@@ -417,11 +416,11 @@ send_segs(socket_t sockfd, Substream_Path* subpath, int CurrOnFly){
 
   //double p = total_loss[path_id]/snd_una[path_id];
   // Compensate for server's over estimation of the loss rate caused by lost acks
-  double p = subpath->slr/(2.0-subpath->slr);   
+  double p = subpath->slr/(2.0-subpath->slr);
 
   // The total number of dofs the we think we should be sending (for the current block) from now on
-  int dof_needed 
-    = MAX(0,(int) (ceil((dof_req_latest 
+  int dof_needed
+    = MAX(0,(int) (ceil((dof_req_latest
                          + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req_latest*p)))/(1-p)))- CurrOnFly);
 
   if (dof_req_latest - CurrOnFly < win){
@@ -442,7 +441,7 @@ send_segs(socket_t sockfd, Substream_Path* subpath, int CurrOnFly){
     job->coding_wnd = INIT_CODING_WND;
     if (dof_req_latest <= 3) {
       job->coding_wnd = MAX_CODING_WND;
-      printf("Requested jobs with coding window %d - blockno %d dof_needed %d  \n", 
+      printf("Requested jobs with coding window %d - blockno %d dof_needed %d  \n",
              job->coding_wnd, curr_block, dof_needed);
     }
     addJob(&workers, &coding_job, job, &free, HIGH);
@@ -466,7 +465,7 @@ send_segs(socket_t sockfd, Substream_Path* subpath, int CurrOnFly){
       job->dof_request = MIN_DOF_REQUEST + NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
       dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
       job->coding_wnd = INIT_CODING_WND;
-     
+
       addJob(&workers, &coding_job, job, &free, LOW);
     }
     // send from curr_block + 1
@@ -487,8 +486,8 @@ send_one(socket_t sockfd, uint32_t blockno, Substream_Path *subpath){
 
   if (debug > 6){
     fprintf(stdout, "\n block %d DOF left %d q size %d\n",
-            blockno, 
-            dof_remain[blockno%NUM_BLOCKS], 
+            blockno,
+            dof_remain[blockno%NUM_BLOCKS],
             coded_q[blockno%NUM_BLOCKS].size);
   }
 
@@ -534,7 +533,7 @@ send_one(socket_t sockfd, uint32_t blockno, Substream_Path *subpath){
 
   } while(errno == ENOBUFS && ++enobufs); // use the while to increment enobufs if the condition is met
 
-    
+
   if(numbytes != message_size){
     err_sys("write");
   }
@@ -568,7 +567,7 @@ endSession(Substream_Path** paths, int num_active){
     printf("**RTT** minrtt  %f maxrtt %f avrgrtt %f\n",
            paths[i]->minrtt, paths[i]->maxrtt,paths[i]->avrgrtt);
     printf("**RTT** rto %f  srtt %f \n", paths[i]->rto, paths[i]->srtt);
-    printf("**VEGAS** max_delta %f vdecr %d v0 %d vdelta %f\n", 
+    printf("**VEGAS** max_delta %f vdecr %d v0 %d vdelta %f\n",
            paths[i]->max_delta ,paths[i]->vdecr, paths[i]->v0,paths[i]->vdelta);
     printf("**CWND** snd_nxt %d snd_cwnd %5.3f  snd_una %d ssthresh %d goodacks %d\n\n",
            paths[i]->snd_nxt, paths[i]->snd_cwnd, paths[i]->snd_una, paths[i]->snd_ssthresh, goodacks);
@@ -601,7 +600,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, Substream_Path *subpath){
   if (rtt < subpath->minrtt) subpath->minrtt = rtt;
   if (rtt > subpath->maxrtt) subpath->maxrtt = rtt;
   subpath->avrgrtt += rtt;
-  subpath->srtt = (1-g)*subpath->srtt + g*rtt; 
+  subpath->srtt = (1-g)*subpath->srtt + g*rtt;
   if (rtt > subpath->rto/beta){
     subpath->rto = (1-g)*subpath->rto + g*beta*rtt;
   }else {
@@ -655,7 +654,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, Substream_Path *subpath){
     dof_req_latest = ack->dof_req;     // reset the dof counter for the current block
 
     if (debug > 5 && curr_block%10==0){
-      printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms \n", 
+      printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms \n",
              curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000);
     }
   }
@@ -663,12 +662,12 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, Substream_Path *subpath){
   if (ackno > subpath->snd_nxt || ack->blockno != curr_block) {
     /* bad ack */
     if (debug > 4) fprintf(stderr,
-                           "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d cli.port %d, cli_storage[path_id].port %d\n\n",                            
-                           curr_block, 
-                           ackno, 
-                           subpath->snd_nxt, 
-                           subpath->snd_una,  
-                           ((struct sockaddr_in*)&cli_addr)->sin_port,  
+                           "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d cli.port %d, cli_storage[path_id].port %d\n\n",
+                           curr_block,
+                           ackno,
+                           subpath->snd_nxt,
+                           subpath->snd_una,
+                           ((struct sockaddr_in*)&cli_addr)->sin_port,
                            ((struct sockaddr_in*)&subpath->cli_addr)->sin_port);
 
     badacks++;
@@ -676,19 +675,19 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, Substream_Path *subpath){
   } else {
     // Late or Good acks count towards goodput
 
-    fprintf(db,"%f %d %f %d %f %f %f %f %f xmt\n", 
-            getTime()-start_time, 
-            ack->blockno, 
-            subpath->snd_cwnd, 
-            subpath->snd_ssthresh, 
-            subpath->slr, 
-            subpath->slr_long, 
-            subpath->srtt, 
-            subpath->rto, 
+    fprintf(db,"%f %d %f %d %f %f %f %f %f xmt\n",
+            getTime()-start_time,
+            ack->blockno,
+            subpath->snd_cwnd,
+            subpath->snd_ssthresh,
+            subpath->slr,
+            subpath->slr_long,
+            subpath->srtt,
+            subpath->rto,
             rtt);
 
     subpath->idle = 0; // Late or good acks should stop the "idle" count for max-idle abort.
-          
+
     if (ackno <= subpath->snd_una){
       //late ack
       if (debug > 5) fprintf(stderr,
@@ -709,22 +708,22 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, Substream_Path *subpath){
       loss_tmp =  pow(1-slr_longmem, losses);
       subpath->slr_long = loss_tmp*(1-slr_longmem)*subpath->slr_long + (1 - loss_tmp);
 
-      // NECESSARY CONDITION: slr_longmem must be smaller than 1/2. 
-      subpath->slr_longstd = (1-slr_longmem)*subpath->slr_longstd 
+      // NECESSARY CONDITION: slr_longmem must be smaller than 1/2.
+      subpath->slr_longstd = (1-slr_longmem)*subpath->slr_longstd
         + slr_longmem*(fabs(subpath->slr - subpath->slr_long) - subpath->slr_longstd);
       subpath->snd_una = ackno;
     }
-    // Updated the requested dofs for the current block 
+    // Updated the requested dofs for the current block
     // The MIN is to avoid outdated infromation by out of order ACKs or ACKs on different paths
     dof_req_latest = MIN(dof_req_latest, ack->dof_req);
 
     advance_cwnd(subpath);
-    /*subpath->snd_cwnd = advance_cwnd(subpath->snd_cwnd, 
-                                     subpath->snd_ssthresh, 
-                                     subpath->slow_start, 
-                                     subpath->vdelta, 
-                                     subpath->slr, 
-                                     subpath->slr_long, 
+    /*subpath->snd_cwnd = advance_cwnd(subpath->snd_cwnd,
+                                     subpath->snd_ssthresh,
+                                     subpath->slow_start,
+                                     subpath->vdelta,
+                                     subpath->slr,
+                                     subpath->slr_long,
                                      subpath->slr_longstd);
                                      if(subpath->snd_cwnd > subpath->snd_ssthresh) subpath->slow_start = 0;*/
     return 1;
@@ -755,7 +754,7 @@ err_sys(char* s){
 void
 readConfig(void){
   // Initialize the default values of config variables
-  
+
   rcvrwin    = 20;          /* rcvr window in mss-segments */
   increment  = 1;           /* cc increment */
   multiplier = 0.5;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
@@ -863,7 +862,7 @@ coding_job(void *a){
   int coding_wnd = job->coding_wnd;
 
   pthread_mutex_lock(&blocks[blockno%NUM_BLOCKS].block_mutex);
-    
+
   // Check if the blockno is already done
     if( blockno < curr_block ){
       if (debug > 5){
@@ -1047,7 +1046,7 @@ readBlock(uint32_t blockno){
     if(feof(snd_file)){
       maxblockno = blockno;
       printf("This is the last block %d\n", maxblockno);
-    }    
+    }
   }
 
   file_position = blockno + 1;  // Advance the counter
@@ -1135,7 +1134,7 @@ openLog(char* log_name){
   if(!db){
     perror("An error ocurred while opening the log file");
   }
-    
+
 
   if(auto_log)
     {
@@ -1159,15 +1158,15 @@ marshallData(Data_Pckt msg, char* buf){
   if (msg.flag == PARTIAL_BLK) partial_blk_flg = sizeof(msg.blk_len);
 
   // the total size in bytes of the current packet
-  int size = PAYLOAD_SIZE 
-    + sizeof(double) 
-    + sizeof(flag_t) 
-    + sizeof(msg.seqno) 
-    + sizeof(msg.blockno) 
-    + (partial_blk_flg) 
-    + sizeof(msg.start_packet) 
-    + sizeof(msg.num_packets) 
-    + msg.num_packets*sizeof(msg.packet_coeff); 
+  int size = PAYLOAD_SIZE
+    + sizeof(double)
+    + sizeof(flag_t)
+    + sizeof(msg.seqno)
+    + sizeof(msg.blockno)
+    + (partial_blk_flg)
+    + sizeof(msg.start_packet)
+    + sizeof(msg.num_packets)
+    + msg.num_packets*sizeof(msg.packet_coeff);
 
   //Set to zeroes before starting
   memset(buf, 0, size);
@@ -1269,37 +1268,37 @@ unmarshallAck(Ack_Pckt* msg, char* buf){
 
 // Compare the IP address and Port of two sockaddr structs
 
-int 
+int
 sockaddr_cmp(struct sockaddr* addr1, struct sockaddr* addr2){
 
   if (addr1->sa_family != addr2->sa_family)    return 1;   // No match
-  
+
   if (addr1->sa_family == AF_INET){
     // IPv4 format
     // Cast to the IPv4 struct
     struct sockaddr_in *tmp1 = (struct sockaddr_in*)addr1;
     struct sockaddr_in *tmp2 = (struct sockaddr_in*)addr2;
-  
+
     if (tmp1->sin_port != tmp2->sin_port) return 1;                // ports don't match
     if (tmp1->sin_addr.s_addr != tmp2->sin_addr.s_addr) return 1;  // Addresses don't match
-    
+
     return 0; // We have a match
   } else if (addr1->sa_family == AF_INET6){
     // IPv6 format
     // Cast to the IPv6 struct
     struct sockaddr_in6 *tmp1 = (struct sockaddr_in6*)addr1;
     struct sockaddr_in6 *tmp2 = (struct sockaddr_in6*)addr2;
-  
+
     if (tmp1->sin6_port != tmp2->sin6_port) return 1;                // ports don't match
     if (memcmp(&tmp1->sin6_addr, &tmp2->sin6_addr, sizeof(struct in6_addr)) != 0) return 1;  // Addresses don't match
-    
+
     return 0; // We have a match
-    
+
   } else {
     printf("Cannot recognize socket address family\n");
     return 1;
   }
- 
+
 }
 
 
@@ -1310,10 +1309,10 @@ initialize(void){
 
   // initialize the thread pool
   thrpool_init( &workers, THREADS );
-  
+
   // Initialize the file mutex and position
   pthread_mutex_init(&file_mutex, NULL);
-    
+
   // Initialize the block mutexes and queue of coded packets and counters
   for(i = 0; i < NUM_BLOCKS; i++){
     pthread_mutex_init( &blocks[i].block_mutex, NULL );
@@ -1325,21 +1324,21 @@ initialize(void){
 void
 init_stream(Substream_Path *subpath){
   subpath->dof_req = BLOCK_SIZE;
-  
+
   int j;
   for(j=0; j < MAX_CWND; j++) subpath->OnFly[j] = 0;
-  
+
   subpath->last_ack_time = 0;
   subpath->snd_nxt = 1;
   subpath->snd_una = 1;
   subpath->snd_cwnd = initsegs;
-  
+
   if (multiplier) {
     subpath->snd_ssthresh = multiplier*MAX_CWND;
   } else {
     subpath->snd_ssthresh = 2147483647;  /* normal TCP, infinite */
   }
-    // Statistics // 
+    // Statistics //
   subpath->idle       = 0;
   subpath->vdelta     = 0;    /* Vegas delta */
   subpath->max_delta  = 0;
@@ -1347,18 +1346,18 @@ init_stream(Substream_Path *subpath){
   subpath->vdecr      = 0;
   subpath->v0         = 0;    /* vegas decrements or no adjusts */
 
-  
+
   subpath->minrtt     = 999999.0;
   subpath->maxrtt     = 0;
   subpath->avrgrtt    = 0;
   subpath->srtt       = 0;
   subpath->rto        = INIT_RTO;
-  
+
   subpath->slr        = 0;
   subpath->slr_long   = SLR_LONG_INIT;
   subpath->slr_longstd= 0;
   subpath->total_loss = 0;
-  
+
   //subpath->cli_addr   = NULL;
 }
 

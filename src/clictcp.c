@@ -118,14 +118,14 @@ main(int argc, char** argv){
         perror("atoucli: failed to initialize socket");
         continue;
       }
-      for (k=1; k<substreams; k++){
+      for (k = 1; k < substreams; k++){
         sockfd[k] = socket(result->ai_family,
                            result->ai_socktype,
                            result->ai_protocol);
       }
-      
-      break;        
-    }  
+
+      break;
+    }
 
     // If we got here, it means that we couldn't initialize the socket.
     if(result  == NULL){
@@ -178,7 +178,7 @@ main(int argc, char** argv){
       SYN_pkt->tstamp = 0;
       SYN_pkt->flag = SYN;
       int size = marshallAck(*SYN_pkt, buff);
-     
+
       if((numbytes = sendto(sockfd[k], buff, size, 0,
                             result->ai_addr, result->ai_addrlen)) == -1){
         err_sys("sendto: Request failed");
@@ -224,10 +224,10 @@ main(int argc, char** argv){
     do{
       idle_timer = getTime();
       // value -1 blocks until something is ready to read
-      ready = poll(read_set, substreams, -1); 
-      
+      ready = poll(read_set, substreams, -1);
+
       if(ready == -1){
-        perror("poll"); 
+        perror("poll");
       }else if (ready == 0){
         printf("Timeout occurred during poll! Should not happen with -1\n");
       }else{
@@ -242,13 +242,13 @@ main(int argc, char** argv){
               err_sys("recvfrom");
             }
             if(numbytes <= 0) break;
-            
+
             idle_total += getTime() - idle_timer;
 
             pkts++;
             end_time = secs();  /* last read */
             if (start_time == 0) start_time = end_time;  /* first pkt time */
-            
+
             // Unmarshall the packet
             bool match = unmarshallData(msg, buff);
             if(msg->flag == FIN_CLI){
@@ -258,7 +258,7 @@ main(int argc, char** argv){
               printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
             }
             if (debug > 6 && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno);
-            
+
             bldack(msg, match, curr_substream);
             ready -= 1;
           }
@@ -266,9 +266,9 @@ main(int argc, char** argv){
           if(curr_substream == substreams) curr_substream = 0;
         }while(ready>0);
       }
-        // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..? 
-        // NOTE that the ones that are not active can be zero, or any value. 
-    }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc 
+        // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
+        // NOTE that the ones that are not active can be zero, or any value.
+    }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc
 
     ctrlc();
 
@@ -602,7 +602,7 @@ unmarshallData(Data_Pckt* msg, char* buf){
         index += part;
     }
 
-    msg->num_packets = coding_wnd; 
+    msg->num_packets = coding_wnd;
 
 
     msg->payload = malloc(PAYLOAD_SIZE);
