@@ -271,7 +271,7 @@ doit(socket_t sockfd){
     } else if (r < 0) {
       err_sys("select");
     } else if (r==0) {
-      for (i = 1; i<num_active; i++){
+      for (i = 0; i<num_active; i++){
         if (timeout(sockfd, active_paths[i])==TRUE){
           // Path timed out, but still alive
           // Compute CurrOnFly, then send. 
