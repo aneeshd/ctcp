@@ -1,22 +1,13 @@
 
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/ioctl.h>
-#include <sys/errno.h>
-
 #include <arpa/inet.h>
 #include <netinet/in.h>
-
 #include <stdio.h>
-#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dlfcn.h>
 #include <unistd.h>
-#include <errno.h>
 
-// !!! NEED TO RUN THIS PROGRAM AS SUDO!! :(
+// !!! NEED TO RUN THIS PROGRAM AS SUDO!!
 
 typedef struct{
   char* interface;
@@ -148,7 +139,5 @@ main(void){
 
   return 0;
 }
-
-
 
 /* demoLIBIPTC.c ends here */
