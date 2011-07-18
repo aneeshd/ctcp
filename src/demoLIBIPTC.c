@@ -47,6 +47,7 @@ make_new_table(dhcp_lease* lease, int table_number, int mark_number){
   /* compute netmask number*/
   mask = ntohl(netmask->s_addr);
   for(maskbits=32; (mask & 1L<<(32-maskbits))==0; maskbits--);
+  
 
   // printf("IP address %s\n", inet_ntoa(*address));
   // printf("Netmask %s\n", inet_ntoa(*netmask));
@@ -59,11 +60,11 @@ make_new_table(dhcp_lease* lease, int table_number, int mark_number){
 
   // Add routes to the routing table (table_number)//
   memset(command, '\0', sizeof(command));
-  sprintf(command, "ip route add table %d %s/%d dev %s proto kernel src %s", table_number, inet_ntoa(*network_addr), maskbits, lease->interface, lease->address);
+  sprintf(command, "ip route add table %d %s/%d dev %s proto static src %s", table_number, inet_ntoa(*network_addr), maskbits, lease->interface, lease->address);
   system(command);
 
   memset(command, '\0', sizeof(command));
-  sprintf(command, "ip route add table %d default via %s dev %s", table_number, lease->gateway, lease->interface);
+  sprintf(command, "ip route add table %d default via %s dev %s proto static", table_number, lease->gateway, lease->interface);
   system(command);
   
   memset(command, '\0', sizeof(command));
@@ -81,6 +82,9 @@ make_new_table(dhcp_lease* lease, int table_number, int mark_number){
   sprintf(command, "ip rule add fwmark %d table %d", mark_number, table_number);
   system(command);
   
+  system("iptables -t mangle -S");
+  printf("\n");
+
   printf("ip rule show\n");
   system("ip rule show");
   printf("\n");
@@ -105,6 +109,10 @@ delete_table(int table_number, int mark_number){
   sprintf(command, "ip rule delete fwmark %d table %d", mark_number, table_number);
   system(command);
 
+  memset(command, '\0', sizeof(command));
+  sprintf(command, "iptables -t mangle -F");
+  system(command);
+
   // Printing...
   memset(command, '\0', sizeof(command));
   sprintf(command, "ip route show table %d", table_number);
@@ -125,8 +133,8 @@ int
 main(void){
 
   dhcp_lease* lease = malloc(sizeof(dhcp_lease));
-  lease->interface = "wlan0";
-  lease->address = "18.62.13.46";
+  lease->interface = "eth1";
+  lease->address = "18.62.30.159";
   lease->gateway = "18.62.0.1";
   lease->netmask = "255.255.0.0";
   
