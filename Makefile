@@ -68,6 +68,7 @@ clean:
 	$(RM) -rf $(BINDIR)
 	$(RM) -rf srvctcp clictcp
 	$(RM) -rf demoServer demoClient
+	$(RM) -rf demoLIBIPTC
 
 #.PHONY: rmlogs
 #rmlogs:
@@ -109,6 +110,11 @@ demoClient: $(BINDIR)/demoClient.o .buildmode Makefile
 	$(MKDIR) -p $(dir $@)
 	$(CC) -o $@ $< $(LDFLAGS) -lreadline
 
+demoLIBIPTC: $(BINDIR)/demoLIBIPTC.o .buildmode Makefile
+	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
+	$(MKDIR) -p $(dir $@)
+	$(CC) -o $@ $< $(LDFLAGS)
+
 # Rule for compiling c files.
 $(BINDIR)/%.o : %.c .buildmode Makefile
 	$(ECHO) "[\033[01;34mCC\033[22;37m] compiling $<"
@@ -118,6 +124,8 @@ $(BINDIR)/%.o : %.c .buildmode Makefile
 all: clictcp srvctcp
 
 demo: demoClient demoServer
+
+demo_libiptc: demoLIBIPTC
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)
