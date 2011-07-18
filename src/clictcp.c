@@ -131,7 +131,7 @@ main(int argc, char** argv){
     if(result  == NULL){
       err_sys("atoucli: failed to bind to socket");
     }
-    freeaddrinfo(servinfo);
+    //   freeaddrinfo(servinfo);
 
 
 
@@ -139,7 +139,7 @@ main(int argc, char** argv){
     // Only bind if the interface IP address is specified through the command line
     struct addrinfo *result_cli, *cli_info;
     k = 0;
-    while (local_addr[k] != NULL){
+    while ((local_addr[k] != NULL) && (k < substreams)){
       
       if((rv = getaddrinfo(local_addr[k], "9999", &hints, &cli_info)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
@@ -171,7 +171,7 @@ main(int argc, char** argv){
                           result->ai_addr, result->ai_addrlen)) == -1){
       err_sys("sendto: Request failed");
     }
-    fprintf(stdout, "Request sent for %s on the first socket\n", file_name);
+    fprintf(stdout, "Request sent to %s for %s on the first socket\n", inet_ntoa(((struct sockaddr_in*)result->ai_addr)->sin_addr), file_name );
 
     // Send a SYN packet for any new connection
     for (k = 1; k < substreams; k++){
@@ -409,8 +409,9 @@ bldack(Data_Pckt *msg, bool match, int curr_substream){
     // Marshall the ack into buff
     int size = marshallAck(*ack, buff);
     srvlen = sizeof(srv_addr);
+
     if(sendto(sockfd[curr_substream],buff, size, 0, &srv_addr, srvlen) == -1){
-        err_sys("bldack: sendto");
+      err_sys("bldack: sendto");
     }
     acks++;
 

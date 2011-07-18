@@ -115,6 +115,7 @@ main (int argc, char** argv){
         err_sys("recvfrom: Failed to receive the request\n");
       }
 
+      printf("Request for a new session: Client address %s Client port %d\n", inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), ((struct sockaddr_in*)&cli_addr)->sin_port);
       printf("sending %s\n", file_name);
       
       if ((snd_file = fopen(file_name, "rb"))== NULL){
@@ -222,7 +223,7 @@ doit(socket_t sockfd){
 
           num_active++;
 
-          printf("Request for a new path: Client port %d\n", ((struct sockaddr_in*)&cli_addr)->sin_port);
+          printf("Request for a new path: Client address %s Client port %d\n", inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), ((struct sockaddr_in*)&cli_addr)->sin_port);
 
           // Initially send a few packets to keep it going
           send_segs(sockfd, active_paths[num_active-1], CurrOnFly);
@@ -663,8 +664,9 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, Substream_Path *subpath){
   if (ackno > subpath->snd_nxt || ack->blockno != curr_block) {
     /* bad ack */
     if (debug > 4) fprintf(stderr,
-                           "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d cli.port %d, cli_storage[path_id].port %d\n\n",                            
+                           "Bad ack: curr block %d ack blockno %d badack no %d snd_nxt %d snd_una %d cli.port %d, cli_storage[path_id].port %d\n\n",                            
                            curr_block, 
+                           ack->blockno,
                            ackno, 
                            subpath->snd_nxt, 
                            subpath->snd_una,  
