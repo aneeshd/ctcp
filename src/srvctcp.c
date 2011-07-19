@@ -96,12 +96,15 @@ main (int argc, char** argv){
         break;
     }
 
+
     if (result == NULL) { // If we are here, we failed to initialize the socket
         err_sys("atousrv: failed to initialize socket");
         return 2;
     }
 
-    freeaddrinfo(servinfo);
+    printf("Trying to bind to address %s port %d\n", inet_ntoa(((struct sockaddr_in*) &(result->ai_addr))->sin_addr), ((struct sockaddr_in*)&(result->ai_addr))->sin_port);
+
+    //freeaddrinfo(servinfo);
 
     /*--------------------------------------------------------------------------*/
 
@@ -502,6 +505,10 @@ send_one(socket_t sockfd, uint32_t blockno, Substream_Path *subpath){
   msg->seqno = subpath->snd_nxt;
   msg->tstamp = getTime();
 
+  fprintf(db,"%f %d xmt\n", 
+          getTime()-start_time, 
+          blockno-curr_block);
+
   if (debug > 6){
     printf("Sending... on blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d   port %d \n",
            blockno,
@@ -678,7 +685,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, Substream_Path *subpath){
   } else {
     // Late or Good acks count towards goodput
 
-    fprintf(db,"%f %d %f %d %f %f %f %f %f xmt\n", 
+    fprintf(db,"%f %d %f %d %f %f %f %f %f rcv\n", 
             getTime()-start_time, 
             ack->blockno, 
             subpath->snd_cwnd, 
