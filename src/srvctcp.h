@@ -55,6 +55,9 @@ typedef struct{
 } Substream_Path;
 
 int dof_req_latest;                       /* Latest information about dofs of the current block */
+// Ideally, move this back into doit
+Substream_Path** active_paths;            // 0-1 representing whether path alive
+int num_active=1;                              // Connection identifier
 
 //----------------------------------------------------------------//
 FILE *db;     /* debug trace file */

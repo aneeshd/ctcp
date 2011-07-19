@@ -22,7 +22,7 @@
 void
 ctrlc(){
     total_time = getTime()-start_time;
-    //endSession();
+    endSession(active_paths, num_active);
     exit(1);
 }
 
@@ -141,13 +141,13 @@ int
 doit(socket_t sockfd){
   int i, r;
 
-  Substream_Path** active_paths;            // 0-1 representing whether path alive
+  //Substream_Path** active_paths;            // 0-1 representing whether path alive
   active_paths = malloc(MAX_CONNECT*sizeof(Substream_Path*));
 
   double idle_timer;
 
   int CurrOnFly = 0;
-  int num_active=1;                              // Connection identifier
+  //int num_active=1;                              // Connection identifier
   int path_index=0;
 
 
@@ -567,7 +567,9 @@ endSession(Substream_Path** paths, int num_active){
 
   int i;
   for (i=0; i < num_active; i++){
-    printf("******* Priniting Statistics for path %d ********\n", i);
+    printf("******* Priniting Statistics for path %d -- %s : %d ********\n",i, 
+           inet_ntoa(((struct sockaddr_in*) &(paths[i]->cli_addr))->sin_addr),
+           ((struct sockaddr_in*)&(paths[i]->cli_addr))->sin_port);
     printf("**THRU** %f Mbs\n",
            8.e-6*(paths[i]->snd_una*PAYLOAD_SIZE)/total_time);
     printf("**LOSS* %6.3f%% \n",

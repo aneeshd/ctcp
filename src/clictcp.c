@@ -30,10 +30,10 @@ ctrlc(void){
   end_time = end_time-start_time;  /* elapsed time */
   if (end_time==0)end_time=.1;
   /* don't include first pkt in data/pkt rate */
-  printf("\n \n%d pkts  %d acks  %d bytes\n %f KBs %f Mbs %f secs \n",
+  printf("\n \n**Packets** %d pkts  %d acks  %d bytes\n**THRU** %f KBs %f Mbs %f secs \n",
          pkts,acks,PAYLOAD_SIZE*pkts,1.e-3*PAYLOAD_SIZE*(pkts-1)/end_time,
          8.e-6*PAYLOAD_SIZE*(pkts-1)/end_time,end_time);
-  printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
+  //printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
   printf("**Ndofs** %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);
   printf("**Old packets** %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
   printf("Total Channel loss rate %f\n", (double)total_loss/(double)last_seqno);
