@@ -96,12 +96,15 @@ main (int argc, char** argv){
         break;
     }
 
+
     if (result == NULL) { // If we are here, we failed to initialize the socket
         err_sys("atousrv: failed to initialize socket");
         return 2;
     }
 
-    freeaddrinfo(servinfo);
+    printf("Trying to bind to address %s port %d\n", inet_ntoa(((struct sockaddr_in*) &(result->ai_addr))->sin_addr), ((struct sockaddr_in*)&(result->ai_addr))->sin_port);
+
+    //freeaddrinfo(servinfo);
 
     /*--------------------------------------------------------------------------*/
 
@@ -115,6 +118,7 @@ main (int argc, char** argv){
         err_sys("recvfrom: Failed to receive the request\n");
       }
 
+      printf("Request for a new session: Client address %s Client port %d\n", inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), ((struct sockaddr_in*)&cli_addr)->sin_port);
       printf("sending %s\n", file_name);
       
       if ((snd_file = fopen(file_name, "rb"))== NULL){
@@ -222,7 +226,7 @@ doit(socket_t sockfd){
 
           num_active++;
 
-          printf("Request for a new path: Client port %d\n", ((struct sockaddr_in*)&cli_addr)->sin_port);
+          printf("Request for a new path: Client address %s Client port %d\n", inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), ((struct sockaddr_in*)&cli_addr)->sin_port);
 
           // Initially send a few packets to keep it going
           send_segs(sockfd, active_paths[num_active-1], CurrOnFly);
@@ -271,7 +275,7 @@ doit(socket_t sockfd){
     } else if (r < 0) {
       err_sys("select");
     } else if (r==0) {
-      for (i = 1; i<num_active; i++){
+      for (i = 0; i<num_active; i++){
         if (timeout(sockfd, active_paths[i])==TRUE){
           // Path timed out, but still alive
           // Compute CurrOnFly, then send. 
@@ -501,6 +505,10 @@ send_one(socket_t sockfd, uint32_t blockno, Substream_Path *subpath){
   msg->seqno = subpath->snd_nxt;
   msg->tstamp = getTime();
 
+  fprintf(db,"%f %d xmt\n", 
+          getTime()-start_time, 
+          blockno-curr_block);
+
   if (debug > 6){
     printf("Sending... on blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d   port %d \n",
            blockno,
@@ -663,8 +671,9 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, Substream_Path *subpath){
   if (ackno > subpath->snd_nxt || ack->blockno != curr_block) {
     /* bad ack */
     if (debug > 4) fprintf(stderr,
-                           "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d cli.port %d, cli_storage[path_id].port %d\n\n",                            
+                           "Bad ack: curr block %d ack blockno %d badack no %d snd_nxt %d snd_una %d cli.port %d, cli_storage[path_id].port %d\n\n",                            
                            curr_block, 
+                           ack->blockno,
                            ackno, 
                            subpath->snd_nxt, 
                            subpath->snd_una,  
@@ -676,7 +685,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, Substream_Path *subpath){
   } else {
     // Late or Good acks count towards goodput
 
-    fprintf(db,"%f %d %f %d %f %f %f %f %f xmt\n", 
+    fprintf(db,"%f %d %f %d %f %f %f %f %f rcv\n", 
             getTime()-start_time, 
             ack->blockno, 
             subpath->snd_cwnd, 

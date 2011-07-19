@@ -113,7 +113,7 @@ demoClient: $(BINDIR)/demoClient.o .buildmode Makefile
 demoLIBIPTC: $(BINDIR)/demoLIBIPTC.o .buildmode Makefile
 	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CC) -o $@ $< $(LDFLAGS) -ldl
+	$(CC) -o $@ $< $(LDFLAGS)
 
 # Rule for compiling c files.
 $(BINDIR)/%.o : %.c .buildmode Makefile
