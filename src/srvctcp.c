@@ -473,8 +473,8 @@ send_segs(socket_t sockfd, int pin, int CurrOnFly){
     job->coding_wnd = INIT_CODING_WND;
     if (dof_req_latest <= 3) {
       job->coding_wnd = MAX_CODING_WND;
-      printf("Requested jobs with coding window %d - blockno %d dof_needed %d  \n", 
-             job->coding_wnd, curr_block, dof_needed);
+      printf("Path %d, Requested jobs with coding window %d - curr blockno %d dof_needed %d  \n", 
+             pin, job->coding_wnd, curr_block, dof_needed);
     }
     addJob(&workers, &coding_job, job, &free, HIGH);
   }
@@ -703,7 +703,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
   if (ackno > subpath->snd_nxt || ack->blockno != curr_block) {
     /* bad ack */
     if (debug > 4) fprintf(stderr,
-                           "Bad ack: curr block %d ack blockno %d badack no %d snd_nxt %d snd_una %d cli.port %d, cli_storage[path_id].port %d\n\n",                            
+                           "Bad ack path %d: curr block %d ack blockno %d badack no %d snd_nxt %d snd_una %d cli.port %d, cli_storage[path_id].port %d\n\n",                            
+                           pin,
                            curr_block, 
                            ack->blockno,
                            ackno, 
@@ -733,8 +734,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
     if (ackno <= subpath->snd_una){
       //late ack
       if (debug > 5) fprintf(stderr,
-                             "Late ack: curr block %d ack-blockno %d badack no %d snd_nxt %d snd_una %d\n",
-                             curr_block, ack->blockno, ackno, subpath->snd_nxt, subpath->snd_una);
+                             "Late ack path %d: curr block %d ack-blockno %d badack no %d snd_nxt %d snd_una %d\n",
+                             pin, curr_block, ack->blockno, ackno, subpath->snd_nxt, subpath->snd_una);
     } else {
       goodacks++;
       int losses = ackno - (subpath->snd_una +1);
