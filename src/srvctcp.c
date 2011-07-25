@@ -443,7 +443,7 @@ send_segs(socket_t sockfd, int pin, int CurrOnFly){
     
     //double p = total_loss[path_id]/snd_una[path_id];
     // Compensate for server's over estimation of the loss rate caused by lost acks
-    double p = subpath->slr/(2.0-subpath->slr);   
+    double p = subpath->slr; ///(2.0-subpath->slr);   
     // The total number of dofs the we think we should be sending (for the current block) from now on
     dof_needed 
       = MAX(0,(int) (ceil((dof_req_latest 
@@ -533,9 +533,10 @@ send_one(socket_t sockfd, uint32_t blockno, int pin){
   msg->seqno = subpath->snd_nxt;
   msg->tstamp = getTime();
 
-  fprintf(db,"%f %d xmt\n", 
+  fprintf(db,"%f %d xmt%d\n", 
           getTime()-start_time, 
-          blockno-curr_block);
+          blockno-curr_block,
+          pin);
 
   if (debug > 6){
     printf("Sending... on blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d   port %d \n",
@@ -653,12 +654,13 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
     if (subpath->vdelta > subpath->max_delta) subpath->max_delta = subpath->vdelta;  /* vegas delta */
   }
   if (debug > 6) {
-    fprintf(db,"%f %d %f  %d %d ack\n",
+    fprintf(db,"%f %d %f  %d %d ack%d\n",
             subpath->last_ack_time - start_time,
             ackno,
             rtt,
             (int)subpath->snd_cwnd,
-            subpath->snd_ssthresh);
+            subpath->snd_ssthresh, 
+            pin);
   }
   //------------- RTT calculations --------------------------//
 
@@ -719,7 +721,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
   } else {
     // Late or Good acks count towards goodput
 
-    fprintf(db,"%f %d %f %d %f %f %f %f %f rcv\n", 
+    fprintf(db,"%f %d %f %d %f %f %f %f %f rcv%d\n", 
             getTime()-start_time, 
             ack->blockno, 
             subpath->snd_cwnd, 
@@ -728,7 +730,8 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
             subpath->slr_long, 
             subpath->srtt, 
             subpath->rto, 
-            rtt);
+            rtt, 
+            pin);
 
     subpath->idle = 0; // Late or good acks should stop the "idle" count for max-idle abort.
           

@@ -31,7 +31,6 @@ def graph(log_file, keyword='', local_node='', remote_node='', showGraph=True, s
 
     xmt_times = []
     xmt_blockno = []
-
     xmt_current = 0.03
 
     print "Processing log at: " + log_file
