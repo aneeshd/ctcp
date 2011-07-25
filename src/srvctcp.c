@@ -714,6 +714,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
                            ((struct sockaddr_in*)&subpath->cli_addr)->sin_port);
 
     badacks++;
+    if(subpath->snd_una < ackno) subpath->snd_una = ackno;
 
   } else {
     // Late or Good acks count towards goodput
