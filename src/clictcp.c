@@ -30,15 +30,24 @@ ctrlc(void){
   end_time = end_time-start_time;  /* elapsed time */
   if (end_time==0)end_time=.1;
   /* don't include first pkt in data/pkt rate */
-  printf("\n \n%d pkts  %d acks  %d bytes\n %f KBs %f Mbs %f secs \n",
+  printf("\n \n**Packets** %d pkts  %d acks  %d bytes\n**THRU** %f KBs %f Mbs %f secs \n",
          pkts,acks,PAYLOAD_SIZE*pkts,1.e-3*PAYLOAD_SIZE*(pkts-1)/end_time,
          8.e-6*PAYLOAD_SIZE*(pkts-1)/end_time,end_time);
-  printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
+  //printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
   printf("**Ndofs** %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);
   printf("**Old packets** %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
   printf("Total Channel loss rate %f\n", (double)total_loss/(double)last_seqno);
   printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", idle_total, elimination_delay, decoding_delay);
   fclose(rcv_file);
+
+  // Flush the routing tables and iptables
+  int k;
+  if (leases[0].address != NULL){
+    for (k=0; k < substreams; k++){
+      delete_table(k+1, k+1);
+    }
+  }
+
   exit(0);
 }
 
@@ -46,18 +55,15 @@ int
 main(int argc, char** argv){
     int optlen,rlth;
     char *file_name = FILE_NAME;
+    char *lease_file = NULL;
     char *port = PORT;
     char *host = HOST;
     int numbytes;//[MAX_SUBSTREAMS];
     int k; // for loop counter
     int rv;
 
-    int substreams = 0;
-    char* local_addr[MAX_SUBSTREAMS];
-    local_addr[0] = NULL;
-
     int c;
-    while((c = getopt(argc, argv, "h:p:b:D:f:i:s:")) != -1) {
+    while((c = getopt(argc, argv, "h:p:b:D:f:s:l:")) != -1) {
         switch (c) {
         case 'h':
           host = optarg;
@@ -74,23 +80,23 @@ main(int argc, char** argv){
         case 'f':
           file_name = optarg;
           break;
-        case 'i':
-          if (substreams < MAX_SUBSTREAMS){
-            local_addr[substreams] = optarg;
-            substreams++;
-          }
+        case 'l':
+          lease_file = optarg;
           break;
         case 's':
-          substreams = MIN(substreams + atoi(optarg), MAX_SUBSTREAMS);
+          substreams = MIN(atoi(optarg), MAX_SUBSTREAMS);
           break;
         default:
           usage();
         }
     }
 
-    if (substreams == 0){
-      substreams = 1;   // The default number of substreams
+    
+    if (lease_file != NULL){
+      // Need to make sure there is at least one lease in the lease file
+      substreams = readLease(lease_file);
     }
+
 
     // Open the file where the contents of the file transfer will be stored
     char dst_file_name[100] = "Rcv_";
@@ -131,31 +137,36 @@ main(int argc, char** argv){
     if(result  == NULL){
       err_sys("atoucli: failed to bind to socket");
     }
-    freeaddrinfo(servinfo);
+    //freeaddrinfo(servinfo);
+
 
 
 
     //-------------- BIND to proper local address ----------------------
     // Only bind if the interface IP address is specified through the command line
     struct addrinfo *result_cli, *cli_info;
-    k = 0;
-    while (local_addr[k] != NULL){
-      
-      if((rv = getaddrinfo(local_addr[k], "9999", &hints, &cli_info)) != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
-      }
 
-      for(result_cli = cli_info; result_cli != NULL; result_cli = result_cli->ai_next) {
-        printf("IP address trying to bind to %s \n", inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
-     
-        if (bind(sockfd[k], result_cli->ai_addr, result_cli->ai_addrlen) == -1) {
-          close(sockfd[k]);
-          err_sys("atousrv: can't bind local address");
-          continue;
+    if (lease_file != NULL){
+      for (k=0; k < substreams; k++){
+      
+        make_new_table(&leases[k], k+1, k+1);
+
+        if((rv = getaddrinfo(leases[k].address, "9999", &hints, &cli_info)) != 0) {
+          fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+          return 1;
         }
+
+        for(result_cli = cli_info; result_cli != NULL; result_cli = result_cli->ai_next) {
+          printf("IP address trying to bind to %s \n\n", inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
+     
+          if (bind(sockfd[k], result_cli->ai_addr, result_cli->ai_addrlen) == -1) {
+            close(sockfd[k]);
+            err_sys("atousrv: can't bind local address");
+            continue;
+          }
+        }
+
       }
-        
     }
 
     //--------------DONE Binding-----------------------------------------
@@ -170,7 +181,7 @@ main(int argc, char** argv){
                           result->ai_addr, result->ai_addrlen)) == -1){
       err_sys("sendto: Request failed");
     }
-    fprintf(stdout, "Request sent for %s on the first socket\n", file_name);
+    fprintf(stdout, "Request sent to %s for %s on the first socket\n", inet_ntoa(((struct sockaddr_in*)result->ai_addr)->sin_addr), file_name );
 
     // Send a SYN packet for any new connection
     for (k = 1; k < substreams; k++){
@@ -303,7 +314,7 @@ bldack(Data_Pckt *msg, bool match, int curr_substream){
         //printf("Old packet.\n");
         old_blk_pkts++;
     }else if (blockno >= curr_block + NUM_BLOCKS){
-        //printf("BAD packet: The block does not exist yet.\n");
+        printf("BAD packet: The block does not exist yet.\n");
     }else{
         int prev_dofs = blocks[blockno%NUM_BLOCKS].dofs;
 
@@ -408,8 +419,9 @@ bldack(Data_Pckt *msg, bool match, int curr_substream){
     // Marshall the ack into buff
     int size = marshallAck(*ack, buff);
     srvlen = sizeof(srv_addr);
+
     if(sendto(sockfd[curr_substream],buff, size, 0, &srv_addr, srvlen) == -1){
-        err_sys("bldack: sendto");
+      err_sys("bldack: sendto");
     }
     acks++;
 
@@ -694,3 +706,163 @@ secs(){
 
 
 
+int
+readLease(char *leasefile){
+  
+  /* read lease file if there, keyword value */
+  FILE *fp;
+  char line[128], type[64], val1[64], val2[64];
+  int substreams = -1;
+
+  fp = fopen(leasefile,"r");
+
+  if (fp == NULL) {
+    printf("ctcp unable to open %s\n",leasefile);
+    return -1;
+  }
+
+  while (fgets(line, sizeof (line), fp) != NULL) {
+    sscanf(line,"%s %s %s",type, val1, val2);
+    if (*type == '#') continue;
+    else if (strcmp(type,"lease")==0){
+      substreams++;
+      
+      printf("lease %d\n", substreams);
+    }
+    else if (strcmp(type,"fixed-address")==0){
+      leases[substreams].address = strndup(val1, strlen(val1)-1);
+      printf("Address: %s\n", leases[substreams].address);
+    }    
+    else if (strcmp(type,"interface")==0){
+      leases[substreams].interface = strndup(val1+sizeof(char), strlen(val1)-3); 
+      printf("Iface: %s\n", leases[substreams].interface);
+    }    
+    else if (strcmp(type,"option")==0){
+      if (strcmp(val1,"subnet-mask")==0){
+        leases[substreams].netmask = strndup(val2, strlen(val2)-1);
+        printf("Netmask: %s\n", leases[substreams].netmask);
+      }    
+      else if (strcmp(val1,"routers")==0){
+        leases[substreams].gateway = strndup(val2, strlen(val2)-1);
+        printf("Gateway:%s\n\n", leases[substreams].gateway);
+      }    
+    }
+    
+  }
+
+  return substreams+1; 
+}
+
+
+
+void 
+make_new_table(dhcp_lease* lease, int table_number, int mark_number){
+
+  printf("/****** making table %d, mark %d *****/\n", table_number, mark_number);
+
+  // command to be used for system()
+  char* command = malloc(150);
+
+  // Flush routing table (table_number) //
+  sprintf(command, "ip route flush table %d", table_number);
+  //printf("%s\n", command);
+  system(command);
+  
+  // Figure out the Network Address, Netmask Number, etc.//
+  struct in_addr* address = malloc(sizeof(struct in_addr));
+  struct in_addr* netmask = malloc(sizeof(struct in_addr));
+  struct in_addr* network_addr = malloc(sizeof(struct in_addr)); //Network address
+  uint32_t mask, network;
+  int maskbits; //Netmask number
+  if(!inet_aton(lease->address, address)){
+    printf("%s is not a good IP address\n", lease->address);
+    exit(1);
+  }
+  if(!inet_aton(lease->netmask, netmask)){
+    printf("%s is not a good netmask\n", lease->netmask);
+    exit(1);
+  }
+  /* compute netmask number*/
+  mask = ntohl(netmask->s_addr);
+  for(maskbits=32; (mask & 1L<<(32-maskbits))==0; maskbits--);
+  
+
+  // printf("IP address %s\n", inet_ntoa(*address));
+  // printf("Netmask %s\n", inet_ntoa(*netmask));
+  // printf("Netmask bits %d\n", maskbits);
+  
+  /* compute network address -- AND netmask and IP addr */
+  network = ntohl(address->s_addr) & ntohl(netmask->s_addr);
+  network_addr->s_addr = htonl(network);
+  // printf("Network %s\n", inet_ntoa(*network_addr));
+
+  // Add routes to the routing table (table_number)//
+  memset(command, '\0', sizeof(command));
+  sprintf(command, "ip route add table %d %s/%d dev %s proto static src %s", table_number, inet_ntoa(*network_addr), maskbits, lease->interface, lease->address);
+  system(command);
+
+  memset(command, '\0', sizeof(command));
+  sprintf(command, "ip route add table %d default via %s dev %s proto static", table_number, lease->gateway, lease->interface);
+  system(command);
+  
+  //memset(command, '\0', sizeof(command));
+  //sprintf(command, "ip route show table %d", table_number);
+  //printf("%s\n", command);
+  //system(command);
+  //printf("\n");
+
+  // Create and add rules//
+  memset(command, '\0', sizeof(command));
+  sprintf(command, "iptables -t mangle -A OUTPUT -s %s -j MARK --set-mark %d", lease->address, mark_number);
+  system(command);
+
+  memset(command, '\0', sizeof(command));
+  sprintf(command, "ip rule add fwmark %d table %d", mark_number, table_number);
+  system(command);
+  
+  //system("iptables -t mangle -S");
+  //printf("\n");
+
+  //printf("ip rule show\n");
+  //system("ip rule show");
+  //printf("\n");
+  
+  //printf("ip route flush cache\n");
+  system("ip route flush cache");
+  //printf("\n");
+  
+  return;
+}
+
+void
+delete_table(int table_number, int mark_number){
+  printf("/****** deleting table %d, mark %d *****/\n", table_number, mark_number);
+  char* command = malloc(150);
+
+  // Flush routing table (table_number) //
+  sprintf(command, "ip route flush table %d", table_number);
+  system(command);
+
+  memset(command, '\0', sizeof(command));
+  sprintf(command, "ip rule delete fwmark %d table %d", mark_number, table_number);
+  system(command);
+
+  memset(command, '\0', sizeof(command));
+  sprintf(command, "iptables -t mangle -F");
+  system(command);
+
+  // Printing...
+  //memset(command, '\0', sizeof(command));
+  //sprintf(command, "ip route show table %d", table_number);
+  //printf("%s\n", command);
+  //system(command);
+  //printf("\n");
+
+  //printf("ip rule show\n");
+  //system("ip rule show");
+  //printf("\n");
+  
+  //printf("ip route flush cache\n");
+  system("ip route flush cache");
+  //printf("\n");
+}

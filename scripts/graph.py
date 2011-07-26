@@ -29,15 +29,19 @@ def graph(log_file, keyword='', local_node='', remote_node='', showGraph=True, s
     abw     = 0
     bw      = 0
 
+    xmt_times = []
+    xmt_blockno = []
+    xmt_current = 0.03
+
     print "Processing log at: " + log_file
 
     f = open(log_file, 'r')
     for line in f:
         values = line.split(" ")
 
-        if values[-1] == "xmt\n":
+        if values[-1] == "rcv\n":
             # The variable values is a list of the form
-            # [time, blockno, snd_cwnd, slr, rtt, srtt, rto, xmt]
+            # [time, blockno, snd_cwnd, slr, slr_long, srtt, rto, rtt, rcv]
 
             # Compute instant and avg bw
 
@@ -95,32 +99,50 @@ def graph(log_file, keyword='', local_node='', remote_node='', showGraph=True, s
                 rtt.append(values[8])
                 rtt.append(values[8])
 
-
-
 		current = zero_point + res
 		bw = 0
 
+        elif values[-1] == "xmt\n":
+
+            time = float(values[0])
+
+            if time > xmt_current:
+                xmt_times.append(time)
+                xmt_blockno.append(values[1])
+                
+                xmt_current = xmt_current + res/10
+            
+
+
+
     # print average_BW
-    subplot(411)
+    subplot(511)
     plot(times, instant_BW, 'r-', times, average_BW, 'g-')
     grid(True)
     title('CTCP Performance')
     ylabel('Mbs')
 
     # print congestion window
-    subplot(412)
+    subplot(512)
     plot(times, snd_cwnd, 'b*', times, ssthresh, 'r-')
     grid(True)
     ylabel('Congestion window (packets)')
 
     # print round trip time and rto
-    subplot(413)
+    subplot(513)
     plot(times, rtt, 'b-', times, srtt, 'r-', times, rto, 'g-')
     grid(True)
     ylabel('time (s)')
 
+    # print round trip time and rto
+    subplot(514)
+    plot(xmt_times, xmt_blockno, 'b*')
+    grid(True)
+    ylabel('blockno')
+    ylim((0,2))
+
     # print loss rate
-    subplot(414)
+    subplot(515)
     plot(times, slr, 'r-', times, slr_long, 'b-')
     grid(True)
     xlabel('time (s)')
