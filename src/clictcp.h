@@ -5,6 +5,13 @@
 #include "qbuffer.h"
 #include <sys/poll.h>
 
+typedef struct{
+  char* interface;
+  char* address;
+  char* gateway;
+  char* netmask;
+} dhcp_lease;
+
 //---------------- DEFAULT CONNECTION PARAMETERS ------------------//
 #define BUFFSIZE  65536
 #define PORT "9999"
@@ -27,8 +34,9 @@ Coded_Block_t blocks[NUM_BLOCKS];
 uint32_t curr_block;
 
 // MULTIPLE SUBSTREAMS
+int substreams = 1;
 int sockfd[MAX_SUBSTREAMS];
-
+dhcp_lease leases[MAX_SUBSTREAMS];
 
 //---------------- STATISTICS & ACCOUTING ------------------//
 int pkts, acks;
@@ -78,6 +86,9 @@ void writeAndFreeBlock(uint32_t blockno);
 bool unmarshallData(Data_Pckt* msg, char* buf);
 int  marshallAck(Ack_Pckt msg, char* buf);
 double secs();
+int readLease(char *leasefile);
+void make_new_table(dhcp_lease* lease, int table_number, int mark_number);
+void delete_table(int table_number, int mark_number);
 
 #endif // ATOUSRV_H_
 

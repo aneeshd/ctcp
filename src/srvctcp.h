@@ -55,6 +55,9 @@ typedef struct{
 } Substream_Path;
 
 int dof_req_latest;                       /* Latest information about dofs of the current block */
+// Ideally, move this back into doit
+Substream_Path** active_paths;            // 0-1 representing whether path alive
+int num_active=1;                              // Connection identifier
 
 //----------------------------------------------------------------//
 FILE *db;     /* debug trace file */
@@ -117,21 +120,22 @@ double idle_total; // The total time the server has spent waiting for the acks
  */
 
 
-void endSession(Substream_Path** paths, int num);
-void removePath(Substream_Path** paths, int dead_index, int num_active);
+void endSession();
+void removePath(int dead_index);
 void init_stream(Substream_Path *sp);
-int countCurrOnFly(Substream_Path** paths, int block, int num_active);
+int countCurrOnFly(int block);
+bool minRTTPath(int index);
 
 int doit( socket_t fd);
 void terminate(socket_t fd);
-int timeout(socket_t fd, Substream_Path *sp);
-void send_segs(socket_t fd, Substream_Path *sp, int cof);
+int timeout(socket_t fd, int pin);
+void send_segs(socket_t fd, int pin, int cof);
 socket_t timedread(socket_t fd, double t);
-int handle_ack(socket_t fd, Ack_Pckt* ack, Substream_Path *sp);
+int handle_ack(socket_t fd, Ack_Pckt* ack, int pin);
 void readBlock(uint32_t blockno);
 void freeBlock(uint32_t blockno);
-void send_one(socket_t fd, unsigned int n, Substream_Path *sp);
-void advance_cwnd(Substream_Path *sp);
+void send_one(socket_t fd, unsigned int n, int pin);
+void advance_cwnd(int pin);
 void ctrlc();
 void readConfig(void);
 void err_sys(char* s);

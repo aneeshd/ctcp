@@ -26,11 +26,43 @@ THRIFT	=	/usr/local/bin/thrift
 AR	=	$(AT)ar
 ARFLAGS	=	rcs
 
-
 CC		=	$(AT) gcc
+CXX             =	$(AT) g++
+FPIC		=	-fPIC
 INCLUDES	=	-I$(HERE) -I. -I$(SRCDIR)
 CFLAGS	 	= 	-c -g -Wall $(INCLUDES)
-LDFLAGS		=	-lm -lpthread
+LDFLAGS		=
+
+CWARN			=	-Wall -Wno-sign-compare -Wno-unused-variable
+CXXWARN			=	$(CWARN) $(FPIC) -Wno-deprecated -Woverloaded-virtual
+
+COMMON_CFLAGS		=	-c -g -std=gnu99 -D_GNU_SOURCE=1 \
+					-D_REENTRANT  $(CWARN) $(FPIC)\
+
+COMMON_CXXFLAGS		=	-c -g $(CXXWARN) -D__cplusplus
+
+
+DBG_CFLAGS		=	$(COMMON_CFLAGS) -DDEBUG_MODE=1
+DBG_CXXFLAGS		=	$(COMMON_CXXFLAGS) -DDEBUG_MODE=1
+OPTIMIZATION_FLAGS	=	-O3
+OPT_CFLAGS		=	$(COMMON_CFLAGS) -DNDEBUG \
+				$(OPTIMIZATION_FLAGS) -fno-omit-frame-pointer
+OPT_CXXFLAGS		=	$(COMMON_CXXFLAGS) -DNDEBUG \
+				$(OPTIMIZATION_FLAGS) -fno-omit-frame-pointer
+
+COMMON_LDFLAGS		=	-g $(FPIC) -Wl,--eh-frame-hdr -L$(ZLIBDIR) -lm -lpthread
+DBG_LDFLAGS		=	$(COMMON_LDFLAGS)
+OPT_LDFLAGS		=	$(COMMON_LDFLAGS) -O3 -fno-omit-frame-pointer
+
+ifneq ($(strip $(OPT)),)
+	CFLAGS		=	$(OPT_CFLAGS)
+	CXXFLAGS	=	$(OPT_CXXFLAGS)
+	LDFLAGS		=	$(OPT_LDFLAGS)
+else
+	CFLAGS		=	$(DBG_CFLAGS)
+	CXXFLAGS	=	$(DBG_CXXFLAGS)
+	LDFLAGS		=	$(DBG_LDFLAGS)
+endif
 
 
 # We start our mode with "mode" so we avoud the leading whitespace from the +=.
@@ -52,6 +84,18 @@ ifeq ($(PROF),1)
 	NEWMODE += profile
 endif
 
+# Rule for compiling c files.
+$(BINDIR)/%.o : %.c .buildmode Makefile
+	$(ECHO) "[\033[01;34mCC\033[22;37m] compiling $<"
+	$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ $<
+
+# Rule for compiling c++ files.
+$(BINDIR)/%.o: %.cpp
+	$(ECHO) "[\033[01;34mCXX\033[22;37m] compiling $<"
+	$(MKDIR) -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
 # If the new mode does'n match the old mode, write the new mode to .buildmode.
 # This forces a rebuild of all the objects files, because they depend on .buildmode.
 OLDMODE := $(shell cat .buildmode 2> /dev/null)
@@ -68,36 +112,26 @@ clean:
 	$(RM) -rf $(BINDIR)
 	$(RM) -rf srvctcp clictcp
 	$(RM) -rf demoServer demoClient
-
-#.PHONY: rmlogs
-#rmlogs:
-#	$(ECHO) Erasing the logs...
-#	$(RM) -rf $(LOGDIR)
-#
-#.PHONY: rmfigs
-#rmfigs:
-#	$(ECHO) Erasing the figs...
-#	$(RM) -rf $(FIGDIR)
+	$(RM) -rf demoLIBIPTC
 
 .PHONY: remake
 remake: clean all
 
 clictcp: $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
-	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
+	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CC) -o $@ $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
+	$(CXX) -o $@ $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
 srvctcp: $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
-	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
+	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CC) -o $@ $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
+	$(CXX) -o $@ $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
 # Rule to make the libUtil library
 $(BINDIR)/libUtil.a: $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o
 	$(ECHO) "[\033[01;32mCC\033[22;37m] building  $@"
 	$(MKDIR) -p $(dir $@)
 	$(AR) $(ARFLAGS) $@ $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o
-
 
 demoServer: $(BINDIR)/demoServer.o .buildmode Makefile
 	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
@@ -109,15 +143,11 @@ demoClient: $(BINDIR)/demoClient.o .buildmode Makefile
 	$(MKDIR) -p $(dir $@)
 	$(CC) -o $@ $< $(LDFLAGS) -lreadline
 
-# Rule for compiling c files.
-$(BINDIR)/%.o : %.c .buildmode Makefile
-	$(ECHO) "[\033[01;34mCC\033[22;37m] compiling $<"
-	$(MKDIR) -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ $<
-
 all: clictcp srvctcp
 
 demo: demoClient demoServer
+
+demo_libiptc: demoLIBIPTC
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)

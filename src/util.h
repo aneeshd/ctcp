@@ -14,7 +14,7 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT, SYN} flag_t;
 
 //---------------- CTCP parameters ------------------//
 #define MSS 1500 // XXX: make sure that this is fine...
-#define UDP_HEADER_SIZE 8 // We have to take into account the UDP header 
+#define UDP_HEADER_SIZE 8 // We have to take into account the UDP header
 
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 // TODO: change such that we can change MSS, BLOCK_SIZE, CODING_WIN via config file
@@ -38,8 +38,8 @@ typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT, SYN} flag_t;
    + sizeof(uint8_t) \
    + sizeof(uint8_t) \
    + sizeof(uint8_t) \
-   + MAX_CODING_WND*sizeof(uint8_t) ) ) 
-  
+   + MAX_CODING_WND*sizeof(uint8_t) ) )
+
 typedef int socket_t;
 typedef struct timeval timeval_t;
 
@@ -72,7 +72,7 @@ typedef struct{ // TODO: this datastructure can store the dof's and other state 
 typedef struct{
   uint32_t blockno;
   int dof_request;
-  int coding_wnd; 
+  int coding_wnd;
 } coding_job_t;
 
 typedef struct{
