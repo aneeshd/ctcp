@@ -4,15 +4,14 @@
 
 
 Day to Day bugs/fixes:
-* Test dev_multiserver with multiple paths -- Add path setup through config - merge back into dev
 * Fix the "invalid argument" issue of the select call - Happens when a connection dies - ICMP reject
 * Fix grapher for multiple paths
-
+* Fix block selection policy so that each path can move forward by more than one block
+* Test with more than two flows
 
 New Big Features:
 * Multiple sources
   - Automatic discovery of interfaces' Ip address
-  - Systematic iptables update using libiptc library
   - Find out gateway information programmatically maybe using DHCP?
   - Automatic path establishment and clean up - both on server and client
 
@@ -20,15 +19,16 @@ New Big Features:
 * Experiment with vectorized SSE instruction for FFmult [try this - long discussion]
 * Handshake
 
+* Test VLC
+
 API/Porting:
 * Try to port to Mac/Windows - Ubuntu wireless driver is crap
 
 Grapher:
 * Fix grapher's bw computations
 * Add things to the grapher:
-  - Block transitions
   - DOFs sent per block
-  - When a block got decode
+  - When a block got decoded
 
 Documentation:
 * Fix README

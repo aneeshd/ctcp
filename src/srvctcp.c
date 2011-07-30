@@ -146,7 +146,7 @@ doit(socket_t sockfd){
 
   double idle_timer;
 
-  int CurrOnFly = 0;
+  //int CurrOnFly = 0;
   //int num_active=1;                              // Connection identifier
   int path_index=0;
 
@@ -171,7 +171,7 @@ doit(socket_t sockfd){
   start_time = getTime();
 
   // read and code the first two blocks
-  for (i=1; i <= 2; i++){
+  for (i=1; i <= NUM_BLOCKS; i++){
     coding_job_t* job = malloc(sizeof(coding_job_t));
     job->blockno = i;
     job->dof_request = (int) ceil(BLOCK_SIZE*1.0);
@@ -181,7 +181,7 @@ doit(socket_t sockfd){
   }
 
   // First send_seg: CurrOnFly = 0
-  send_segs(sockfd, path_index, CurrOnFly);
+  send_segs(sockfd, path_index);
 
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
 
@@ -215,9 +215,6 @@ doit(socket_t sockfd){
       if (ack->flag == SYN){
         if (num_active < MAX_CONNECT){
 
-          // Compute CurrOnFly, then send.
-          CurrOnFly = countCurrOnFly(active_paths, curr_block, num_active);
-
           active_paths[num_active] = malloc(sizeof(Substream_Path));
           init_stream(active_paths[num_active]);
           // add the client address info to the client lookup table
@@ -229,7 +226,7 @@ doit(socket_t sockfd){
           printf("Request for a new path: Client address %s Client port %d\n", inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), ((struct sockaddr_in*)&cli_addr)->sin_port);
 
           // Initially send a few packets to keep it going
-          send_segs(sockfd, num_active-1, CurrOnFly);
+          send_segs(sockfd, num_active-1);
           continue;        // Go back to the beginning of the while loop
         }
       }else{
@@ -245,13 +242,16 @@ doit(socket_t sockfd){
       if (r <= 0) err_sys("read");
 
       double rcvt = getTime();
-      ipkts++;
-      active_paths[path_index]->last_ack_time = rcvt;
 
-      if(handle_ack(sockfd, ack, active_paths[path_index])==1){
-        // Compute CurrOnFly, then send.
-        CurrOnFly = countCurrOnFly(active_paths, curr_block, num_active);
-        send_segs(sockfd, active_paths[path_index], CurrOnFly);
+      if (ack->flag == NORMAL) {
+        ipkts++;
+        active_paths[path_index]->last_ack_time = rcvt;
+
+        if(handle_ack(sockfd, ack, path_index)==1){
+          // Compute CurrOnFly, then send. 
+          //CurrOnFly = countCurrOnFly(curr_block);
+          send_segs(sockfd, path_index);
+        }
       }
 
       // Check all the other paths, and see if any of them timed-out.
@@ -260,9 +260,8 @@ doit(socket_t sockfd){
         if(rcvt - active_paths[path_index]->last_ack_time > active_paths[path_index]->rto + RTO_BIAS){
           if (timeout(sockfd, path_index)==TRUE){
             // Path timed out, but still alive
-            // Compute CurrOnFly, then send.
-            CurrOnFly = countCurrOnFly(active_paths, curr_block, num_active);
-            send_segs(sockfd, active_paths[path_index], CurrOnFly);
+
+            send_segs(sockfd, path_index);
           }else{
             // Path is dead and is being removed
             removePath(path_index);
@@ -278,10 +277,7 @@ doit(socket_t sockfd){
       for (i = 0; i<num_active; i++){
         if (timeout(sockfd, i)==TRUE){
           // Path timed out, but still alive
-
-          // Compute CurrOnFly, then send.
-          CurrOnFly = countCurrOnFly(active_paths, curr_block, num_active);
-          send_segs(sockfd, active_paths[i], CurrOnFly);
+          send_segs(sockfd, i);
         }else{
           // Path is dead and is being removed
           removePath(i);
@@ -300,7 +296,7 @@ doit(socket_t sockfd){
 
   terminate(sockfd); // terminate
 
-  endSession(active_paths, num_active);
+  endSession();
 
 
   for(i=1; i<num_active; i++){
@@ -350,9 +346,10 @@ removePath(int dead_index){
   Returns FALSE if the path is dead
   Returns TRUE if the path is still potentially alive
  */
-int
 
-timeout(socket_t sockfd, Substream_Path *subpath){
+int 
+timeout(socket_t fd, int pin){
+  Substream_Path *subpath = active_paths[pin];
         /* see if a packet has timedout */
   if (subpath->idle > maxidle) {
     /* give up */
@@ -378,7 +375,7 @@ timeout(socket_t sockfd, Substream_Path *subpath){
   timeouts++;
 
   subpath->idle++;
-  subpath->slr = 0;
+  subpath->slr = subpath->slr_long;
   //slr_long[path_id] = SLR_LONG_INIT;
   subpath->rto = 2*subpath->rto; // Exponential back-off
 
@@ -424,7 +421,7 @@ terminate(socket_t sockfd){
 }
 
 void
-send_segs(socket_t sockfd, int pin, int CurrOnFly){
+send_segs(socket_t sockfd, int pin){
 
   Substream_Path* subpath = active_paths[pin];
 
@@ -433,90 +430,128 @@ send_segs(socket_t sockfd, int pin, int CurrOnFly){
 
   if (win < 1) return;  /* no available window => done */
 
-  // ** OPTIMIZING FOR MULTIPLE INTERFACE ** MINJI ** //
-  bool indicator_minrtt = minRTTPath(pin);
   int CurrWin;
-  int NextWin;
   int dof_needed;
-  if(indicator_minrtt){
+  int dof_request_tmp;
 
-    CurrWin = win;
-    NextWin = 0;
+  double mean_rate = 0;
+  double mean_latency = 0;
+  double mean_OnFly = 0;
 
-    //double p = total_loss[path_id]/snd_una[path_id];
-    // Compensate for server's over estimation of the loss rate caused by lost acks
+  double delay_diff_tmp;
+  double p, t0;
+  
+  double current_time = getTime();
 
+  int CurrOnFly[MAX_CONNECT];
+  double d[MAX_CONNECT];    // delay vector
 
-  //double p = total_loss[path_id]/snd_una[path_id];
-  // Compensate for server's over estimation of the loss rate caused by lost acks
-  double p = subpath->slr/(2.0-subpath->slr);
-
-  // The total number of dofs the we think we should be sending (for the current block) from now on
-  int dof_needed
-    = MAX(0,(int) (ceil((dof_req_latest
-                         + ALPHA/2*(ALPHA*p + sqrt(pow(ALPHA*p,2.0) + 4*dof_req_latest*p)))/(1-p)))- CurrOnFly);
-
-    if (dof_req_latest - CurrOnFly < win){
-      CurrWin = MIN(win, dof_needed);
-      NextWin = win - CurrWin;
+  int j,k;
+  for (j = 0; j < num_active; j++){
+    CurrOnFly[j] = 0;
+    for(k = active_paths[j]->snd_una; k < active_paths[j]->snd_nxt; k++){
+      CurrOnFly[j] += (active_paths[j]->OnFly[k%MAX_CWND] == curr_block) & (active_paths[j]->tx_time[k%MAX_CWND] >= current_time - 1.5*active_paths[j]->srtt);
     }
-  }else{
-    dof_needed = 0;
-    CurrWin = 0;
-    NextWin = win;
-  }
-  // ** OPTIMIZING FOR MULTIPLE INTERFACE ** MINJI ** //
 
-  // Check whether we have enough coded packets for current block
-  if (dof_remain[curr_block%NUM_BLOCKS] < dof_needed){
-    /*
-    printf("requesting more dofs: curr path_id %d curr block %d,  dof_remain %d, dof_needed %d dof_req_latest %d\n",
-           path_id, curr_block, dof_remain[curr_block%NUM_BLOCKS], dof_needed, dof_req_latest);
-    */
-    coding_job_t* job = malloc(sizeof(coding_job_t));
-    job->blockno = curr_block;
-    job->dof_request = MIN_DOF_REQUEST + dof_needed - dof_remain[curr_block%NUM_BLOCKS];
-    dof_remain[curr_block%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
-    job->coding_wnd = INIT_CODING_WND;
-    if (dof_req_latest <= 3) {
+    d[j] = active_paths[j]->srtt/2.0;
+  }
+
+  //////////////////////////  START CHECKING EACH BLOCK   //////////////////////////
+
+  int blockno = curr_block;
+  while ( (win > 0) && (blockno < curr_block + NUM_BLOCKS) && (!maxblockno || blockno <= maxblockno) ){
+
+    if (blockno == curr_block){
+      dof_request_tmp = dof_req_latest;
+    }else{
+      dof_request_tmp = BLOCK_SIZE;
+      for (j = 0; j < num_active; j++){
+        CurrOnFly[j] = active_paths[j]->packets_sent[blockno%NUM_BLOCKS];
+      }
+    }
+
+
+    mean_rate = 0;
+    mean_latency = 0;
+    mean_OnFly = 0;
+
+    for (j = 0; j < num_active; j++){
+
+      // Compensate for server's over estimation of the loss rate caused by lost acks
+      p = active_paths[j]->slr/(2.0 - active_paths[j]->slr);
+
+      delay_diff_tmp = subpath->srtt/2.0 - d[j];
+      if ((delay_diff_tmp > 0) && (d[j] > 0)){
+        mean_rate    += (1-p)*active_paths[j]->snd_cwnd/(2*d[j]);
+        mean_latency += (1-p)*active_paths[j]->snd_cwnd/(2.0);
+      }
+      mean_OnFly += (1-p)*(CurrOnFly[j]);
+    }
+
+    p = subpath->slr/(2.0 - subpath->slr);
+
+    // The total number of dofs the we think we should be sending (for the current block) from now on
+    dof_needed = 0;
+    while ( (dof_needed < win) &&  ( (dof_needed)*(1-p) + (mean_rate*subpath->srtt/2.0 - mean_latency + mean_OnFly)  < dof_request_tmp) ) {
+      dof_needed++;
+    }
+
+    if (dof_needed == 0){
+      
+      if (mean_rate > 0){
+	t0 = (dof_request_tmp - mean_OnFly + mean_latency)/(mean_rate);
+
+	if (t0 > subpath->srtt/2.0){
+	  printf("current path delay %f  t0 %f \n", subpath->srtt/2.0, t0);
+	}
+
+      }
+
+      for (j = 0; j < num_active; j++){
+        if (d[j] < subpath->srtt/2.0){
+          d[j] = t0;
+        }
+      }
+
+      if (debug > 6 && num_active == 2){
+	printf("path_id %d blockno %d mean OnFly %f dof_request tmp %d win %d CurrOnFly[0] %d CurrOnFly[1] %d srtt[0] %f srtt[1] %f\n", pin, blockno, mean_OnFly, dof_request_tmp, win, CurrOnFly[0], CurrOnFly[1], active_paths[0]->srtt*1000, active_paths[1]->srtt*1000);
+      }
+
+    }
+
+    CurrWin = dof_needed;
+    win = win - CurrWin;
+
+      //printf("Currenet Block %d win %d  dof_needed %d dof_req_latest %d CurrOnFly[%d] %d mean Onfly %f t0 %f\n", blockno, win, dof_needed, dof_request_tmp, pin, CurrOnFly[pin], mean_OnFly, t0);  
+
+    // Check whether we have enough coded packets for current block
+    if (dof_remain[blockno%NUM_BLOCKS] < dof_needed){
+      /*
+        printf("requesting more dofs: curr path_id %d curr block %d,  dof_remain %d, dof_needed %d dof_req_latest %d\n",
+        path_id, blockno, dof_remain[blockno%NUM_BLOCKS], dof_needed, dof_req_latest);
+      */
+      coding_job_t* job = malloc(sizeof(coding_job_t));
+
+      job->blockno = blockno;
+      job->dof_request = MIN_DOF_REQUEST + dof_needed - dof_remain[blockno%NUM_BLOCKS];
+      dof_remain[blockno%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
       job->coding_wnd = MAX_CODING_WND;
 
-      printf("Requested jobs with coding window %d - blockno %d dof_needed %d  \n",
-             job->coding_wnd, curr_block, dof_needed);
+      addJob(&workers, &coding_job, job, &free, HIGH);
     }
-    addJob(&workers, &coding_job, job, &free, HIGH);
-  }
 
-  while (CurrWin>=1) {
-    // TODO TODO
-    send_one(sockfd, curr_block, pin);
-    subpath->snd_nxt++;
-    CurrWin--;
-    dof_remain[curr_block%NUM_BLOCKS]--;   // Update the internal dof counter
-  }
-
-  if (curr_block != maxblockno){
-
-    // Check whether we have enough coded packets for next block
-    if (dof_remain[(curr_block+1)%NUM_BLOCKS] < NextWin){
-
-      coding_job_t* job = malloc(sizeof(coding_job_t));
-      job->blockno = curr_block+1;
-      job->dof_request = MIN_DOF_REQUEST + NextWin - dof_remain[(curr_block+1)%NUM_BLOCKS];
-      dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
-      job->coding_wnd = INIT_CODING_WND;
-
-      addJob(&workers, &coding_job, job, &free, LOW);
-    }
-    // send from curr_block + 1
-    while (NextWin>=1) {
-      // TODO TODO
-      send_one(sockfd, curr_block+1, pin);
+    while (CurrWin>=1) {
+      send_one(sockfd, blockno, pin);
       subpath->snd_nxt++;
-      NextWin--;
-      dof_remain[(curr_block+1)%NUM_BLOCKS]--;   // Update the internal dof counter
-    }
-  }
+      CurrWin--;
+      dof_remain[blockno%NUM_BLOCKS]--;   // Update the internal dof counter
+      subpath->packets_sent[blockno%NUM_BLOCKS]++;
+   }
+
+  blockno++;
+
+  } //////////////////////// END CHECKING BLOCKS ////////////////////
+
 }
 
 
@@ -585,12 +620,13 @@ send_one(socket_t sockfd, uint32_t blockno, int pin){
   }
   // Update the packets on the fly
   subpath->OnFly[subpath->snd_nxt%MAX_CWND] = blockno;
+  subpath->tx_time[subpath->snd_nxt%MAX_CWND] = msg->tstamp;
   //printf("Freeing the message - blockno %d snd_nxt[path_id] %d ....", blockno, snd_nxt[path_id]);
   opkts++;
   free(msg->packet_coeff);
   free(msg->payload);
   free(msg);
-  //printf("Done Freeing the message - blockno %d snd_nxt[path_id] %d \n\n\n", blockno, snd_nxt[path_id]);
+  //printf("---------- Done Freeing the message\n-------------");
 }
 
 void
@@ -613,11 +649,10 @@ endSession(){
            100.*active_paths[i]->total_loss/active_paths[i]->snd_una);
     if (ipkts) active_paths[i]->avrgrtt /= ipkts;
     printf("**RTT** minrtt  %f maxrtt %f avrgrtt %f\n",
-
-           paths[i]->minrtt, paths[i]->maxrtt,paths[i]->avrgrtt);
-    printf("**RTT** rto %f  srtt %f \n", paths[i]->rto, paths[i]->srtt);
+           active_paths[i]->minrtt, active_paths[i]->maxrtt,active_paths[i]->avrgrtt);
+    printf("**RTT** rto %f  srtt %f \n", active_paths[i]->rto, active_paths[i]->srtt);
     printf("**VEGAS** max_delta %f vdecr %d v0 %d vdelta %f\n",
-           paths[i]->max_delta ,paths[i]->vdecr, paths[i]->v0,paths[i]->vdelta);
+           active_paths[i]->max_delta ,active_paths[i]->vdecr, active_paths[i]->v0,active_paths[i]->vdelta);
     printf("**CWND** snd_nxt %d snd_cwnd %5.3f  snd_una %d ssthresh %d goodacks %d\n\n",
            active_paths[i]->snd_nxt, active_paths[i]->snd_cwnd, active_paths[i]->snd_una,
            active_paths[i]->snd_ssthresh, goodacks);
@@ -674,7 +709,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
   //------------- RTT calculations --------------------------//
 
 
-  if (ack->blockno > curr_block){
+  while (ack->blockno > curr_block){
     // Moving on to a new block
 
     pthread_mutex_lock(&blocks[curr_block%NUM_BLOCKS].block_mutex);
@@ -695,15 +730,20 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
     if (!maxblockno){
 
       coding_job_t* job = malloc(sizeof(coding_job_t));
-      job->blockno = curr_block+1;
+      job->blockno = curr_block+NUM_BLOCKS-1;
       job->dof_request = BLOCK_SIZE;
-      dof_remain[(curr_block+1)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+      dof_remain[(job->blockno)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
       job->coding_wnd = 1;
 
       addJob(&workers, &coding_job, job, &free, LOW);
     }
 
     dof_req_latest = ack->dof_req;     // reset the dof counter for the current block
+    
+    int j;
+    for (j =0; j < num_active; j++){
+      active_paths[j]->packets_sent[(curr_block-1)%NUM_BLOCKS]=0;
+    }
 
     if (debug > 5 && curr_block%10==0){
       printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms \n",
@@ -711,7 +751,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
     }
   }
 
-  if (ackno > subpath->snd_nxt || ack->blockno != curr_block) {
+  if (ackno > subpath->snd_nxt || ack->blockno > curr_block) {
     /* bad ack */
     if (debug > 4) fprintf(stderr,
 
@@ -745,7 +785,7 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
 
     if (ackno <= subpath->snd_una){
       //late ack
-      if (debug > 5) fprintf(stderr,
+      if (debug > 6) fprintf(stderr,
                              "Late ack path %d: curr block %d ack-blockno %d badack no %d snd_nxt %d snd_una %d\n",
                              pin, curr_block, ack->blockno, ackno, subpath->snd_nxt, subpath->snd_una);
     } else {
@@ -770,17 +810,12 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
     }
     // Updated the requested dofs for the current block
     // The MIN is to avoid outdated infromation by out of order ACKs or ACKs on different paths
-    dof_req_latest = MIN(dof_req_latest, ack->dof_req);
 
-    advance_cwnd(subpath);
-    /*subpath->snd_cwnd = advance_cwnd(subpath->snd_cwnd,
-                                     subpath->snd_ssthresh,
-                                     subpath->slow_start,
-                                     subpath->vdelta,
-                                     subpath->slr,
-                                     subpath->slr_long,
-                                     subpath->slr_longstd);
-                                     if(subpath->snd_cwnd > subpath->snd_ssthresh) subpath->slow_start = 0;*/
+	if (ack->blockno == curr_block){
+	    dof_req_latest = MIN(dof_req_latest, ack->dof_req);
+	}
+    advance_cwnd(pin);
+
     return 1;
   } // end else goodack
   return 0;
@@ -1014,6 +1049,8 @@ coding_job(void *a){
   if (dof_request > 0){
     // Extra degrees of freedom are generated by picking a row randomly
 
+    //fprintf(stdout, "coding job for %d coded packets \n", dof_request);
+
     int i, j;
     int dof_ix, row;
 
@@ -1050,11 +1087,16 @@ coding_job(void *a){
         msg->flag = PARTIAL_BLK;
         msg->blk_len = block_len;
       }
+
       q_push_back(&coded_q[blockno%NUM_BLOCKS], msg);
+
     }  // Done with forming the remaining set of coded packets
 
   }
-  //printf("Almost done with block %d\n", blockno);
+
+  //pthread_mutex_lock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
+  //printf("Almost done with block %d - q size %d\n", blockno, coded_q[blockno%NUM_BLOCKS].size);
+  //pthread_mutex_unlock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
 
  release:
 
@@ -1378,11 +1420,17 @@ initialize(void){
 
 void
 init_stream(Substream_Path *subpath){
+  int j;
+
   subpath->dof_req = BLOCK_SIZE;
 
-  int j;
-  for(j=0; j < MAX_CWND; j++) subpath->OnFly[j] = 0;
+  for(j=0; j < NUM_BLOCKS; j++) subpath->packets_sent[j] = 0;
 
+  for(j=0; j < MAX_CWND; j++){
+    subpath->OnFly[j] = 0;
+    subpath->tx_time[j] = 0;
+  }
+  
   subpath->last_ack_time = 0;
   subpath->snd_nxt = 1;
   subpath->snd_una = 1;

@@ -27,7 +27,7 @@ int rcvspace;
 socklen_t srvlen;
 
 //---------------- CTCP PARAMETERS ------------------//
-#define NUM_BLOCKS 2
+#define NUM_BLOCKS 4
 #define MAX_SUBSTREAMS 5
 
 Coded_Block_t blocks[NUM_BLOCKS];
@@ -43,6 +43,7 @@ int pkts, acks;
 int debug = 0;
 int ndofs = 0;
 int old_blk_pkts = 0;
+int nxt_blk_pkts = 0;
 int total_loss = 0;
 double idle_total = 0; // The total time the client has spent waiting for a packet
 double decoding_delay = 0;

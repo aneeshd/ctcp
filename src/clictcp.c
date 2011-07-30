@@ -36,6 +36,7 @@ ctrlc(void){
   //printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
   printf("**Ndofs** %d  coding loss rate %f\n", ndofs, (double)ndofs/(double)pkts);
   printf("**Old packets** %d  old pkt loss rate %f\n", old_blk_pkts, (double)old_blk_pkts/(double)pkts);
+  printf("**Next Block packets** %d  nxt pkt loss rate %f\n", nxt_blk_pkts, (double)nxt_blk_pkts/(double)pkts);
   printf("Total Channel loss rate %f\n", (double)total_loss/(double)last_seqno);
   printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", idle_total, elimination_delay, decoding_delay);
   fclose(rcv_file);
@@ -176,7 +177,6 @@ main(int argc, char** argv){
 
 
     // Send request to the server.
-    // We only send request (with the file name) through the first substream
     if((numbytes = sendto(sockfd[0], file_name, (strlen(file_name)+1)*sizeof(char), 0,
                           result->ai_addr, result->ai_addrlen)) == -1){
       err_sys("sendto: Request failed");
@@ -311,8 +311,10 @@ bldack(Data_Pckt *msg, bool match, int curr_substream){
     if (blockno < curr_block){
         // Discard the packet if it is coming from a decoded block or it is too far ahead
         // Send an appropriate ack to return the token
-        //printf("Old packet.\n");
-        old_blk_pkts++;
+      if (debug > 5){
+        printf("Old packet  curr block %d packet blockno %d seqno %d substream %d \n", curr_block, blockno, msg->seqno, curr_substream);
+      }
+      old_blk_pkts++;
     }else if (blockno >= curr_block + NUM_BLOCKS){
         printf("BAD packet: The block does not exist yet.\n");
     }else{
@@ -389,10 +391,15 @@ bldack(Data_Pckt *msg, bool match, int curr_substream){
                     start += shift;
                 }
             } // end while
-        } // end if block.dof < block.len
 
-        if(blocks[blockno%NUM_BLOCKS].dofs == prev_dofs){
-            ndofs++;
+            if(blocks[blockno%NUM_BLOCKS].dofs == prev_dofs){
+              ndofs++;
+            }
+        } else {  // end if block.dof < block.len
+          nxt_blk_pkts++;   // If the block is full rank but not yet decoded, anything arriving is old
+          if (debug > 5){
+            printf("NEXT packet  curr block %d packet blockno %d seqno %d substream %d\n", curr_block, blockno, msg->seqno, curr_substream);
+          }
         }
 
         elimination_delay += getTime() - elimination_timer;
@@ -407,11 +414,11 @@ bldack(Data_Pckt *msg, bool match, int curr_substream){
     Ack_Pckt* ack = ackPacket(msg->seqno+1, curr_block,
                               blocks[curr_block%NUM_BLOCKS].len - blocks[curr_block%NUM_BLOCKS].dofs);
 
-    if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
+    while(ack->dof_req == 0){
         // The current block is decodable, so need to request for the next block
         // XXX make sure that NUM_BLOCKS is not 1, or this will break
-        ack->blockno = curr_block+1;
-        ack->dof_req =   blocks[(curr_block+1)%NUM_BLOCKS].len - blocks[(curr_block+1)%NUM_BLOCKS].dofs;
+        ack->blockno++;
+        ack->dof_req =   blocks[(ack->blockno)%NUM_BLOCKS].len - blocks[(ack->blockno)%NUM_BLOCKS].dofs;
     }
 
     ack->tstamp = msg->tstamp;
@@ -435,7 +442,7 @@ bldack(Data_Pckt *msg, bool match, int curr_substream){
     //------------------------------------------------------------------------------------------------------
 
     // Always try decoding the curr_block first, even if the next block is decodable, it is not useful
-    if(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
+    while(blocks[curr_block%NUM_BLOCKS].dofs == blocks[curr_block%NUM_BLOCKS].len){
         // We have enough dofs to decode, DECODE!
 
         double decoding_timer = getTime();

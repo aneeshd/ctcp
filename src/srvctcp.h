@@ -10,9 +10,9 @@
 #define MAX_CONNECT 5
 
 // ------------ CTCP parameters ---------------//
-#define NUM_BLOCKS 2
+#define NUM_BLOCKS 4
 #define THREADS 5
-#define ALPHA 2.32           // The number of std to deviate from mean to get 1% target error probability
+#define ALPHA (0.0)           // The number of std to deviate from mean to get 1% target error probability
 #define MIN_DOF_REQUEST 0
 #define SLR_LONG_INIT 0.05
 #define RTO_BIAS 0.010      // (seconds) Bias the time-out timer
@@ -26,10 +26,12 @@ const double slr_longmem     = 1.0/(BLOCK_SIZE*10); // Long term memory smoothin
 const double g               = 1.0/(BLOCK_SIZE/5);      // Memory for updating slr, rto
 const double beta            = 2.5;                 // rto range compared to rtt
 
-// ------------ MultiPath variables ---------------//
+//------------ MultiPath variables ---------------//
 
 typedef struct{
   uint32_t OnFly[MAX_CWND];
+  double tx_time[MAX_CWND];
+  int packets_sent[NUM_BLOCKS]; 
   int dof_req;
   double last_ack_time;
   uint32_t snd_nxt;
@@ -129,7 +131,7 @@ bool minRTTPath(int index);
 int doit( socket_t fd);
 void terminate(socket_t fd);
 int timeout(socket_t fd, int pin);
-void send_segs(socket_t fd, int pin, int cof);
+void send_segs(socket_t fd, int pin);
 socket_t timedread(socket_t fd, double t);
 int handle_ack(socket_t fd, Ack_Pckt* ack, int pin);
 void readBlock(uint32_t blockno);
