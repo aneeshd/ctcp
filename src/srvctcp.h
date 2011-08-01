@@ -59,7 +59,7 @@ typedef struct{
 int dof_req_latest;                       /* Latest information about dofs of the current block */
 // Ideally, move this back into doit
 Substream_Path** active_paths;            // 0-1 representing whether path alive
-int num_active=1;                              // Connection identifier
+int num_active;                              // Connection identifier
 
 //----------------------------------------------------------------//
 FILE *db;     /* debug trace file */
@@ -127,14 +127,14 @@ void removePath(int dead_index);
 void init_stream(Substream_Path *sp);
 int countCurrOnFly(int block);
 bool minRTTPath(int index);
-
-int doit( socket_t fd);
+uint32_t send_ctcp(socket_t sockfd, const void *usr_buf, size_t usr_buf_len);
 void terminate(socket_t fd);
 int timeout(socket_t fd, int pin);
 void send_segs(socket_t fd, int pin);
 socket_t timedread(socket_t fd, double t);
 int handle_ack(socket_t fd, Ack_Pckt* ack, int pin);
-void readBlock(uint32_t blockno);
+
+uint32_t readBlock(uint32_t blockno, const void *buf, size_t buf_len);
 void freeBlock(uint32_t blockno);
 void send_one(socket_t fd, unsigned int n, int pin);
 void advance_cwnd(int pin);
@@ -150,7 +150,7 @@ void openLog(char* log_name);
 void* coding_job(void *a);
 void free_coded_pkt(void* a);
 
-void initialize(void);
+void initialize(socket_t sockfd);
 int sockaddr_cmp(struct sockaddr* addr1, struct sockaddr* addr2);
 
 #endif // ATOUCLI_H_

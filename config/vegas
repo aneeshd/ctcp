@@ -1,10 +1,5 @@
-# you MUST use -s with atousrv for fack/sack
-#newreno 0
-#fack 0
-#sack 0
-#rampdown 0
 valpha 0.05
 vbeta 0.2
 multiplier 0.75
 debug 6
-#droplist 200 200
+

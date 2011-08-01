@@ -64,7 +64,6 @@ main (int argc, char** argv){
     }
 
     readConfig();    // Read config file
-    initialize();    // Initialize global variables and threads
 
     signal(SIGINT, ctrlc);
 
@@ -102,7 +101,7 @@ main (int argc, char** argv){
         return 2;
     }
 
-    printf("Trying to bind to address %s port %d\n", inet_ntoa(((struct sockaddr_in*) &(result->ai_addr))->sin_addr), ((struct sockaddr_in*)&(result->ai_addr))->sin_port);
+    //printf("Trying to bind to address %s port %d\n", inet_ntoa(((struct sockaddr_in*) &(result->ai_addr))->sin_addr), ((struct sockaddr_in*)&(result->ai_addr))->sin_port);
 
     //freeaddrinfo(servinfo);
 
@@ -110,77 +109,103 @@ main (int argc, char** argv){
 
 
     char *file_name = malloc(1024);
-    while(1){
-      fprintf(stdout, "\nWaiting for requests...\n");
-      if((numbytes = recvfrom(sockfd, file_name, 1024, 0,
-                              &cli_addr, &clilen)) == -1){
-        //printf("%s\n", file_name);
-        err_sys("recvfrom: Failed to receive the request\n");
-      }
-
-      printf("Request for a new session: Client address %s Client port %d\n", inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), ((struct sockaddr_in*)&cli_addr)->sin_port);
-      printf("sending %s\n", file_name);
-
-      if ((snd_file = fopen(file_name, "rb"))== NULL){
-        err_sys("Error while trying to create/open a file");
-      }
-
-      if (debug > 3) openLog(log_name);
-
-      // TODO TODO change restart
-      restart();
-      doit(sockfd);
+    // while(1){
+      
+    fprintf(stdout, "\nWaiting for requests...\n");
+    if((numbytes = recvfrom(sockfd, file_name, 1024, 0,
+                            &cli_addr, &clilen)) == -1){
+      //printf("%s\n", file_name);
+      err_sys("recvfrom: Failed to receive the request\n");
     }
+
+    printf("Request for a new session: Client address %s Client port %d\n", inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), ((struct sockaddr_in*)&cli_addr)->sin_port);
+    printf("sending %s\n", file_name);
+
+    if ((snd_file = fopen(file_name, "rb"))== NULL){
+      err_sys("Error while trying to create/open a file");
+    }
+
+    if (debug > 3) openLog(log_name);
+
+    // TODO TODO change restart
+    initialize(sockfd);    // Initialize global variables and threads
+    restart();
+
+
+    /* INITIALIZE SUBSTREAMS */
+    active_paths = malloc(MAX_CONNECT*sizeof(Substream_Path*));
+
+    Substream_Path *stream = malloc(sizeof(Substream_Path));
+    init_stream(stream);
+    // Save the client address as the primary client
+    // cli_addr set the main loop...
+    stream->cli_addr = cli_addr;
+    active_paths[0] = stream;
+   
+
+    /* READ FROM A FILE AND PUT IN A BUFFER */
+
+    size_t buf_size = 20000000;
+    size_t f_bytes_read, bytes_sent;
+    char *file_buff = malloc(buf_size*sizeof(char));
+    size_t total_bytes_sent =0;
+    size_t total_bytes_read = 0;
+
+    while(!feof(snd_file)){
+      f_bytes_read = fread(file_buff, 1, buf_size, snd_file);
+      total_bytes_read += f_bytes_read;
+      //printf("%d bytes read from the file \n", total_bytes_read);
+
+      bytes_sent = 0;
+      while(bytes_sent < f_bytes_read){
+        bytes_sent += send_ctcp(sockfd, file_buff + bytes_sent, f_bytes_read - bytes_sent);
+      }
+      total_bytes_sent += bytes_sent;
+      //printf("Total bytes sent %d\n", total_bytes_sent);
+
+    }
+
+    //}  
+    
     return 0;
 }
 
 /*
  * This is contains the main functionality and flow of the client program
  */
-int
-doit(socket_t sockfd){
+uint32_t
+send_ctcp(socket_t sockfd, const void *usr_buf, size_t usr_buf_len){
   int i, r;
-
-  //Substream_Path** active_paths;            // 0-1 representing whether path alive
-  active_paths = malloc(MAX_CONNECT*sizeof(Substream_Path*));
-
   double idle_timer;
 
-  //int CurrOnFly = 0;
-  //int num_active=1;                              // Connection identifier
-  int path_index=0;
+  int path_index=0;              // Connection identifier
 
-  Substream_Path *stream = malloc(sizeof(Substream_Path));
-  init_stream(stream);
-  // Save the client address as the primary client
-  // cli_addr set the main loop...
-  stream->cli_addr = cli_addr;
-  active_paths[path_index] = stream;
+  uint32_t bytes_left = usr_buf_len;
+  int block_len_tmp;
+  // read the user buffer into blocks of packets
+  for (i=curr_block; i < curr_block+NUM_BLOCKS && bytes_left > 0; i++){
+    block_len_tmp = blocks[i%NUM_BLOCKS].len;   // keep the block len before reading
 
-  i=sizeof(sndbuf);
+    bytes_left -= readBlock(i, usr_buf+usr_buf_len-bytes_left, bytes_left);
+    //printf("bytes_left %d maxblockno %d\n", bytes_left, maxblockno);
 
-  //--------------- Setting the socket options --------------------------------//
-  setsockopt(sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,i);
-  getsockopt(sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,(socklen_t*)&i);
-  setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,i);
-  getsockopt(sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,(socklen_t*)&i);
-  printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
-  //---------------------------------------------------------------------------//
-
-  /* send out initial segments, then go for it */
-  start_time = getTime();
-
-  // read and code the first two blocks
-  for (i=1; i <= NUM_BLOCKS; i++){
     coding_job_t* job = malloc(sizeof(coding_job_t));
     job->blockno = i;
-    job->dof_request = (int) ceil(BLOCK_SIZE*1.0);
-    job->coding_wnd = 1; //INIT_CODING_WND;  TODO: remove comment if stable
+    job->dof_request = blocks[i%NUM_BLOCKS].len - block_len_tmp;   //(int) ceil(BLOCK_SIZE*1.0);
+    job->coding_wnd = 0; //INIT_CODING_WND;  TODO: remove comment if stable
     dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
     addJob(&workers, &coding_job, job, &free, LOW);
   }
 
-  // First send_seg: CurrOnFly = 0
+  if (bytes_left > 0){
+    maxblockno = curr_block + NUM_BLOCKS - 1;
+  }
+
+  done = FALSE;
+  /* send out initial segments, then go for it */
+  start_time = getTime();
+
+  // First send_seg
   send_segs(sockfd, path_index);
 
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
@@ -248,8 +273,6 @@ doit(socket_t sockfd){
         active_paths[path_index]->last_ack_time = rcvt;
 
         if(handle_ack(sockfd, ack, path_index)==1){
-          // Compute CurrOnFly, then send. 
-          //CurrOnFly = countCurrOnFly(curr_block);
           send_segs(sockfd, path_index);
         }
       }
@@ -294,17 +317,18 @@ doit(socket_t sockfd){
   total_time = getTime()-start_time;
   free(ack);
 
-  terminate(sockfd); // terminate
+  //terminate(sockfd); // terminate
 
-  endSession();
+  //endSession();
 
-
+  /*
   for(i=1; i<num_active; i++){
     free(active_paths[i]);
   }
   free(active_paths);
+  */
 
-  return 0;
+  return usr_buf_len - bytes_left;
 }
 
 int
@@ -450,7 +474,7 @@ send_segs(socket_t sockfd, int pin){
   for (j = 0; j < num_active; j++){
     CurrOnFly[j] = 0;
     for(k = active_paths[j]->snd_una; k < active_paths[j]->snd_nxt; k++){
-      CurrOnFly[j] += (active_paths[j]->OnFly[k%MAX_CWND] == curr_block) & (active_paths[j]->tx_time[k%MAX_CWND] >= current_time - 1.5*active_paths[j]->srtt);
+      CurrOnFly[j] += (active_paths[j]->OnFly[k%MAX_CWND] == curr_block) & (active_paths[j]->tx_time[k%MAX_CWND] >= current_time - (1.5*active_paths[j]->srtt + RTO_BIAS));
     }
 
     d[j] = active_paths[j]->srtt/2.0;
@@ -721,10 +745,10 @@ handle_ack(socket_t sockfd, Ack_Pckt *ack, int pin){
     pthread_mutex_unlock(&blocks[(curr_block-1)%NUM_BLOCKS].block_mutex);
 
 
-    if(maxblockno && ack->blockno > maxblockno){
+    if(maxblockno && ack->blockno > maxblockno && curr_block > maxblockno){
       done = TRUE;
-      printf("THIS IS THE LAST ACK\n");
-      return 0; // goes back to the beginning of the while loop in main() and exits
+      //printf("THIS IS THE LAST ACK - maxblockno %d curr_block %d\n", maxblockno, curr_block);
+      return 0; // goes back to the beginning of the while loop in send_ctcp() and exits
     }
 
     if (!maxblockno){
@@ -954,60 +978,58 @@ coding_job(void *a){
   pthread_mutex_lock(&blocks[blockno%NUM_BLOCKS].block_mutex);
 
   // Check if the blockno is already done
-    if( blockno < curr_block ){
+ 
+  if( blockno < curr_block ){
       if (debug > 5){
         printf("Coding job request for old block - curr_block %d blockno %d dof_request %d \n\n", curr_block,  blockno, dof_request);
       }
-      goto release;
-    }
-
+      pthread_mutex_unlock( &blocks[blockno%NUM_BLOCKS].block_mutex );
+      return NULL;
+  }
+  
 
   // Check whether the requested blockno is already read, if not, read it from the file
   // generate the first set of degrees of freedom according toa  random permutation
 
   uint8_t block_len = blocks[blockno%NUM_BLOCKS].len;
-
+  
   if (block_len  == 0){
-    if( !maxblockno || maxblockno >= blockno )
-      {
-        // lock the file
-        pthread_mutex_lock(&file_mutex);
+    printf("Error: Block not read yet\n");
 
-        readBlock(blockno);
+    pthread_mutex_unlock( &blocks[blockno%NUM_BLOCKS].block_mutex );
+    return NULL;
+  } 
+  
+  if (coding_wnd == 0){
 
-        // unlock the file
-        pthread_mutex_unlock(&file_mutex);
-      }else{
-      goto release;
-    }
-
-    if( (block_len = blocks[blockno%NUM_BLOCKS].len) == 0){
-      goto release;
-    }
+    coding_wnd = 1;
+  
     // Compute a random permutation of the rows
 
-    uint8_t order[block_len];
+    uint8_t order[dof_request];
     int i, j, swap_temp;
-    for (i=0; i < block_len; i++){
-      order[i] = i;
+    for (i=0; i < dof_request; i++){
+      order[i] = i + block_len - dof_request;
     }
+
+    // Permutations disabled 
+    /*
     for (i=block_len - 1; i > 0; i--){
       j = random()%(i+1);
       swap_temp = order[i];
       order[i] = order[j];
       order[j] = swap_temp;
-    }
+      } */ 
 
     // Make sure this never happens!
     if (dof_request < block_len){
       printf("Error: the initially requested dofs are less than the block length - blockno %d dof_request %d block_len %d\n\n\n\n\n",  blockno, dof_request, block_len);
-      dof_request = block_len;
     }
 
 
     // Generate random combination by picking rows based on order
     int dof_ix, row;
-    for (dof_ix = 0; dof_ix < block_len; dof_ix++){
+    for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
       uint8_t num_packets = MIN(coding_wnd, block_len);
       Data_Pckt *msg = dataPacket(0, blockno, num_packets);
 
@@ -1098,10 +1120,7 @@ coding_job(void *a){
   //printf("Almost done with block %d - q size %d\n", blockno, coded_q[blockno%NUM_BLOCKS].size);
   //pthread_mutex_unlock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
 
- release:
-
   pthread_mutex_unlock( &blocks[blockno%NUM_BLOCKS].block_mutex );
-
   return NULL;
 }
 
@@ -1119,36 +1138,35 @@ free_coded_pkt(void* a)
 }
 
 //--------------------------------------------------------------------
-void
-readBlock(uint32_t blockno){
+uint32_t
+readBlock(uint32_t blockno, const void *buf, size_t buf_len){
 
-  // TODO: Make sure that the memory in the block is released before calling this function
-  blocks[blockno%NUM_BLOCKS].len = 0;
-  blocks[blockno%NUM_BLOCKS].content = malloc(BLOCK_SIZE*sizeof(char*));
-
-  if (file_position != blockno){
-    fseek(snd_file, (blockno-1)*BLOCK_SIZE*(PAYLOAD_SIZE-2), SEEK_SET);
-  }
-
-  while(blocks[blockno%NUM_BLOCKS].len < BLOCK_SIZE && !feof(snd_file)){
+  // starting from buf, read up to buf_len bytes into block #blockno
+  // If the block is already full, do nothing
+  uint16_t bytes_read; 
+  uint32_t bytes_left = buf_len; 
+  while(blocks[blockno%NUM_BLOCKS].len < BLOCK_SIZE && bytes_left){
     char* tmp = malloc(PAYLOAD_SIZE);
     memset(tmp, 0, PAYLOAD_SIZE); // This is done to pad with 0's
-    uint16_t bytes_read = (uint16_t) fread(tmp + 2, 1, PAYLOAD_SIZE-2, snd_file);
+    bytes_read = (uint16_t) MIN(PAYLOAD_SIZE-2, bytes_left);
+    memcpy(tmp+2, buf+buf_len-bytes_left, bytes_read);
     bytes_read = htons(bytes_read);
     memcpy(tmp, &bytes_read, sizeof(uint16_t));
 
+    bytes_read = ntohs(bytes_read);
+    //printf("bytes_read from block %d = %d \t bytes_left %d\n", blockno, bytes_read, bytes_left);
+    
     // Insert this pointer into the blocks datastructure
     blocks[blockno%NUM_BLOCKS].content[blocks[blockno%NUM_BLOCKS].len] = tmp;
     blocks[blockno%NUM_BLOCKS].len++;
-    if(feof(snd_file)){
+    bytes_left -= bytes_read;
+
+    if(bytes_left <= 0){
       maxblockno = blockno;
-      printf("This is the last block %d\n", maxblockno);
     }
   }
 
-  file_position = blockno + 1;  // Advance the counter
-
-
+  return buf_len - bytes_left;
 }
 
 
@@ -1161,7 +1179,7 @@ freeBlock(uint32_t blockno){
   for(i = 0; i < blocks[blockno%NUM_BLOCKS].len; i++){
     free(blocks[blockno%NUM_BLOCKS].content[i]);
   }
-  free(blocks[blockno%NUM_BLOCKS].content);
+
   // reset the counters
   blocks[blockno%NUM_BLOCKS].len = 0;
   dof_remain[blockno%NUM_BLOCKS] = 0;
@@ -1401,7 +1419,7 @@ sockaddr_cmp(struct sockaddr* addr1, struct sockaddr* addr2){
 
 // Initialize the global objects (called only once)
 void
-initialize(void){
+initialize(socket_t sockfd){
   int i;
 
   // initialize the thread pool
@@ -1415,6 +1433,16 @@ initialize(void){
     pthread_mutex_init( &blocks[i].block_mutex, NULL );
     q_init(&coded_q[i], 2*BLOCK_SIZE);
   }
+
+  i = sizeof(sndbuf);
+
+  //--------------- Setting the UDP socket options -----------------------------//
+  setsockopt(sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,i);
+  getsockopt(sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,(socklen_t*)&i);
+  setsockopt(sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,i);
+  getsockopt(sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,(socklen_t*)&i);
+  printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
+  //---------------------------------------------------------------------------//
 
 }
 
@@ -1471,17 +1499,17 @@ restart(void){
   fprintf(stdout, "\n\n*************************************\n****** Starting New Connection ******\n*************************************\n");
 
 
-
   int i;
 
   for(i = 0; i < NUM_BLOCKS; i++){
     dof_remain[i] = 0;
+    blocks[i].content = malloc(BLOCK_SIZE*sizeof(char*));
   }
 
   memset(buff,0,BUFFSIZE);        /* pretouch */
 
   dof_req_latest = BLOCK_SIZE;
-  //num_active = 0;
+  num_active = 1;
 
   //--------------------------------------------------------
   done = FALSE;
