@@ -95,6 +95,8 @@ void make_new_table(dhcp_lease* lease, int table_number, int mark_number);
 void delete_table(int table_number, int mark_number);
 
 uint32_t  read_ctcp(void *usr_buf, size_t count);
+void handle_connection(void);
+
 #endif // ATOUSRV_H_
 
 

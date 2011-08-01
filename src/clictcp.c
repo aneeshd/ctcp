@@ -42,12 +42,16 @@ ctrlc(void){
 
   uint32_t f_buf_size = NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE;
   char *f_buffer = malloc(f_buf_size);
-
+    
+  printf("Calling read ctcp... ");
   f_buf_size = read_ctcp(f_buffer, f_buf_size);  
+  printf("return %d bytes to write\n", f_buf_size);
 
   fwrite(f_buffer, 1, f_buf_size, rcv_file);
 
   fclose(rcv_file);
+
+  printf("Closed file successfully\n");
 
   fifo_free(&usr_cache);
 
@@ -59,7 +63,7 @@ ctrlc(void){
     }
   }
 
-  exit(0);
+  //exit(0);
 }
 
 int
@@ -237,72 +241,23 @@ main(int argc, char** argv){
     /// FORK AND LET THE CHILD DO THE CONNECTION
     /// RETURN THE CTCP SOCKET
 
+    pid_t pid = fork();
 
-    // READING FROM MULTIPLE SOCKET
-    struct pollfd read_set[substreams];
-    for(k=0; k<substreams; k++){
-      read_set[k].fd = sockfd[k];
-      read_set[k].events = POLLIN;
+    if (pid == 0){
+      handle_connection();
+      return 0;
+    }else if (pid == -1){
+      err_sys("clictcp could not create child process\n");
     }
 
-    Data_Pckt *msg = malloc(sizeof(Data_Pckt));
-    double idle_timer;
-    int curr_substream=0;
-    int ready;
-    do{
-      idle_timer = getTime();
-      // value -1 blocks until something is ready to read
-      ready = poll(read_set, substreams, -1);
+    //    while (1){
+    //}
 
-      if(ready == -1){
-        perror("poll");
-      }else if (ready == 0){
-        printf("Timeout occurred during poll! Should not happen with -1\n");
-      }else{
-        srvlen = sizeof srv_addr; // TODO: this is not necessary -> remove
-        //printf("ready! %d\n", ready);
-
-        do{
-          if(read_set[curr_substream].revents & POLLIN){
-            //printf("reading substream %d\n", curr_substream);
-            if((numbytes = recvfrom(sockfd[curr_substream], buff, MSS, 0,
-                                    &srv_addr, &srvlen)) == -1){
-              err_sys("recvfrom");
-            }
-            if(numbytes <= 0) break;
-
-            idle_total += getTime() - idle_timer;
-
-            pkts++;
-            end_time = secs();  /* last read */
-            if (start_time == 0) start_time = end_time;  /* first pkt time */
-
-            // Unmarshall the packet
-            bool match = unmarshallData(msg, buff);
-            if(msg->flag == FIN_CLI){
-              ctrlc();
-            }
-            if (debug > 6){
-              printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
-            }
-            if (debug > 6 && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno);
-
-            bldack(msg, match, curr_substream);
-            ready -= 1;
-          }
-          curr_substream++;
-          if(curr_substream == substreams) curr_substream = 0;
-        }while(ready>0);
-      }
-      // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
-      // NOTE that the ones that are not active can be zero, or any value.
-    }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc
-
+    sleep(2);
     ctrlc();
 
     return 0;
 }
-
 
 uint32_t 
 read_ctcp(void *usr_buf, size_t count){
@@ -310,6 +265,77 @@ read_ctcp(void *usr_buf, size_t count){
   return fifo_pop(&usr_cache, usr_buf, count);
 
 }
+
+
+void
+handle_connection(void){
+  int k, numbytes;//[MAX_SUBSTREAMS];
+
+  // READING FROM MULTIPLE SOCKET
+  struct pollfd read_set[substreams];
+  for(k=0; k<substreams; k++){
+    read_set[k].fd = sockfd[k];
+    read_set[k].events = POLLIN;
+  }
+
+  Data_Pckt *msg = malloc(sizeof(Data_Pckt));
+  double idle_timer;
+  int curr_substream=0;
+  int ready;
+  do{
+    idle_timer = getTime();
+    // value -1 blocks until something is ready to read
+    ready = poll(read_set, substreams, -1);
+
+    if(ready == -1){
+      perror("poll");
+    }else if (ready == 0){
+      printf("Timeout occurred during poll! Should not happen with -1\n");
+    }else{
+      srvlen = sizeof srv_addr; // TODO: this is not necessary -> remove
+      //printf("ready! %d\n", ready);
+
+      do{
+        if(read_set[curr_substream].revents & POLLIN){
+          //printf("reading substream %d\n", curr_substream);
+          if((numbytes = recvfrom(sockfd[curr_substream], buff, MSS, 0,
+                                  &srv_addr, &srvlen)) == -1){
+            err_sys("recvfrom");
+          }
+          if(numbytes <= 0) break;
+
+          idle_total += getTime() - idle_timer;
+
+          pkts++;
+          end_time = secs();  /* last read */
+          if (start_time == 0) start_time = end_time;  /* first pkt time */
+
+          // Unmarshall the packet
+          bool match = unmarshallData(msg, buff);
+          if(msg->flag == FIN_CLI){
+            ctrlc();
+          }
+          if (debug > 6){
+            printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, curr_block, blocks[curr_block%NUM_BLOCKS].dofs);
+          }
+          if (debug > 6 && msg->blockno != curr_block ) printf("exp %d got %d\n", curr_block, msg->blockno);
+
+          bldack(msg, match, curr_substream);
+          ready -= 1;
+        }
+        curr_substream++;
+        if(curr_substream == substreams) curr_substream = 0;
+      }while(ready>0);
+    }
+    // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
+    // NOTE that the ones that are not active can be zero, or any value.
+  }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc
+
+  ctrlc();
+  
+}
+
+
 
 
 void
