@@ -2,7 +2,7 @@
 #define ATOUSRV_H_
 #include <unistd.h>
 #include "util.h"
-#include "qbuffer.h"
+#include "fifo.h"
 #include <sys/poll.h>
 
 typedef struct{
@@ -37,6 +37,9 @@ uint32_t curr_block;
 int substreams = 1;
 int sockfd[MAX_SUBSTREAMS];
 dhcp_lease leases[MAX_SUBSTREAMS];
+
+uint32_t bytes_left;
+fifo_t usr_cache;
 
 //---------------- STATISTICS & ACCOUTING ------------------//
 int pkts, acks;
@@ -91,6 +94,7 @@ int readLease(char *leasefile);
 void make_new_table(dhcp_lease* lease, int table_number, int mark_number);
 void delete_table(int table_number, int mark_number);
 
+uint32_t  read_ctcp(void *usr_buf, size_t count);
 #endif // ATOUSRV_H_
 
 

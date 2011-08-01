@@ -128,10 +128,10 @@ srvctcp: $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(CXX) -o $@ $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
 # Rule to make the libUtil library
-$(BINDIR)/libUtil.a: $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o
+$(BINDIR)/libUtil.a: $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o $(BINDIR)/fifo.o 
 	$(ECHO) "[\033[01;32mCC\033[22;37m] building  $@"
 	$(MKDIR) -p $(dir $@)
-	$(AR) $(ARFLAGS) $@ $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o
+	$(AR) $(ARFLAGS) $@ $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o $(BINDIR)/fifo.o  
 
 demoServer: $(BINDIR)/demoServer.o .buildmode Makefile
 	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"

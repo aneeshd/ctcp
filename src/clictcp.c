@@ -39,7 +39,17 @@ ctrlc(void){
   printf("**Next Block packets** %d  nxt pkt loss rate %f\n", nxt_blk_pkts, (double)nxt_blk_pkts/(double)pkts);
   printf("Total Channel loss rate %f\n", (double)total_loss/(double)last_seqno);
   printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", idle_total, elimination_delay, decoding_delay);
+
+  uint32_t f_buf_size = NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE;
+  char *f_buffer = malloc(f_buf_size);
+
+  f_buf_size = read_ctcp(f_buffer, f_buf_size);  
+
+  fwrite(f_buffer, 1, f_buf_size, rcv_file);
+
   fclose(rcv_file);
+
+  fifo_free(&usr_cache);
 
   // Flush the routing tables and iptables
   int k;
@@ -62,7 +72,7 @@ main(int argc, char** argv){
     int numbytes;//[MAX_SUBSTREAMS];
     int k; // for loop counter
     int rv;
-
+    
     int c;
     while((c = getopt(argc, argv, "h:p:b:D:f:s:l:")) != -1) {
         switch (c) {
@@ -220,13 +230,20 @@ main(int argc, char** argv){
         initCodedBlock(k);
     }
 
+    fifo_init(&usr_cache, NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE);
+
+    ///////////////////////   CONNECTION SETUP UP TO HERE  ///////////////
+
+    /// FORK AND LET THE CHILD DO THE CONNECTION
+    /// RETURN THE CTCP SOCKET
+
+
     // READING FROM MULTIPLE SOCKET
     struct pollfd read_set[substreams];
     for(k=0; k<substreams; k++){
       read_set[k].fd = sockfd[k];
       read_set[k].events = POLLIN;
     }
-
 
     Data_Pckt *msg = malloc(sizeof(Data_Pckt));
     double idle_timer;
@@ -277,13 +294,21 @@ main(int argc, char** argv){
           if(curr_substream == substreams) curr_substream = 0;
         }while(ready>0);
       }
-        // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
-        // NOTE that the ones that are not active can be zero, or any value.
+      // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
+      // NOTE that the ones that are not active can be zero, or any value.
     }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc
 
     ctrlc();
 
     return 0;
+}
+
+
+uint32_t 
+read_ctcp(void *usr_buf, size_t count){
+
+  return fifo_pop(&usr_cache, usr_buf, count);
+
 }
 
 
@@ -555,7 +580,7 @@ unwrap(uint32_t blockno){
 void
 writeAndFreeBlock(uint32_t blockno){
     uint16_t len;
-    int i;
+    int bytes_pushed, i;
     //printf("Writing a block of length %d\n", blocks[blockno%NUM_BLOCKS].len);
 
     for(i=0; i < blocks[blockno%NUM_BLOCKS].len; i++){
@@ -565,7 +590,12 @@ writeAndFreeBlock(uint32_t blockno){
         // Convert to host order
         len = ntohs(len);
         // Write the contents of the decode block into the file
-        fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
+        //fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
+
+        bytes_pushed = 0;
+        while (bytes_pushed < len){
+          bytes_pushed += fifo_push(&usr_cache, blocks[blockno%NUM_BLOCKS].content[i]+2+bytes_pushed, len - bytes_pushed);
+        }
 
         // TODO remove the if condition (This is to avoid seg fault for the last block)
         //if (blocks[blockno%NUM_BLOCKS].len == BLOCK_SIZE){
