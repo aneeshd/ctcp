@@ -10,7 +10,7 @@ typedef int bool;
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
 // flags for Data_Pckt
-typedef enum {NORMAL=0, EXT_MOD, FIN_CLI, PARTIAL_BLK, OLD_PKT, SYN} flag_t;
+typedef enum {NORMAL=0, FIN_CLI, PARTIAL_BLK, SYN, SYN_ACK} flag_t;
 
 //---------------- CTCP parameters ------------------//
 #define MSS 1450 // XXX: make sure that this is fine...

@@ -20,6 +20,7 @@ typedef struct{
 
 #define NUM_BLOCKS 4
 #define MAX_SUBSTREAMS 5
+#define SYN_ACK_TO 5000   // in milliseconds
 
 FILE *rcv_file;
 
@@ -69,11 +70,14 @@ int readLease(char *leasefile, dhcp_lease *leases);
 void make_new_table(dhcp_lease* lease, int table_number, int mark_number);
 void delete_table(int table_number, int mark_number);
 
-uint32_t  read_ctcp(ctcp_sock* csk, void *usr_buf, size_t count);
 void handle_connection(ctcp_sock* csk);
-
 ctcp_sock* create_ctcp_sock(void);
+int  poll_SYN_ACK(ctcp_sock *csk);
 
+ctcp_sock* connect_ctcp(char *host, char *port, char *lease_file);
+uint32_t  read_ctcp(ctcp_sock* csk, void *usr_buf, size_t count);
+
+ 
 #endif // ATOUSRV_H_
 
 

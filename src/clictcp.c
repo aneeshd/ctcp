@@ -66,20 +66,6 @@ ctrlc(ctcp_sock *csk){
   printf("Total Channel loss rate %f\n", (double)csk->total_loss/(double)csk->last_seqno);
   printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", csk->idle_total, csk->elimination_delay, csk->decoding_delay);
 
-  uint32_t f_buf_size = NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE;
-  char *f_buffer = malloc(f_buf_size);
-    
-  printf("Calling read ctcp... ");
-  f_buf_size = read_ctcp(csk, f_buffer, f_buf_size);  
-  printf("return %d bytes to write\n", f_buf_size);
-
-  fwrite(f_buffer, 1, f_buf_size, rcv_file);
-
-  fclose(rcv_file);
-
-  printf("Closed file successfully\n");
-
-  fifo_free(&(csk->usr_cache));
 
   // Flush the routing tables and iptables
   
@@ -95,22 +81,10 @@ ctrlc(ctcp_sock *csk){
 
 int
 main(int argc, char** argv){
-    int optlen,rlth;
     char *file_name = FILE_NAME;
     char *lease_file = NULL;
     char *port = PORT;
     char *host = HOST;
-    int rcvspace;
-    int numbytes;//[MAX_SUBSTREAMS];
-    double dbuff[BUFFSIZE/8];
-    char *buff = (char *)dbuff;  
-    struct addrinfo *result;
-    int k; // for loop counter
-    int rv;
-    
-    // Create the ctcp socket
-    ctcp_sock* csk = create_ctcp_sock();
-
 
     int c;
     while((c = getopt(argc, argv, "h:p:b:D:f:s:l:")) != -1) {
@@ -121,40 +95,81 @@ main(int argc, char** argv){
         case 'p':
           port = optarg;
           break;
-        case 'b':
-          rcvspace = atoi(optarg);
-          break;
-        case 'D':
-          csk->debug = atoi(optarg);
-          break;
+          //case 'b':
+          //rcvspace = atoi(optarg);
+          //break;
+         
+          //case 'D':
+          //csk->debug = atoi(optarg);
+          //break;
         case 'f':
           file_name = optarg;
           break;
         case 'l':
           lease_file = optarg;
           break;
-        case 's':
-          csk->substreams = MIN(atoi(optarg), MAX_SUBSTREAMS);
-          break;
         default:
           usage();
         }
     }
 
-    dhcp_lease leases[MAX_SUBSTREAMS];
+    ctcp_sock* csk = connect_ctcp(host, port, lease_file);
 
+    if (csk == NULL){
+      printf("Could not create CTCP socket\n");
+      return 1;
+    } else{
+
+      char dst_file_name[100] = "Rcv_";
+      strcat(dst_file_name, file_name);
+      rcv_file = fopen(dst_file_name,  "wb");
+
+      uint32_t f_buf_size = NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE;
+      uint32_t bytes_read;
+      char *f_buffer = malloc(f_buf_size);
+ 
+      printf("Calling read ctcp... ");
+
+      uint32_t total_bytes = 0;
+      while(total_bytes < 20000000){
+        bytes_read = read_ctcp(csk, f_buffer, f_buf_size);  
+        printf("return %d bytes to write\n", bytes_read);
+        fwrite(f_buffer, 1, bytes_read, rcv_file);
+        total_bytes += bytes_read;
+      }
+
+      fclose(rcv_file);
+
+      printf("Closed file successfully\n");
+
+      fifo_free(&(csk->usr_cache));
+    }
+
+
+
+    return 0;
+}
+
+ctcp_sock*
+connect_ctcp(char *host, char *port, char *lease_file){
+    int optlen,rlth;
+    double dbuff[BUFFSIZE/8];
+    char *buff = (char *)dbuff;  
+    struct addrinfo *result;
+    int k; // for loop counter
+    int rv;
+    int numbytes;//[MAX_SUBSTREAMS];
+    int rcvspace = 0;
+
+
+    // Create the ctcp socket
+    ctcp_sock* csk = create_ctcp_sock();
+
+    dhcp_lease leases[MAX_SUBSTREAMS];
     if (lease_file != NULL){
       // Need to make sure there is at least one lease in the lease file
       csk->substreams = readLease(lease_file, leases);
     }
-
-
-    // Open the file where the contents of the file transfer will be stored
-    char dst_file_name[100] = "Rcv_";
-    strcat(dst_file_name, file_name);
-    rcv_file = fopen(dst_file_name,  "wb");
-
-
 
     struct addrinfo hints, *servinfo;
     memset(&hints, 0, sizeof hints);
@@ -163,7 +178,7 @@ main(int argc, char** argv){
 
     if((rv = getaddrinfo(host, port, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
+        return NULL;
     }
     // TODO need to loop through to find interfaces number of connections
 
@@ -172,7 +187,7 @@ main(int argc, char** argv){
       if((csk->sockfd[0] = socket(result->ai_family,
                                   result->ai_socktype,
                                   result->ai_protocol)) == -1){
-        perror("atoucli: failed to initialize socket");
+        perror("Failed to initialize socket");
         continue;
       }
       for (k = 1; k < csk->substreams; k++){
@@ -186,7 +201,8 @@ main(int argc, char** argv){
 
     // If we got here, it means that we couldn't initialize the socket.
     if(result  == NULL){
-      err_sys("atoucli: failed to bind to socket", csk);
+      perror("Failed to create socket");
+      return NULL;
     }
     //freeaddrinfo(servinfo);
 
@@ -202,7 +218,7 @@ main(int argc, char** argv){
 
         if((rv = getaddrinfo(leases[k].address, "9999", &hints, &cli_info)) != 0) {
           fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-          return 1;
+          return NULL;
         }
 
         for(result_cli = cli_info; result_cli != NULL; result_cli = result_cli->ai_next) {
@@ -210,8 +226,8 @@ main(int argc, char** argv){
      
           if (bind(csk->sockfd[k], result_cli->ai_addr, result_cli->ai_addrlen) == -1) {
             close(csk->sockfd[k]);
-            err_sys("atousrv: can't bind local address", csk);
-            continue;
+            perror("can't bind to local address");
+            return NULL;
           }
         }
 
@@ -221,29 +237,6 @@ main(int argc, char** argv){
     //--------------DONE Binding-----------------------------------------
     
     //signal(SIGINT, (__sighandler_t) ctrlc);
-
-
-    // Send request to the server.
-    if((numbytes = sendto(csk->sockfd[0], file_name, (strlen(file_name)+1)*sizeof(char), 0,
-                          result->ai_addr, result->ai_addrlen)) == -1){
-      err_sys("sendto: Request failed", csk);
-    }
-    fprintf(stdout, "Request sent to %s for %s on the first socket\n", inet_ntoa(((struct sockaddr_in*)result->ai_addr)->sin_addr), file_name );
-
-    // Send a SYN packet for any new connection
-    for (k = 1; k < csk->substreams; k++){
-      Ack_Pckt* SYN_pkt = ackPacket(0, 0, 0);
-      SYN_pkt->tstamp = 0;
-      SYN_pkt->flag = SYN;
-      int size = marshallAck(*SYN_pkt, buff);
-
-      if((numbytes = sendto(csk->sockfd[k], buff, size, 0,
-                            result->ai_addr, result->ai_addrlen)) == -1){
-        err_sys("sendto: Request failed",csk);
-      }
-      printf("New connection request sent to server on socket %d\n", k+1);
-    }
-
 
     if (!rcvspace) rcvspace = MSS*MAX_CWND;
 
@@ -256,6 +249,26 @@ main(int argc, char** argv){
 
     memset(buff,0,BUFFSIZE);        /* pretouch */
 
+    // ------------  Send a SYN packet for any new connection ----------------
+    for (k = 0; k < csk->substreams; k++){
+      Ack_Pckt* SYN_pkt = ackPacket(0, 0, 0);
+      SYN_pkt->tstamp = 0;
+      SYN_pkt->flag = SYN;
+      int size = marshallAck(*SYN_pkt, buff);
+
+      if((numbytes = sendto(csk->sockfd[k], buff, size, 0,
+                            result->ai_addr, result->ai_addrlen)) == -1){
+        perror("Failed to send SYN packet");
+        return NULL;
+      }
+      printf("New connection request sent to server on socket %d\n", k+1);
+    }
+
+    if (poll_SYN_ACK(csk) == -1){
+      printf("Did not receive SYN ACK\n");
+      return NULL;
+    }
+
     ///////////////////////   CONNECTION SETUP UP TO HERE  ///////////////
 
     /// FORK AND LET THE CHILD DO THE CONNECTION
@@ -266,12 +279,13 @@ main(int argc, char** argv){
 
     if (pid == 0){
       handle_connection(csk);
-      return 0;
+      return NULL;
     }else if (pid == -1){
-      err_sys("clictcp could not create child process\n",csk);
+      perror("clictcp could not create child process\n");
+      return NULL;
     }
 
-    return 0;
+    return csk;
 }
 
 uint32_t 
@@ -330,19 +344,40 @@ handle_connection(ctcp_sock* csk){
 
           // Unmarshall the packet
           bool match = unmarshallData(msg, buff, csk);
-          if(msg->flag == FIN_CLI){
-            ctrlc(csk);
-          }
-          if (csk->debug > 6){
-            printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, csk->curr_block, csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
-          }
-          if (csk->debug > 6 && msg->blockno != csk->curr_block ) printf("exp %d got %d\n", csk->curr_block, msg->blockno);
 
-          bldack(csk, msg, match, curr_substream);
-          ready -= 1;
+          switch (msg->flag){
+
+          case FIN_CLI:
+            ctrlc(csk);
+            break;
+
+          case SYN_ACK:
+            // ACK the SYN-ACK
+            break;
+
+          case SYN:
+            printf("ERROR: received SYN on the client side\n");
+            ctrlc(csk);
+            break;
+
+          default:
+            if (csk->debug > 6){
+              printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",
+                     msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, 
+                     csk->curr_block, csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
+            }
+            if (csk->debug > 6 && msg->blockno != csk->curr_block ){
+              printf("exp %d got %d\n", csk->curr_block, msg->blockno);
+            }
+
+            bldack(csk, msg, match, curr_substream);            
+          }
+           
+          ready--;    // decrease the number of ready sockets
         }
         curr_substream++;
         if(curr_substream == csk->substreams) curr_substream = 0;
+
       }while(ready>0);
     }
     // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
@@ -975,3 +1010,57 @@ create_ctcp_sock(void){
   return sk;
 }
 
+int 
+poll_SYN_ACK(ctcp_sock *csk){
+  
+  double dbuff[BUFFSIZE/8];
+  char *buff = (char *)dbuff;  
+  Data_Pckt *msg = malloc(sizeof(Data_Pckt));
+  int k, ready, numbytes;
+  int curr_substream = 0;
+  socklen_t srvlen;
+
+  // READING FROM MULTIPLE SOCKET
+  struct pollfd read_set[csk->substreams];
+  for(k=0; k < csk->substreams; k++){
+    read_set[k].fd = csk->sockfd[k];
+    read_set[k].events = POLLIN;
+  }
+
+  // value -1 blocks until something is ready to read
+  ready = poll(read_set, csk->substreams, SYN_ACK_TO);
+
+  if(ready == -1){
+    perror("poll");
+    return -1;
+  }else if (ready == 0){
+    printf("Timeout occurred during poll!\n");
+    return -1;
+  }else{
+    srvlen = sizeof(csk->srv_addr);
+    while (curr_substream < csk->substreams){
+
+      if(read_set[curr_substream].revents & POLLIN){
+        if((numbytes = recvfrom(csk->sockfd[curr_substream], buff, MSS, 0,
+                                &(csk->srv_addr), &srvlen)) == -1){
+          err_sys("recvfrom",csk);
+        }
+        if(numbytes <= 0) return -1;
+          
+        // Unmarshall the packet
+        bool match = unmarshallData(msg, buff, csk);
+        if (msg->flag == SYN_ACK){
+          return 0;
+        }else{
+          printf("Expected SYN ACK, received something else!\n");
+          return -1;
+        }
+      }
+
+      curr_substream++;
+    }  /* end while */
+  }
+
+  return -1;
+
+}
