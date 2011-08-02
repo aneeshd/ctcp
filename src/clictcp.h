@@ -16,9 +16,9 @@ typedef struct{
 #define BUFFSIZE  65536
 #define PORT "9999"
 #define HOST "127.0.0.1"
-#define FILE_NAME "Avatar.mov"
+#define FILE_NAME "Honda"
 
-#define NUM_BLOCKS 4
+#define NUM_BLOCKS 70
 #define MAX_SUBSTREAMS 5
 #define SYN_ACK_TO 5000   // in milliseconds
 
@@ -50,32 +50,32 @@ typedef struct{
   int last_seqno;
   double start_time;
   double end_time;
-} ctcp_sock; 
+} clictcp_sock; 
 
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
-void ctrlc(ctcp_sock *csk);
-void err_sys(char *s, ctcp_sock *csk);
-void bldack(ctcp_sock* csk, Data_Pckt *msg, bool match, int substream);
+void ctrlc(clictcp_sock *csk);
+void err_sys(char *s, clictcp_sock *csk);
+void bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int substream);
 void normalize(uint8_t* coefficients, char*  payload, uint8_t size);
 int  shift_row(uint8_t* buf, int len);
 bool isEmpty(uint8_t* coefficients, uint8_t size);
 void initCodedBlock(Coded_Block_t *blk);
 void unwrap(Coded_Block_t *blk);
 void writeAndFreeBlock(Coded_Block_t *blk, fifo_t *buffer);
-bool unmarshallData(Data_Pckt* msg, char* buf, ctcp_sock *csk);
+bool unmarshallData(Data_Pckt* msg, char* buf, clictcp_sock *csk);
 int  marshallAck(Ack_Pckt msg, char* buf);
 int readLease(char *leasefile, dhcp_lease *leases);
 void make_new_table(dhcp_lease* lease, int table_number, int mark_number);
 void delete_table(int table_number, int mark_number);
 
-void handle_connection(ctcp_sock* csk);
-ctcp_sock* create_ctcp_sock(void);
-int  poll_SYN_ACK(ctcp_sock *csk);
+void handle_connection(clictcp_sock* csk);
+clictcp_sock* create_clictcp_sock(void);
+int  poll_SYN_ACK(clictcp_sock *csk);
 
-ctcp_sock* connect_ctcp(char *host, char *port, char *lease_file);
-uint32_t  read_ctcp(ctcp_sock* csk, void *usr_buf, size_t count);
+clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file);
+uint32_t  read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count);
 
  
 #endif // ATOUSRV_H_

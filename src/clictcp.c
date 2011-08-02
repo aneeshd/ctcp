@@ -49,7 +49,7 @@ uint8_t inv_vec[256]={
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
 void
-ctrlc(ctcp_sock *csk){
+ctrlc(clictcp_sock *csk){
   csk->end_time = csk->end_time - csk->start_time;  /* elapsed time */
 
   if (csk->end_time==0) csk->end_time = 0.1;
@@ -113,25 +113,35 @@ main(int argc, char** argv){
         }
     }
 
-    ctcp_sock* csk = connect_ctcp(host, port, lease_file);
+    clictcp_sock* csk = connect_ctcp(host, port, lease_file);
+
+    printf("This is the parent process 1 \n");
 
     if (csk == NULL){
       printf("Could not create CTCP socket\n");
       return 1;
     } else{
-
+      
+      printf("This is the parent process 2 \n");
       char dst_file_name[100] = "Rcv_";
       strcat(dst_file_name, file_name);
       rcv_file = fopen(dst_file_name,  "wb");
 
+      printf("This is the parent process 3 \n");
+
       uint32_t f_buf_size = NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE;
       uint32_t bytes_read;
+
+      printf("This is the parent process 4 \n");
+
       char *f_buffer = malloc(f_buf_size);
- 
-      printf("Calling read ctcp... ");
+
+      printf("Calling read ctcp... \n");
 
       uint32_t total_bytes = 0;
       while(total_bytes < 20000000){
+        printf("This is the parent process 5 \n"); 
+      
         bytes_read = read_ctcp(csk, f_buffer, f_buf_size);  
         printf("return %d bytes to write\n", bytes_read);
         fwrite(f_buffer, 1, bytes_read, rcv_file);
@@ -150,7 +160,7 @@ main(int argc, char** argv){
     return 0;
 }
 
-ctcp_sock*
+clictcp_sock*
 connect_ctcp(char *host, char *port, char *lease_file){
     int optlen,rlth;
     double dbuff[BUFFSIZE/8];
@@ -163,7 +173,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
 
 
     // Create the ctcp socket
-    ctcp_sock* csk = create_ctcp_sock();
+    clictcp_sock* csk = create_clictcp_sock();
 
     dhcp_lease leases[MAX_SUBSTREAMS];
     if (lease_file != NULL){
@@ -289,15 +299,16 @@ connect_ctcp(char *host, char *port, char *lease_file){
 }
 
 uint32_t 
-read_ctcp(ctcp_sock* csk, void *usr_buf, size_t count){
+read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
 
+  printf("This is the parent process 6 pkts %d\n",csk->pkts); 
   return fifo_pop(&(csk->usr_cache), usr_buf, count);
 
 }
 
 
 void
-handle_connection(ctcp_sock* csk){
+handle_connection(clictcp_sock* csk){
   socklen_t srvlen;
   double dbuff[BUFFSIZE/8];
   char *buff = (char *)dbuff;
@@ -392,13 +403,13 @@ handle_connection(ctcp_sock* csk){
 
 
 void
-err_sys(char *s, ctcp_sock *csk){
+err_sys(char *s, clictcp_sock *csk){
     perror(s);
     ctrlc(csk);     /* do stats on error */
 }
 
 void
-bldack(ctcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
+bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
   socklen_t srvlen;
   double dbuff[BUFFSIZE/8];
   char *buff = (char *)dbuff;
@@ -691,7 +702,7 @@ writeAndFreeBlock(Coded_Block_t *blk, fifo_t *buffer){
 }
 
 bool
-unmarshallData(Data_Pckt* msg, char* buf, ctcp_sock *csk){
+unmarshallData(Data_Pckt* msg, char* buf, clictcp_sock *csk){
     int index = 0;
     int part = 0;
 
@@ -972,11 +983,11 @@ delete_table(int table_number, int mark_number){
   //printf("\n");
 }
 
-ctcp_sock* 
-create_ctcp_sock(void){
+clictcp_sock* 
+create_clictcp_sock(void){
   int k;
 
-  ctcp_sock* sk = malloc(sizeof(ctcp_sock));
+  clictcp_sock* sk = malloc(sizeof(clictcp_sock));
 
   sk-> curr_block = 1;
     
@@ -1011,7 +1022,7 @@ create_ctcp_sock(void){
 }
 
 int 
-poll_SYN_ACK(ctcp_sock *csk){
+poll_SYN_ACK(clictcp_sock *csk){
   
   double dbuff[BUFFSIZE/8];
   char *buff = (char *)dbuff;  

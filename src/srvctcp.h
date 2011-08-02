@@ -56,102 +56,91 @@ typedef struct{
   double max_delta;                         // vegas like tracker 
 } Substream_Path;
 
-int dof_req_latest;                       /* Latest information about dofs of the current block */
-// Ideally, move this back into doit
-Substream_Path** active_paths;            // 0-1 representing whether path alive
-int num_active;                              // Connection identifier
 
-//----------------------------------------------------------------//
-FILE *db;     /* debug trace file */
-char* log_name = NULL; // Name of the log
-FILE *snd_file; // The file to be sent
-char *version = "$version 0.0$";
-char *configfile = "config/vegas";
-char *port = "9999";  // This is the port that the server is listening to
+typedef struct{
+  Substream_Path** active_paths;            // 0-1 representing whether path alive
+  int num_active;                           // Connection identifier
+  socket_t sockfd;                          /* network file descriptor */
 
-struct addrinfo *result; //This is where the info about the server is stored
-struct sockaddr cli_addr;
-socklen_t clilen = sizeof cli_addr;
+  int dof_req_latest;                       /* Latest information about dofs of the current block */
+  uint32_t curr_block; // Current block number
+  Block_t blocks[NUM_BLOCKS];
+  uint32_t maxblockno; // use highest blockno possible, set when we reach the end of the file
 
-double dbuff[BUFFSIZE/8];
-char *buff = (char *)dbuff;
+  // ------------ Multithreading related variables ---------------//
+  qbuffer_t coded_q[NUM_BLOCKS];
+  thr_pool_t workers;
+  /*
+    Internal dof counter:
+    -the number of dofs left in the server
+    -does not necessarily coincide with the number of packets in coded_q)
+    -need to update this whenever a coding job is added/coded packets are popped
+  */
+  int dof_remain[NUM_BLOCKS];
 
-unsigned int file_position; // Indicates the block number at which we are in the file at any moment
-uint32_t curr_block; // Current block number
-bool done;
-Block_t blocks[NUM_BLOCKS];
-uint32_t maxblockno; // use highest blockno possible, set when we reach the end of the file
-int numbytes;
+  //----------------- configurable variables -----------------//
+  int debug;
+  int maxidle;                     /* max idle before abort */
+  int rcvrwin;                     /* rcvr window in mss-segments */    // TODO actual use rcvrwin!
+  int increment;                   /* cc increment */
+  double multiplier;               /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
+  int ssincr;                      /* slow start increment */
+  int initsegs;                    /* slowstart initial */
+  double valpha, vbeta;            /* vegas parameters (in terms of number of packets) */
 
-// ------------ Multithreading related variables ---------------//
-qbuffer_t coded_q[NUM_BLOCKS];
-thr_pool_t workers;
-pthread_mutex_t file_mutex;  // Allows locking the file while reading a block
-/*
-  Internal dof counter:
-  -the number of dofs left in the server
-  -does not necessarily coincide with the number of packets in coded_q)
-  -need to update this whenever a coding job is added/coded packets are popped
-*/
-int dof_remain[NUM_BLOCKS];
+  //------------------Statistics----------------------------------//
+  int ipkts,opkts,badacks,timeouts,enobufs, goodacks;
+  double start_time, total_time;
+  double idle_total; // The total time the server has spent waiting for the acks
 
-//----------------- configurable variables -----------------//
+  FILE *db;     /* debug trace file */
 
-int debug;
-int maxidle;                     /* max idle before abort */
-int rcvrwin;                     /* rcvr window in mss-segments */    // TODO actual use rcvrwin!
-int increment;                   /* cc increment */
-double multiplier;               /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
-int ssincr;                      /* slow start increment */
-// double thresh_init = 1.0;     /* fraction of rcvwind for initial ssthresh*/
-int initsegs;                    /* slowstart initial */
-int maxpkts;                     /* test duration */
-double valpha, vbeta;            /* vegas parameters (in terms of number of packets) */
-int sndbuf;                      /* udp send buff, bigger than mss */
-int rcvbuf;                      /* udp recv buff for ACKs*/
+} srvctcp_sock;
 
-//------------------Statistics----------------------------------//
-int ipkts,opkts,badacks,timeouts,enobufs, goodacks;
-double start_time, total_time;
-double idle_total; // The total time the server has spent waiting for the acks
+typedef struct{
+  uint32_t blockno;
+  int dof_request;
+  int coding_wnd;
+  srvctcp_sock* socket;
+} coding_job_t;
 
 
 //---------------- Function Definitions -----------------------//
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
+void ctrlc(srvctcp_sock* sk);
+void endSession(srvctcp_sock* sk);
+void removePath(srvctcp_sock* sk, int dead_index);
+void init_stream(srvctcp_sock* sk, Substream_Path *sp);
 
-
-void endSession();
-void removePath(int dead_index);
-void init_stream(Substream_Path *sp);
-int countCurrOnFly(int block);
-bool minRTTPath(int index);
-uint32_t send_ctcp(socket_t sockfd, const void *usr_buf, size_t usr_buf_len);
-void terminate(socket_t fd);
-int timeout(socket_t fd, int pin);
-void send_segs(socket_t fd, int pin);
+int send_FIN_CLI(srvctcp_sock* sk);
+int timeout(srvctcp_sock* sk, int pin);
+void send_segs(srvctcp_sock* sk, int pin);
 socket_t timedread(socket_t fd, double t);
-int handle_ack(socket_t fd, Ack_Pckt* ack, int pin);
+int handle_ack(srvctcp_sock* sk, Ack_Pckt* ack, int pin);
 
-uint32_t readBlock(uint32_t blockno, const void *buf, size_t buf_len);
-void freeBlock(uint32_t blockno);
-void send_one(socket_t fd, unsigned int n, int pin);
-void advance_cwnd(int pin);
-void ctrlc();
-void readConfig(void);
-void err_sys(char* s);
+uint32_t readBlock(Block_t* blk, const void *buf, size_t buf_len);
+void freeBlock(Block_t* blk);
+void send_one(srvctcp_sock* sk, unsigned int n, int pin);
+void advance_cwnd(srvctcp_sock* sk, int pin);
+
+void readConfig(char* configfile, srvctcp_sock* sk);
+void err_sys(srvctcp_sock* sk, char* s);
 
 int marshallData(Data_Pckt msg, char* buf);
 bool unmarshallAck(Ack_Pckt* msg, char* buf);
 
-void restart(void);
-void openLog(char* log_name);
+void openLog(srvctcp_sock* sk, char* log_name);
 void* coding_job(void *a);
 void free_coded_pkt(void* a);
-
-void initialize(socket_t sockfd);
 int sockaddr_cmp(struct sockaddr* addr1, struct sockaddr* addr2);
+
+srvctcp_sock* create_srvctcp_sock(void);
+srvctcp_sock* open_srvctcp(char *port);
+
+uint32_t send_ctcp(srvctcp_sock* sk, const void *usr_buf, size_t usr_buf_len);
+
 
 #endif // ATOUCLI_H_
 

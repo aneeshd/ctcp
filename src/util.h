@@ -70,12 +70,6 @@ typedef struct{ // TODO: this datastructure can store the dof's and other state 
 } Block_t;
 
 typedef struct{
-  uint32_t blockno;
-  int dof_request;
-  int coding_wnd;
-} coding_job_t;
-
-typedef struct{
   double tstamp;
   flag_t flag;
   uint32_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
