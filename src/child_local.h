@@ -32,6 +32,6 @@ int  negotiate( struct sockaddr *ad_cl_local );
 int  connect_client();
 int  bind_client();
 int  handle_traffic();
-int  handle_ctcp_traffic();
+void *handle_ctcp_traffic();
 
 #endif /* CHILD_LOCAL_H */

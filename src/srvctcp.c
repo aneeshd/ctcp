@@ -366,7 +366,6 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
         if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto + RTO_BIAS){
           if (timeout(sk, path_index)==TRUE){
             // Path timed out, but still alive
-
             send_segs(sk, path_index);
           }else{
             // Path is dead and is being removed
@@ -395,6 +394,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
     if(sk->num_active==0){
       // no path alive, terminate
       endSession(sk);
+      return 0;
     }
   }  /* while more pkts */
   sk->total_time = getTime() - sk->start_time;

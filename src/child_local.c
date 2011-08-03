@@ -108,7 +108,8 @@ int handle_con()
   ** Handle the actual data traffic between the client
   ** and its target.
   */
-  pid_t pid = fork();
+
+  /*  pid_t pid = fork();
 
   if (pid == 0){
     res = handle_ctcp_traffic();
@@ -123,7 +124,21 @@ int handle_con()
 
     close(sk_target);
   }
+  */
 
+
+  pthread_t clictcp_thread;
+
+  res = pthread_create( &clictcp_thread, NULL, handle_ctcp_traffic, NULL);
+
+
+
+  res = handle_traffic();
+    
+  sprintf(buf,"TCP Connection closed (%s)",sz_error[res]);
+  logstr(buf,&ad_client);
+
+  close(sk_target);
     
   return ERR_NONE;
 }
@@ -290,6 +305,7 @@ int connect_client()
 
 
   if( up_proxy ) {
+
     pcon = proxy_connect(up_proxy,target_ip,target_port,PROXY_CMD_CONNECT);
     if( !pcon ) 
 	    return ERR_NEGFAIL;
@@ -533,7 +549,8 @@ int handle_traffic()
  *                         and 'ad_target' to hold valid data.
  *                         Returns: error code (ERR_NONE if successful).
  **********************************************************************/
-int handle_ctcp_traffic()
+void 
+*handle_ctcp_traffic()
 {
   uchar         *buf;
   int           btop = 0;
@@ -541,7 +558,8 @@ int handle_ctcp_traffic()
   int           bown = -1;
   int           res;
     
-    
+  //fprintf(stdout, "Starting to handle CTCP traffic from port %s\n", ctcp_port);
+
   /*
   ** Allocate memory for buffer
   */
@@ -554,13 +572,16 @@ int handle_ctcp_traffic()
     bptr = 0;
     btop = read_ctcp(csk, buf, buf_size);  
 
+    //fprintf(stdout, "received %d bytes over CTCP\n", btop);
+
     //write those bytes to sk_client (TCP) socket using a while loop
     while( bptr < btop ) {
 	    while( (res=write(sk_client, buf+bptr, btop-bptr)) < 0 && errno==EINTR );
 	    if( res<0 ) {
         res = ERR_SKFATAL;
         free(buf);
-        return res;
+        exit(1);
+        //return res;
 	    }
 	    bptr += res;
     }
@@ -572,5 +593,6 @@ int handle_ctcp_traffic()
   */
   free(buf);
 
-  return res;
+  //return res;
+  exit(1);
 }

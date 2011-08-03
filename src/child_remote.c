@@ -61,18 +61,6 @@ int handle_con(int ctcp_port)
   start_timer(neg_timeo);
   res = negotiate(&ad_cl_local, ctcp_port);
 
-  sprintf(buf, "%d", ctcp_port);
-  ctcp_sk = open_srvctcp(buf);
-
-  if (ctcp_sk == NULL){
-    sprintf(buf,"Failed to create the CTCP socket\n");
-    logstr(buf,NULL);
-    res = ERR_SRVCTCP;
-  } else{
-    sprintf(buf,"Successfully created the CTCP socket\n");
-    logstr(buf,NULL);
-  }
-
   /*
   ** Setup SOCKS reply
   */
@@ -113,6 +101,20 @@ int handle_con(int ctcp_port)
   addr_to_ip(&ad_target,buf+strlen(buf));
   logstr(buf,&ad_client);
     
+
+  sprintf(buf, "%d", ctcp_port);
+  ctcp_sk = open_srvctcp(buf);
+
+  if (ctcp_sk == NULL){
+    sprintf(buf,"Failed to create the CTCP socket\n");
+    logstr(buf,NULL);
+    res = ERR_SRVCTCP;
+  } else{
+    sprintf(buf,"Successfully created the CTCP socket\n");
+    logstr(buf,NULL);
+  }
+
+
   /*
   ** Handle the actual data traffic between the client
   ** and its target.

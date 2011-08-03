@@ -321,7 +321,7 @@ void
   do{
     idle_timer = getTime();
     // value -1 blocks until something is ready to read
-    ready = poll(read_set, csk->substreams, TIMEOUT);
+    ready = poll(read_set, csk->substreams, -1);
 
     if(ready == -1){
       perror("poll");
@@ -387,7 +387,7 @@ void
     }
     // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
     // NOTE that the ones that are not active can be zero, or any value.
-  }while(numbytes > 0 && ready != POLL_TO_FLG ); // TODO doesn't ever seem to exit the loop! Need to ctrlc
+  }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc
 
   ctrlc(csk);
 
