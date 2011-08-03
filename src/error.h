@@ -40,10 +40,11 @@
 #define ERR_CREATESK     12
 #define ERR_BIND         13
 #define ERR_LISTEN       14
-#define ERR_CONIDLE	 15
-#define ERR_SKFATAL 	 16
+#define ERR_CONIDLE	     15
+#define ERR_SKFATAL 	   16
 #define ERR_LASTMSG      ERR_SKFATAL
-
+#define ERR_SRVCTCP      17
+#define ERR_CLICTCP      18
 
 
 /*

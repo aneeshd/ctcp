@@ -36,6 +36,7 @@ usage()
     exit(0);
 }
 
+/*
 int
 main (int argc, char** argv){
 
@@ -107,6 +108,7 @@ main (int argc, char** argv){
 
      return 0;
 }
+*/
 
 
 srvctcp_sock*
@@ -170,12 +172,14 @@ open_srvctcp(char *port){
     getsockopt(sk->sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,(socklen_t*)&i);
     setsockopt(sk->sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,i);
     getsockopt(sk->sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,(socklen_t*)&i);
-    printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
+    //printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
     //---------------------------------------------------------------------------//
 
     //printf("Trying to bind to address %s port %d\n", inet_ntoa(((struct sockaddr_in*) &(result->ai_addr))->sin_addr), ((struct sockaddr_in*)&(result->ai_addr))->sin_port);
 
     /*------------------------WAIT FOR SYN PACKETS TO COME--------------------------------------------------*/
+
+    printf("Listening for SYN on port %s\n", port);
 
     Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
     memset(buff,0,BUFFSIZE);        /* pretouch */

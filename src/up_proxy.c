@@ -1,21 +1,21 @@
 /*****************************************************************************
-*  MOCKS, a RFC1928 compliant SOCKSv5 server                         
-*  Copyright (C) 2004  Dan Horobeanu <dhoro@spymac.com>
-*
-*  This program is free software; you can redistribute it and/or modify
-*  it under the terms of the GNU General Public License as published by
-*  the Free Software Foundation; either version 2 of the License, or
-*  (at your option) any later version.
-*
-*  This program is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program; if not, write to the Free Software
-*  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-******************************************************************************/
+ *  MOCKS, a RFC1928 compliant SOCKSv5 server                         
+ *  Copyright (C) 2004  Dan Horobeanu <dhoro@spymac.com>
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ ******************************************************************************/
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -460,8 +460,8 @@ int proxy_poll_connect( struct t_proxy_connection *pcon, int timeout )
     /*
      * Read the server selected method.
      */
-    buf_len = read(pcon->sock,buf,2);
-    if( buf_len < 2 ) {
+    buf_len = read(pcon->sock,buf,7);
+    if( buf_len < 7 ) {
 	    proxy_errno = errno;
 	    pcon->status = PROXY_CS_ERROR;
 	    return -1;
@@ -492,6 +492,12 @@ int proxy_poll_connect( struct t_proxy_connection *pcon, int timeout )
 	    pcon->status = PROXY_CS_ERROR;
 	    return -1;
     }
+
+    char srvctcp_port[5];
+
+    memcpy(srvctcp_port, buf+2, 5);
+
+    pcon->ctcp_port = srvctcp_port;
 
     pcon->flags |= PROXY_CF_WAITWRITE;
 

@@ -12,7 +12,7 @@ do_worker(void *arg)
 {
     thr_pool_t *pool = (thr_pool_t *) arg;
 
-    fprintf(stdout, "*** Started thread id:  %lu***\n", pthread_self());
+    //fprintf(stdout, "*** Started thread id:  %lu***\n", pthread_self());
 
     while(1){
         job_t* j;
@@ -26,7 +26,7 @@ do_worker(void *arg)
         free(j);
     }
 
-    fprintf(stdout, "*** Dying thread id: %lu ***\n", pthread_self());
+    //fprintf(stdout, "*** Dying thread id: %lu ***\n", pthread_self());
     pthread_exit(NULL);
 }
 

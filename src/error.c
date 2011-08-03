@@ -41,17 +41,19 @@ char sz_error[ERR_LASTMSG+1][MAX_ERRMSGLEN] = {
 
 int err_to_se( int err_code )
 {
-    switch( err_code ) {
-      case ERR_NONE:
-	return SE_NONE;
-      case ERR_CMDNOTSUP:
-	return SE_CMDNOTSUP;
-      case ERR_ATYPNOTSUP:
-	return SE_ATYPNOTSUP;
-      case ERR_NETUNREACH:
-	return SE_NETUNREACH;
-      case ERR_CONREFUSE:
-	return SE_CONREFUSE;
-    }
-    return SE_GENERAL;
+  switch( err_code ) {
+  case ERR_NONE:
+    return SE_NONE;
+  case ERR_CMDNOTSUP:
+    return SE_CMDNOTSUP;
+  case ERR_ATYPNOTSUP:
+    return SE_ATYPNOTSUP;
+  case ERR_NETUNREACH:
+    return SE_NETUNREACH;
+  case ERR_CONREFUSE:
+    return SE_CONREFUSE;
+  case ERR_SRVCTCP:
+    return SE_CONREFUSE;
+  }
+  return SE_GENERAL;
 }

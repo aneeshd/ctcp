@@ -112,9 +112,10 @@ clean:
 	$(RM) -rf $(BINDIR)
 	$(RM) -rf srvctcp clictcp
 	$(RM) -rf demoServer demoClient
+	$(RM) -rf proxy_local proxy_remote
 
 .PHONY: remake
-remake: clean all
+remake: clean proxy
 
 clictcp: $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
@@ -142,15 +143,15 @@ demoClient: $(BINDIR)/demoClient.o .buildmode Makefile
 	$(MKDIR) -p $(dir $@)
 	$(CC) -o $@ $< $(LDFLAGS) -lreadline
 
-proxy_local: $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o .buildmode Makefile
+proxy_local: $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CXX) -o $@ $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(LDFLAGS)
+	$(CXX) -o $@ $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
-proxy_remote: $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o .buildmode Makefile
+proxy_remote: $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CXX) -o $@ $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(LDFLAGS)
+	$(CXX) -o $@ $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
 
 all: clictcp srvctcp

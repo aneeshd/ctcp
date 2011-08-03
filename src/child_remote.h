@@ -27,10 +27,10 @@ extern struct sockaddr ad_client;
 extern int             sk_target;
 extern struct sockaddr ad_target;
 
-int  handle_con();
-int  negotiate( struct sockaddr *ad_cl_local );
+int  handle_con(int ctcp_port);
+int  negotiate( struct sockaddr *ad_cl_local, int ctcp_port);
 int  connect_client();
 int  bind_client();
-int  handle_traffic();
+int  handle_traffic(int ctcp_port);
 
 #endif /* CHILD_REMOTE_H */

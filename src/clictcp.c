@@ -79,6 +79,8 @@ ctrlc(clictcp_sock *csk){
   exit(0);
 }
 
+
+/*
 int
 main(int argc, char** argv){
     char *file_name = FILE_NAME;
@@ -148,10 +150,12 @@ main(int argc, char** argv){
       fifo_free(&(csk->usr_cache));    // TODO should go to the close function
     }
 
-
-
     return 0;
 }
+
+*/
+
+
 
 clictcp_sock*
 connect_ctcp(char *host, char *port, char *lease_file){

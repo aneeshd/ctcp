@@ -35,6 +35,9 @@
 #define FP_ALLOW              1
 #define FP_DENY               2
 
+#define START_PORT            8001
+#define MAX_PORT              9999
+
 
 extern int  socks_port;
 extern char sz_logfile[256];

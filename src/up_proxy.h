@@ -114,6 +114,7 @@ struct t_proxy_connection {
   char           *remote_name;
   uint16_t       target_port;
   char           *target_name;
+  char*          ctcp_port;
 };
 
 

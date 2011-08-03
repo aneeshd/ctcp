@@ -75,6 +75,7 @@ int main( int argc, char **argv )
     int              allow;
     uint32_t         adam;
 
+    int             ctcp_port = START_PORT;
     
     /*
     ** Parse command line parameters
@@ -264,69 +265,68 @@ int main( int argc, char **argv )
     */
     while( 1 ) {
 
-	/*
-	** If we're already working with  the maximum number of
-	** client connections, wake up every second to check
-	** if any connection closed and if not, ignore any other
-	** connection requests.
-	*/
-	if( con_cnt >= max_con_cnt ) {
-	    sleep(1);
-	    continue;
-	}
+      /*
+      ** If we're already working with  the maximum number of
+      ** client connections, wake up every second to check
+      ** if any connection closed and if not, ignore any other
+      ** connection requests.
+      */
+      if( con_cnt >= max_con_cnt ) {
+        sleep(1);
+        continue;
+      }
 
-	sksize    = SOCK_SIZE;
-	sk_client = accept( sk_socks,&ad_client,&sksize );
-	if( sk_client==-1 ) {
-	    if( errno!=EINTR )
-		logstr("Error: accept() failed",NULL);
-	    continue;
-	}
+      sksize    = SOCK_SIZE;
+      sk_client = accept( sk_socks,&ad_client,&sksize );
+      if( sk_client==-1 ) {
+        if( errno!=EINTR )
+          logstr("Error: accept() failed",NULL);
+        continue;
+      }
 
-	/*
-	 * Match the connection against our
-	 * client filter.
-	 */
-	allow = (filter_policy == FP_ALLOW);
-	for( i=0; i<filter_except_cnt; i++ ) {
-	    memcpy(&adam,ad_client.sa_data+2,4);
-	    adam ^= filter_excepts[i];
-	    adam &= htonl(0xFFFFFFFF << (32-filter_except_masks[i]));
-	    if( !adam ) {
-		allow = !allow;
-		break;
-	    }
-	}
+      /*
+       * Match the connection against our
+       * client filter.
+       */
+      allow = (filter_policy == FP_ALLOW);
+      for( i=0; i<filter_except_cnt; i++ ) {
+        memcpy(&adam,ad_client.sa_data+2,4);
+        adam ^= filter_excepts[i];
+        adam &= htonl(0xFFFFFFFF << (32-filter_except_masks[i]));
+        if( !adam ) {
+          allow = !allow;
+          break;
+        }
+      }
 	
-	if( !allow ) {
-	    logstr("Blocked by filter!",&ad_client);
-	    close(sk_client);
-	    continue;
-	}
+      if( !allow ) {
+        logstr("Blocked by filter!",&ad_client);
+        close(sk_client);
+        continue;
+      }
 
 
-	switch( fork() ) {
-	  case  0:
-	    child = 1;
-	    close(sk_socks);
-	    logstr("Incoming connection",&ad_client);
-	    res = handle_con();
-	    close(sk_client);
-	    exit(res);
-	    break;
-	  case -1:
-	    logstr("Could not accept connection (fork() error)",&ad_client);
-	    close(sk_client);
-	    break;
-	  default:
-	    if( ++con_cnt >= max_con_cnt ) {
-		printf("Maximum daemon load reached: %d active connections",
-			con_cnt);
-		logstr(s,NULL);
-	    }
-	    close(sk_client);
-	    break;
-	} /* end switch */
+      switch( fork() ) {
+      case  0:
+        child = 1;
+        close(sk_socks);
+        logstr("Incoming connection",&ad_client);
+        res = handle_con(ctcp_port);
+        close(sk_client);
+        exit(res);
+        break;
+      case -1:
+        logstr("Could not accept connection (fork() error)",&ad_client);
+        close(sk_client);
+        break;
+      default:
+        if( ++con_cnt >= max_con_cnt || ++ctcp_port >= MAX_PORT) {
+          printf("Maximum daemon load reached: %d active connections ", con_cnt);
+          logstr(s,NULL);
+        }
+        close(sk_client);
+        break;
+      } /* end switch */
 
     } /* end while */
 
