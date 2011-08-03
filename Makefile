@@ -31,7 +31,7 @@ CXX             =	$(AT) g++
 FPIC		=	-fPIC
 INCLUDES	=	-I$(HERE) -I. -I$(SRCDIR)
 CFLAGS	 	= 	-c -g -Wall $(INCLUDES)
-LDFLAGS		=
+LDFLAGS		= -lnsl
 
 CWARN			=	-Wall -Wno-sign-compare -Wno-unused-variable
 CXXWARN			=	$(CWARN) $(FPIC) -Wno-deprecated -Woverloaded-virtual
@@ -112,7 +112,6 @@ clean:
 	$(RM) -rf $(BINDIR)
 	$(RM) -rf srvctcp clictcp
 	$(RM) -rf demoServer demoClient
-	$(RM) -rf demoLIBIPTC
 
 .PHONY: remake
 remake: clean all
@@ -143,11 +142,22 @@ demoClient: $(BINDIR)/demoClient.o .buildmode Makefile
 	$(MKDIR) -p $(dir $@)
 	$(CC) -o $@ $< $(LDFLAGS) -lreadline
 
+proxy_local: $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o .buildmode Makefile
+	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(MKDIR) -p $(dir $@)
+	$(CXX) -o $@ $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(LDFLAGS)
+
+proxy_remote: $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o .buildmode Makefile
+	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(MKDIR) -p $(dir $@)
+	$(CXX) -o $@ $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(LDFLAGS)
+
+
 all: clictcp srvctcp
 
 demo: demoClient demoServer
 
-demo_libiptc: demoLIBIPTC
+proxy: proxy_local proxy_remote
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)
