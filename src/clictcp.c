@@ -115,44 +115,37 @@ main(int argc, char** argv){
 
     clictcp_sock* csk = connect_ctcp(host, port, lease_file);
 
-    printf("This is the parent process 1 \n");
 
     if (csk == NULL){
       printf("Could not create CTCP socket\n");
       return 1;
     } else{
       
-      printf("This is the parent process 2 \n");
       char dst_file_name[100] = "Rcv_";
       strcat(dst_file_name, file_name);
       rcv_file = fopen(dst_file_name,  "wb");
 
-      printf("This is the parent process 3 \n");
-
       uint32_t f_buf_size = NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE;
       uint32_t bytes_read;
-
-      printf("This is the parent process 4 \n");
 
       char *f_buffer = malloc(f_buf_size);
 
       printf("Calling read ctcp... \n");
 
       uint32_t total_bytes = 0;
-      while(total_bytes < 20000000){
-        printf("This is the parent process 5 \n"); 
+      while(total_bytes < 200000000){
       
         bytes_read = read_ctcp(csk, f_buffer, f_buf_size);  
-        printf("return %d bytes to write\n", bytes_read);
         fwrite(f_buffer, 1, bytes_read, rcv_file);
         total_bytes += bytes_read;
+        //printf(" %d bytes receieved\n", bytes_read);
       }
 
       fclose(rcv_file);
 
       printf("Closed file successfully\n");
 
-      fifo_free(&(csk->usr_cache));
+      fifo_free(&(csk->usr_cache));    // TODO should go to the close function
     }
 
 
@@ -281,19 +274,13 @@ connect_ctcp(char *host, char *port, char *lease_file){
 
     ///////////////////////   CONNECTION SETUP UP TO HERE  ///////////////
 
-    /// FORK AND LET THE CHILD DO THE CONNECTION
-    /// RETURN THE CTCP SOCKET
+    // Let another thread do the job and return the socket
 
-    
-    pid_t pid = fork();
+    pthread_t daemon_thread;
 
-    if (pid == 0){
-      handle_connection(csk);
-      return NULL;
-    }else if (pid == -1){
-      perror("clictcp could not create child process\n");
-      return NULL;
-    }
+    rv = pthread_create( &daemon_thread, NULL, handle_connection, (void *) csk);
+
+    // TODO TODO We need to have a close function to join the threads and gracefully close the connection
 
     return csk;
 }
@@ -301,14 +288,16 @@ connect_ctcp(char *host, char *port, char *lease_file){
 uint32_t 
 read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
 
-  printf("This is the parent process 6 pkts %d\n",csk->pkts); 
   return fifo_pop(&(csk->usr_cache), usr_buf, count);
 
 }
 
 
 void
-handle_connection(clictcp_sock* csk){
+*handle_connection(void* arg){
+
+  clictcp_sock* csk = (clictcp_sock*) arg;
+
   socklen_t srvlen;
   double dbuff[BUFFSIZE/8];
   char *buff = (char *)dbuff;
@@ -328,12 +317,13 @@ handle_connection(clictcp_sock* csk){
   do{
     idle_timer = getTime();
     // value -1 blocks until something is ready to read
-    ready = poll(read_set, csk->substreams, 5000);
+    ready = poll(read_set, csk->substreams, TIMEOUT);
 
     if(ready == -1){
       perror("poll");
     }else if (ready == 0){
       printf("Timeout occurred during poll! Should not happen with -1\n");
+      ready = POLL_TO_FLG;
     }else{
       srvlen = sizeof(csk->srv_addr); // TODO: this is not necessary -> remove
       //printf("ready! %d\n", ready);
@@ -393,9 +383,11 @@ handle_connection(clictcp_sock* csk){
     }
     // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
     // NOTE that the ones that are not active can be zero, or any value.
-  }while(numbytes > 0 && (getTime() - csk->start_time) < 5 ); // TODO doesn't ever seem to exit the loop! Need to ctrlc
+  }while(numbytes > 0 && ready != POLL_TO_FLG ); // TODO doesn't ever seem to exit the loop! Need to ctrlc
 
   ctrlc(csk);
+
+  pthread_exit(NULL);
   
 }
 

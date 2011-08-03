@@ -44,15 +44,17 @@ fifo_push(fifo_t* Q, const void *buf, size_t n){
   }
 
   size_t push_size = MIN(n, Q->max_size - Q->size);
+  size_t tail_to_end = Q->max_size - Q->tail;
 
-  if(push_size <= Q->max_size - Q->tail){
+  if(push_size <= tail_to_end){
 
     memcpy(Q->q_ + Q->tail, buf, push_size);
 
   }else{
 
-    size_t res = fifo_push(Q, buf, Q->max_size - Q->tail);
-    res        = fifo_push(Q, buf+res, push_size - res);
+    memcpy(Q->q_ + Q->tail, buf, tail_to_end);
+    memcpy(Q->q_, buf + tail_to_end, push_size - tail_to_end);
+
   }
 
   Q->tail = modulo(Q->tail + push_size, Q->max_size);
@@ -76,18 +78,18 @@ size_t fifo_pop(fifo_t* Q, void *buf, size_t n){
   }
 
   size_t pop_size = MIN(n, Q->size);
+  size_t head_to_end = Q->max_size - Q->head;
 
-  if (Q->head + pop_size <= Q->max_size){
+  if (pop_size <= head_to_end){
 
     memcpy(buf, Q->q_ + Q->head, pop_size);
 
   }else{
     
-    size_t res = fifo_pop(Q, buf, Q->max_size - Q->head);
-    res        = fifo_pop(Q, buf+res, pop_size - res);
+    memcpy(buf, Q->q_ + Q->head, head_to_end);
+    memcpy(buf + head_to_end, Q->q_, pop_size - head_to_end);
 
   }
-
 
   Q->head = modulo(Q->head + pop_size, Q->max_size);
   Q->size -= pop_size;

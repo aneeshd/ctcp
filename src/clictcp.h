@@ -18,9 +18,12 @@ typedef struct{
 #define HOST "127.0.0.1"
 #define FILE_NAME "Honda"
 
-#define NUM_BLOCKS 70
+#define NUM_BLOCKS 4
 #define MAX_SUBSTREAMS 5
+
 #define SYN_ACK_TO 5000   // in milliseconds
+#define TIMEOUT 1000
+#define POLL_TO_FLG -7
 
 FILE *rcv_file;
 
@@ -70,7 +73,7 @@ int readLease(char *leasefile, dhcp_lease *leases);
 void make_new_table(dhcp_lease* lease, int table_number, int mark_number);
 void delete_table(int table_number, int mark_number);
 
-void handle_connection(clictcp_sock* csk);
+void *handle_connection(void* arg);
 clictcp_sock* create_clictcp_sock(void);
 int  poll_SYN_ACK(clictcp_sock *csk);
 
