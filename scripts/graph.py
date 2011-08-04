@@ -32,14 +32,16 @@ def graph(log_file, keyword='', local_node='', remote_node='', showGraph=True, s
     xmt_times = []
     xmt_blockno = []
     xmt_current = 0.03
+    current_set = 0
 
     print "Processing log at: " + log_file
+
 
     f = open(log_file, 'r')
     for line in f:
         values = line.split(" ")
 
-        if values[-1] == "rcv\n":
+        if values[-1] == "ack0\n":
             # The variable values is a list of the form
             # [time, blockno, snd_cwnd, slr, slr_long, srtt, rto, rtt, rcv]
 
@@ -50,6 +52,10 @@ def graph(log_file, keyword='', local_node='', remote_node='', showGraph=True, s
 
             time = float(values[0])
 
+            if current_set == 0:
+                current = time
+                current_set = 1
+
             if time > current and time <= (current + res):
                 times.append(time)
 
@@ -57,13 +63,11 @@ def graph(log_file, keyword='', local_node='', remote_node='', showGraph=True, s
                 average_BW.append(8e-6*1.0*abw/current)
 
                 blockno.append(values[1])
-                snd_cwnd.append(values[2])
-                ssthresh.append(values[3])
-                slr.append(values[4])
-                slr_long.append(values[5])
-                srtt.append(values[6])
-                rto.append(values[7])
-                rtt.append(values[8])
+                rtt.append(values[2])
+                snd_cwnd.append(values[3])
+                ssthresh.append(values[4])
+
+
 
 
                 current = res + current
@@ -78,75 +82,69 @@ def graph(log_file, keyword='', local_node='', remote_node='', showGraph=True, s
 
                 average_BW.append(8e-6*1.0*abw/current)
                 average_BW.append(8e-6*1.0*abw/zero_point)
-
-                blockno.append(values[1])
-                blockno.append(values[1])
-
 		# need to appen twice to account for zero_point
-                snd_cwnd.append(values[2])
-                snd_cwnd.append(values[2])
 
-                ssthresh.append(values[3])
-                ssthresh.append(values[3])
-                slr.append(values[4])
-                slr.append(values[4])
-                slr_long.append(values[5])
-                slr_long.append(values[5])
-                srtt.append(values[6])
-                srtt.append(values[6])
-                rto.append(values[7])
-                rto.append(values[7])
-                rtt.append(values[8])
-                rtt.append(values[8])
+                blockno.append(values[1])
+                blockno.append(values[1])
+
+                rtt.append(values[2])
+                rtt.append(values[2])
+
+                snd_cwnd.append(values[3])
+                snd_cwnd.append(values[3])
+
+                ssthresh.append(values[4])
+                ssthresh.append(values[4])
+
 
 		current = zero_point + res
 		bw = 0
 
-        elif values[-1] == "xmt\n":
+  #      elif values[-1] == "xmt\n":
 
-            time = float(values[0])
+  #          time = float(values[0])
 
-            if time > xmt_current:
-                xmt_times.append(time)
-                xmt_blockno.append(values[1])
-                
-                xmt_current = xmt_current + res/10
+#            if time > xmt_current:
+ #               xmt_times.append(time)
+  #              xmt_blockno.append(values[1])
+   #             
+    #            xmt_current = xmt_current + res/10
             
 
 
 
     # print average_BW
-    subplot(511)
+    subplot(311)
     plot(times, instant_BW, 'r-', times, average_BW, 'g-')
     grid(True)
     title('CTCP Performance')
     ylabel('Mbs')
 
     # print congestion window
-    subplot(512)
-    plot(times, snd_cwnd, 'b*', times, ssthresh, 'r-')
-    grid(True)
-    ylabel('Congestion window (packets)')
+#    subplot(312)
+#    plot(times, snd_cwnd, 'b*', times, ssthresh, 'r-')
+#    grid(True)
+#    ylabel('Congestion window (packets)')
 
     # print round trip time and rto
-    subplot(513)
-    plot(times, rtt, 'b-', times, srtt, 'r-', times, rto, 'g-')
+    subplot(313)
+    plot(times, rtt, 'b-')
     grid(True)
     ylabel('time (s)')
 
     # print round trip time and rto
-    subplot(514)
-    plot(xmt_times, xmt_blockno, 'b*')
-    grid(True)
-    ylabel('blockno')
-    ylim((0,2))
+#    subplot(514)
+#    plot(xmt_times, xmt_blockno, 'b*')
+#    grid(True)
+#    ylabel('blockno')
+#    ylim((0,2))
 
     # print loss rate
-    subplot(515)
-    plot(times, slr, 'r-', times, slr_long, 'b-')
-    grid(True)
-    xlabel('time (s)')
-    ylabel('loss rate')
+#    subplot(515)
+#    plot(times, slr, 'r-', times, slr_long, 'b-')
+#    grid(True)
+#    xlabel('time (s)')
+#    ylabel('loss rate')
 
     F = pylab.gcf()
 

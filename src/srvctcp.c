@@ -21,7 +21,6 @@
  */
 void
 ctrlc(srvctcp_sock* sk){
-    sk->total_time = getTime()-sk->start_time;
     endSession(sk);
     exit(1);
 }
@@ -105,6 +104,8 @@ main (int argc, char** argv){
      
      fclose(snd_file);
 
+     ctrlc(sk);
+
      return 0;
 }
 
@@ -112,8 +113,7 @@ main (int argc, char** argv){
 srvctcp_sock*
 open_srvctcp(char *port){
 
-    double dbuff[BUFFSIZE/8];
-    char *buff = (char *)dbuff;
+    char *buff = malloc(BUFFSIZE);
     int numbytes;
     struct sockaddr cli_addr;
     socklen_t clilen = sizeof(cli_addr);
@@ -233,8 +233,7 @@ open_srvctcp(char *port){
 uint32_t
 send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
-  double dbuff[BUFFSIZE/8];
-  char *buff = (char *)dbuff;
+  char *buff = malloc(BUFFSIZE);
   int numbytes;
   
   struct sockaddr cli_addr;
@@ -245,7 +244,8 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
   int path_index=0;              // Connection identifier
 
-  /* ----- DONE READING THE BUFFER INTO BLOCKS ------- */
+
+  /* ----- START READING THE BUFFER INTO BLOCKS ------- */
 
   if (usr_buf_len == 0){
     return 0;
@@ -274,14 +274,17 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
   } else{
     sk->maxblockno = i-1;
   }
-    
 
+  printf("Time %f Read from %d to %d\n \n ", getTime(), sk->curr_block, sk->maxblockno);
+    
   /* ----- DONE READING THE BUFFER INTO BLOCKS ------- */
 
 
   int done = 0;
   memset(buff,0,BUFFSIZE);        /* pretouch */
   sk->start_time = getTime();
+
+  sk->dof_req_latest = sk->blocks[sk->curr_block%NUM_BLOCKS].len ;     // reset the dof counter for the current block
 
   /* send out initial segments, then go for it */  // First send_seg
   send_segs(sk, path_index);
@@ -290,14 +293,15 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
   while(done == 0){
 
-    idle_timer = getTime();
     double rto_max = 0;
     for (i=0; i < sk->num_active; i++){
       if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto;
     }
 
+    idle_timer = getTime();
+
+
     r = timedread(sk->sockfd, rto_max + RTO_BIAS);
-    sk->idle_total += getTime() - idle_timer;
 
     if (r > 0){  /* ack ready */
 
@@ -306,6 +310,8 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
         perror("Error in receveing ACKs\n");
         return 0;   // TODO should count the number of bytes that was delivered so far
       }
+
+      sk->idle_total += getTime() - idle_timer;
 
       unmarshallAck(ack, buff);
 
@@ -393,7 +399,8 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       endSession(sk);
     }
   }  /* while more pkts */
-  sk->total_time = getTime() - sk->start_time;
+
+  sk->total_time += getTime() - sk->start_time;
   free(ack);
 
   //      send_FIN_CLI(sk);
@@ -475,8 +482,7 @@ timeout(srvctcp_sock* sk, int pin){
 int
 send_FIN_CLI(srvctcp_sock* sk){
 
-  double dbuff[BUFFSIZE/8];
-  char *buff = (char *)dbuff;
+  char *buff = malloc(BUFFSIZE);
   int numbytes;
   // FIN_CLI sequence number is meaningless
   Data_Pckt *msg = dataPacket(0, sk->curr_block, 0);
@@ -597,11 +603,14 @@ send_segs(srvctcp_sock* sk, int pin){
         }
       }
 
+
       if (sk->debug > 6 && sk->num_active == 2){
         printf("path_id %d blockno %d mean OnFly %f dof_request tmp %d win %d CurrOnFly[0] %d CurrOnFly[1] %d srtt[0] %f srtt[1] %f\n", pin, blockno, mean_OnFly, dof_request_tmp, win, CurrOnFly[0], CurrOnFly[1], sk->active_paths[0]->srtt*1000, sk->active_paths[1]->srtt*1000);
       }
 
     }
+
+    //printf("Time %f win %d curr_block %d  block no %d dof_needed %d meanOnFly %f dof_req %d \n", getTime(), win, sk->curr_block, blockno, dof_needed, mean_OnFly, dof_request_tmp);
 
     CurrWin = dof_needed;
     win = win - CurrWin;
@@ -642,8 +651,7 @@ send_segs(srvctcp_sock* sk, int pin){
 void
 send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
 
-  double dbuff[BUFFSIZE/8];
-  char *buff = (char *)dbuff;
+  char *buff = malloc(BUFFSIZE);
   int numbytes;
 
   // Send coded packet from block number blockno
@@ -747,7 +755,7 @@ endSession(srvctcp_sock* sk){
            sk->active_paths[i]->snd_ssthresh, sk->goodacks);
   }
 
-  printf("Total idle time %f, Total timeouts %d\n", sk->idle_total, sk->timeouts);
+  printf("Total time %f Total idle time %f, Total timeouts %d\n", sk->total_time, sk->idle_total, sk->timeouts);
   printf("Total packets in: %d, out: %d, enobufs %d\n", sk->ipkts, sk->opkts, sk->enobufs);
 
   if(sk->db)       fclose(sk->db);
@@ -762,6 +770,7 @@ endSession(srvctcp_sock* sk){
 int
 handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
   Substream_Path *subpath = sk->active_paths[pin];
+  int j;
 
   uint32_t ackno = ack->ackno;
 
@@ -784,9 +793,9 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // max_delta: only for statistics
     if (subpath->vdelta > subpath->max_delta) subpath->max_delta = subpath->vdelta;  /* vegas delta */
   }
-  if (sk->debug > 6) {
+  if (sk->debug > 3) {
     fprintf(sk->db,"%f %d %f  %d %d ack%d\n",
-            subpath->last_ack_time - sk->start_time,
+            subpath->last_ack_time, // - sk->start_time,
             ackno,
             rtt,
             (int)subpath->snd_cwnd,
@@ -802,6 +811,13 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     pthread_mutex_lock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
 
     freeBlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS]));
+    
+    for (j = 0; j < sk->num_active; j++){
+      sk->active_paths[j]->packets_sent[sk->curr_block%NUM_BLOCKS] = 0;
+      sk->active_paths[j]->OnFly[sk->curr_block%NUM_BLOCKS] = 0;
+      sk->active_paths[j]->tx_time[sk->curr_block%NUM_BLOCKS] = 0;
+    }
+
     sk->dof_remain[sk->curr_block%NUM_BLOCKS] = 0;
 
     q_free(&(sk->coded_q[sk->curr_block%NUM_BLOCKS]), &free_coded_pkt);
@@ -830,7 +846,6 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
     sk->dof_req_latest = ack->dof_req;     // reset the dof counter for the current block
     
-    int j;
     for (j =0; j < sk->num_active; j++){
       sk->active_paths[j]->packets_sent[(sk->curr_block-1)%NUM_BLOCKS]=0;
     }
@@ -1530,8 +1545,6 @@ create_srvctcp_sock(void){
 void
 init_stream(srvctcp_sock* sk, Substream_Path *subpath){
   int j;
-
-  subpath->dof_req = BLOCK_SIZE;
 
   for(j=0; j < NUM_BLOCKS; j++) subpath->packets_sent[j] = 0;
 
