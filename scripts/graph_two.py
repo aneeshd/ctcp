@@ -53,7 +53,7 @@ def graph_two(log_file, keyword='', local_node='', remote_node='', showGraph=Tru
     for line in f:
         values = line.split(" ")
 
-        if values[-1] == "rcv0\n":
+        if values[-1] == "ack0\n":
             # The variable values is a list of the form
             # [time, blockno, snd_cwnd, slr, slr_long, srtt, rto, rtt, rcv]
 
@@ -116,7 +116,7 @@ def graph_two(log_file, keyword='', local_node='', remote_node='', showGraph=Tru
 		current = zero_point + res
 		bw = 0
 
-        elif values[-1] == "rcv1\n":
+        elif values[-1] == "ack1\n":
             # The variable values is a list of the form
             # [time, blockno, snd_cwnd, slr, slr_long, srtt, rto, rtt, rcv]
 

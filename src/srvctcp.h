@@ -31,7 +31,6 @@ typedef struct{
   uint32_t OnFly[MAX_CWND];
   double tx_time[MAX_CWND];
   int packets_sent[NUM_BLOCKS]; 
-  int dof_req;
   double last_ack_time;
   uint32_t snd_nxt;
   uint32_t snd_una;
