@@ -1,4 +1,4 @@
-/*****************************************************************************
+/****************************************************************************
 *  MOCKS, a RFC1928 compliant SOCKSv5 server                         
 *  Copyright (C) 2004  Dan Horobeanu <dhoro@spymac.com>
 *
@@ -114,7 +114,7 @@ struct t_proxy_connection {
   char           *remote_name;
   uint16_t       target_port;
   char           *target_name;
-  char*          ctcp_port;
+  char           *ctcp_port;
 };
 
 

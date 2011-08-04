@@ -31,7 +31,7 @@
 
 
 int proxy_errno;
-
+char srvctcp_port[5];
 
 
 
@@ -177,8 +177,9 @@ struct t_proxy_connection *proxy_connect(
 	    proxy_end_connect(pcon);
 	    return NULL;
     }
-    if( poll_res > 0 ) 
+    if( poll_res > 0 ) {
 	    return pcon;
+    }
   }
 
 }
@@ -493,12 +494,8 @@ int proxy_poll_connect( struct t_proxy_connection *pcon, int timeout )
 	    return -1;
     }
 
-    char srvctcp_port[5];
-
     memcpy(srvctcp_port, buf+2, 5);
-
     pcon->ctcp_port = srvctcp_port;
-
     pcon->flags |= PROXY_CF_WAITWRITE;
 
     break;
@@ -611,7 +608,6 @@ int proxy_poll_connect( struct t_proxy_connection *pcon, int timeout )
      */
     pcon->status  = PROXY_CS_S5_WAITREQ;
     pcon->flags |= PROXY_CF_WAITREAD;
-
     break;
 
 
@@ -947,6 +943,7 @@ int proxy_poll_connect( struct t_proxy_connection *pcon, int timeout )
     /*
      * Success.
      */
+
     pcon->status = PROXY_CS_CONNECTED;
 
     return 1;
@@ -971,6 +968,7 @@ int proxy_poll_connect( struct t_proxy_connection *pcon, int timeout )
     return -1;
 
   }
+
 
   return 0;
 
