@@ -79,7 +79,7 @@ int  poll_SYN_ACK(clictcp_sock *csk);
 
 clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file);
 uint32_t  read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count);
-
+void partial_write(clictcp_sock* csk);
  
 #endif // ATOUSRV_H_
 

@@ -275,7 +275,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
     sk->maxblockno = i-1;
   }
 
-  printf("Time %f Read from %d to %d\n \n ", getTime(), sk->curr_block, sk->maxblockno);
+  // printf("Time %f Read from %d to %d\n \n ", getTime(), sk->curr_block, sk->maxblockno);
     
   /* ----- DONE READING THE BUFFER INTO BLOCKS ------- */
 
@@ -1123,10 +1123,7 @@ coding_job(void *a){
           msg->payload[j] ^= FFmult(msg->packet_coeff[i], sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j]);
         }
       }
-      if(block_len < BLOCK_SIZE){
-        msg->flag = PARTIAL_BLK;
-        msg->blk_len = block_len;
-      }
+      
       /*
         printf("Pushing ... block %d, row %d \t start pkt %d\n", blockno, row, msg->start_packet);
         fprintf(stdout, "before BEFORE push  queue size %d HEAD %d, TAIL %d\n",coded_q[blockno%NUM_BLOCKS].size, coded_q[blockno%NUM_BLOCKS].head, coded_q[blockno%NUM_BLOCKS].tail);
@@ -1179,11 +1176,6 @@ coding_job(void *a){
         for(j = 0; j < PAYLOAD_SIZE; j++){
           msg->payload[j] ^= FFmult(msg->packet_coeff[i], sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j]);
         }
-      }
-
-      if(block_len < BLOCK_SIZE){
-        msg->flag = PARTIAL_BLK;
-        msg->blk_len = block_len;
       }
 
       q_push_back(&(sk->coded_q[blockno%NUM_BLOCKS]), msg);
@@ -1340,16 +1332,12 @@ marshallData(Data_Pckt msg, char* buf){
   int index = 0;
   int part = 0;
 
-  int partial_blk_flg = 0;
-  if (msg.flag == PARTIAL_BLK) partial_blk_flg = sizeof(msg.blk_len);
-
   // the total size in bytes of the current packet
   int size = PAYLOAD_SIZE
     + sizeof(double)
     + sizeof(flag_t)
     + sizeof(msg.seqno)
     + sizeof(msg.blockno)
-    + (partial_blk_flg)
     + sizeof(msg.start_packet)
     + sizeof(msg.num_packets)
     + msg.num_packets*sizeof(msg.packet_coeff);
@@ -1369,10 +1357,6 @@ marshallData(Data_Pckt msg, char* buf){
   memcpy(buf + index, &msg.blockno, (part = sizeof(msg.blockno)));
   index += part;
 
-  if (partial_blk_flg > 0){
-    memcpy(buf + index, &msg.blk_len, (part = sizeof(msg.blk_len)));
-    index += part;
-  }
   memcpy(buf + index, &msg.start_packet, (part = sizeof(msg.start_packet)));
   index += part;
 
@@ -1524,7 +1508,7 @@ create_srvctcp_sock(void){
   sk->maxidle    = 10;          /* max idle before abort */
   sk->valpha     = 0.05;        /* vegas parameter */
   sk->vbeta      = 0.2;         /* vegas parameter */
-  sk->debug      = 6           ;/* Debug level */
+  sk->debug      = 6;           /* Debug level */
 
   //------------------Statistics----------------------------------//
   sk->timeouts   = 0;

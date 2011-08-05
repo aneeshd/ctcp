@@ -72,7 +72,6 @@ dataPacket(uint32_t seqno, uint32_t blockno, uint8_t num_packets){
     packet->flag         = NORMAL;
     packet->seqno        = seqno;
     packet->blockno      = blockno;
-    packet->blk_len      = BLOCK_SIZE;
     packet->num_packets  = num_packets;
     packet->packet_coeff = (uint8_t*) malloc(num_packets*sizeof(uint8_t));
     packet->payload      = (char*) malloc(PAYLOAD_SIZE);

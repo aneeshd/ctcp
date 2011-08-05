@@ -33,6 +33,17 @@ fifo_init(fifo_t* Q, int max_size){
   Q->q_ = (char*) calloc(max_size, sizeof(char));
 }
 
+size_t
+fifo_getspace(fifo_t* Q){
+  pthread_mutex_lock(&Q->q_mutex_);
+
+  size_t q_size = Q->max_size - Q->size;
+
+  pthread_mutex_unlock(&Q->q_mutex_);
+
+  return q_size;
+}
+
 
 size_t
 fifo_push(fifo_t* Q, const void *buf, size_t n){

@@ -133,7 +133,7 @@ main(int argc, char** argv){
       printf("Calling read ctcp... \n");
 
       uint32_t total_bytes = 0;
-      while(total_bytes < 200000000){
+      while(total_bytes < 11492499){
       
         bytes_read = read_ctcp(csk, f_buffer, f_buf_size);  
         fwrite(f_buffer, 1, bytes_read, rcv_file);
@@ -363,8 +363,8 @@ void
 
           default:
             if (csk->debug > 6){
-              printf("seqno %d blklen %d num pkts %d start pkt %d curr_block %d dofs %d\n",
-                     msg->seqno, msg->blk_len, msg->num_packets, msg->start_packet, 
+              printf("seqno %d num pkts %d start pkt %d curr_block %d dofs %d\n",
+                     msg->seqno,  msg->num_packets, msg->start_packet, 
                      csk->curr_block, csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
             }
             if (csk->debug > 6 && msg->blockno != csk->curr_block ){
@@ -407,14 +407,13 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
   char *buff = (char *)dbuff;
   double elimination_timer = getTime();
   uint32_t blockno = msg->blockno;    //The block number of incoming packet
+  uint8_t start;
 
-    // Update the incoming block lenght
-    csk->blocks[blockno%NUM_BLOCKS].len = msg->blk_len;
 
-    if (msg->seqno > csk->last_seqno+1){
-        //printf("Loss report blockno %d Number of losses %d\n", msg->blockno, msg->seqno - last_seqno - 1);
-        csk->total_loss += msg->seqno - (csk->last_seqno+1);
-    }
+  if (msg->seqno > csk->last_seqno+1){
+    //printf("Loss report blockno %d Number of losses %d\n", msg->blockno, msg->seqno - last_seqno - 1);
+    csk->total_loss += msg->seqno - (csk->last_seqno+1);
+  }
 
     csk->last_seqno = MAX(msg->seqno, csk->last_seqno) ;  // ignore out of order packets
 
@@ -436,7 +435,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
         // If the block is already full, skip Gaussian elimination
         if(csk->blocks[blockno%NUM_BLOCKS].dofs < csk->blocks[blockno%NUM_BLOCKS].len){
 
-            uint8_t start = msg->start_packet;
+          start = msg->start_packet;
 
             // Shift the row to make SHURE the leading coefficient is not zero
             int shift = shift_row(msg->packet_coeff, msg->num_packets);
@@ -549,7 +548,10 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
         printf("Sent an ACK: ackno %d blockno %d\n", ack->ackno, ack->blockno);
     }
 
-    //------------------------------------------------------------------------------------------------------
+    //----------------------------------------------------------------
+    //      CHECK IF ANYTHING CAN BE PUSHED TO THE APPLICATION     //
+
+    partial_write(csk);
 
     // Always try decoding the curr_block first, even if the next block is decodable, it is not useful
     while(csk->blocks[csk->curr_block%NUM_BLOCKS].dofs == csk->blocks[csk->curr_block%NUM_BLOCKS].len){
@@ -573,12 +575,74 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
 
         csk->decoding_delay += getTime() - decoding_timer;
         if (csk->debug > 4){
-            printf("Done within %f secs\n", getTime()-decoding_timer);
+          printf("Done within %f secs   blockno %d max_pkt_ix %d \n", getTime()-decoding_timer, csk->curr_block, csk->blocks[(csk->curr_block)%NUM_BLOCKS].max_packet_index);
         }
     } // end if the block is done
 
 }
 //========================== END Build Ack ===============================================================
+
+
+void
+partial_write(clictcp_sock* csk){
+
+  int blockno = csk->curr_block;
+  uint8_t start = csk->blocks[blockno%NUM_BLOCKS].dofs_pushed;
+  bool push_ready = TRUE; 
+  uint16_t payload_len;
+  int i;
+  size_t bytes_pushed;
+
+  if(csk->blocks[blockno%NUM_BLOCKS].dofs == csk->blocks[blockno%NUM_BLOCKS].max_packet_index){
+    // We have enough dofs to decode, DECODE!
+    unwrap(&(csk->blocks[blockno%NUM_BLOCKS]));
+ }
+
+  //printf("blockno %d dofs %d max_pkt_ix %d dofs_pushed %d\n", blockno, csk->blocks[blockno%NUM_BLOCKS].dofs, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start);
+
+  do {
+    if ( csk->blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
+      push_ready = FALSE;
+    } else {
+      for (i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
+        if (csk->blocks[blockno%NUM_BLOCKS].rows[start][i]){
+          push_ready = FALSE;
+          break;
+        }
+      }
+    }
+
+    if (push_ready){
+      // check the queue size
+      // if enough room, push, otherwise, exit the push process
+      if (fifo_getspace(&(csk->usr_cache)) >= PAYLOAD_SIZE){
+        // push the packet to user cache
+
+        // Read the first two bytes containing the length of the useful data
+        memcpy(&payload_len, csk->blocks[blockno%NUM_BLOCKS].content[start], 2);
+
+        // Convert to host order
+        payload_len = ntohs(payload_len);
+        // Write the contents of the decode block into the file
+        //fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
+
+        bytes_pushed = 0;
+        while (bytes_pushed < payload_len){
+          bytes_pushed += fifo_push(&(csk->usr_cache), csk->blocks[blockno%NUM_BLOCKS].content[start]+2+bytes_pushed, payload_len - bytes_pushed);
+        }
+
+        start++;
+      }else{
+        push_ready = FALSE;
+      }
+    }
+
+  } while (push_ready);
+
+  csk->blocks[blockno%NUM_BLOCKS].dofs_pushed = start;
+
+  return;
+}
 
 
 // TODO: TEST!
@@ -633,6 +697,8 @@ initCodedBlock(Coded_Block_t *blk){
     blk->dofs = 0;
     blk->len  = BLOCK_SIZE; // this may change once we get packets
     blk->max_coding_wnd = 0;
+    blk->dofs_pushed = 0;
+    blk->max_packet_index = 0;
 
     int i;
     for(i = 0; i < BLOCK_SIZE; i++){
@@ -648,7 +714,7 @@ unwrap(Coded_Block_t *blk){
     int offset;
     int byte;
     //prettyPrint(blocks[blockno%NUM_BLOCKS].rows, MAX_CODING_WND);
-    for(row = blk->len-2; row >= 0; row--){
+    for(row = blk->max_packet_index-2; row >= blk->dofs_pushed; row--){
         for(offset = 1; offset <  blk->row_len[row]; offset++){
             if(blk->rows[row][offset] == 0)
                 continue;
@@ -668,7 +734,7 @@ writeAndFreeBlock(Coded_Block_t *blk, fifo_t *buffer){
     int bytes_pushed, i;
     //printf("Writing a block of length %d\n", blocks[blockno%NUM_BLOCKS].len);
 
-    for(i=0; i < blk->len; i++){
+    for(i = blk->dofs_pushed; i < blk->len; i++){
         // Read the first two bytes containing the length of the useful data
         memcpy(&len, blk->content[i], 2);
 
@@ -709,20 +775,16 @@ unmarshallData(Data_Pckt* msg, char* buf, clictcp_sock *csk){
 
     ntohpData(msg);
 
-    if (msg->flag == PARTIAL_BLK){
-        memcpy(&msg->blk_len, buf+index, (part = sizeof(msg->blk_len)));
-        index += part;
-    } else {
-        msg->blk_len = BLOCK_SIZE;
-    }
-
     memcpy(&msg->start_packet, buf+index, (part = sizeof(msg->start_packet)));
     index += part;
 
     memcpy(&msg->num_packets, buf+index, (part = sizeof(msg->num_packets)));
     index += part;
 
-    //  msg->packet_coeff = malloc(MIN(coding_wnd, blocks[msg->blockno%NUM_BLOCKS].len - msg->start_packet));
+    // Need to make sure all the incoming packet_coeff are non-zero
+    if (msg->blockno >= csk->curr_block){
+      csk->blocks[msg->blockno%NUM_BLOCKS].max_packet_index = MAX(msg->start_packet + msg->num_packets , csk->blocks[msg->blockno%NUM_BLOCKS].max_packet_index);
+    }
 
     int coding_wnd = MAX(msg->num_packets, csk->blocks[msg->blockno%NUM_BLOCKS].max_coding_wnd);
     msg->packet_coeff = malloc(coding_wnd);
