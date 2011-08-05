@@ -316,10 +316,10 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       unmarshallAck(ack, buff);
 
       if (sk->debug > 6){
-        printf("Got an ACK: ackno %d blockno %d dof_req %d -- RTT est %f \n",
+        printf("Got an ACK: ackno %d blockno %d dof_rec %d -- RTT est %f \n",
                ack->ackno,
                ack->blockno,
-               ack->dof_req,
+               ack->dof_rec,
                getTime()-ack->tstamp);
       }
 
@@ -844,7 +844,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
       addJob(&(sk->workers), &coding_job, job, &free, LOW);
     }
 
-    sk->dof_req_latest = ack->dof_req;     // reset the dof counter for the current block
+    sk->dof_req_latest =  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec;     // reset the dof counter for the current block
     
     for (j =0; j < sk->num_active; j++){
       sk->active_paths[j]->packets_sent[(sk->curr_block-1)%NUM_BLOCKS]=0;
@@ -916,7 +916,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // The MIN is to avoid outdated infromation by out of order ACKs or ACKs on different paths
 
 	if (ack->blockno == sk->curr_block){
-	    sk->dof_req_latest = MIN(sk->dof_req_latest, ack->dof_req);
+	    sk->dof_req_latest = MIN(sk->dof_req_latest,  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec);
 	}
   advance_cwnd(sk, pin);
 
@@ -1402,7 +1402,7 @@ unmarshallAck(Ack_Pckt* msg, char* buf){
   index += part;
   memcpy(&msg->blockno, buf+index, (part = sizeof(msg->blockno)));
   index += part;
-  memcpy(&msg->dof_req, buf+index, (part = sizeof(msg->dof_req)));
+  memcpy(&msg->dof_rec, buf+index, (part = sizeof(msg->dof_rec)));
   index += part;
   ntohpAck(msg);
 

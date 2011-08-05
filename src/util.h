@@ -72,7 +72,7 @@ typedef struct{
   flag_t flag;
   uint32_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
   uint32_t  blockno; // Base of the current block
-  uint8_t dof_req;  // Number of dofs left from the block
+  uint8_t dof_rec;  // Number of dofs left from the block
   //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
 } Ack_Pckt;
 

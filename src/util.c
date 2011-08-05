@@ -84,7 +84,7 @@ ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left){
     ack->flag     = NORMAL;
     ack->ackno    = ackno;
     ack->blockno  = blockno;
-    ack->dof_req  = dofs_left;
+    ack->dof_rec  = dofs_left;
     return ack;
 }
 

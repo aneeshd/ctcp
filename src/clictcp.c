@@ -521,13 +521,13 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
 
     // Build the ack packet according to the new information
     Ack_Pckt* ack = ackPacket(msg->seqno+1, csk->curr_block,
-                              csk->blocks[csk->curr_block%NUM_BLOCKS].len - csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
+                              csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
 
-    while(ack->dof_req == 0){
+    while(ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len){
         // The current block is decodable, so need to request for the next block
         // XXX make sure that NUM_BLOCKS is not 1, or this will break
         ack->blockno++;
-        ack->dof_req =   csk->blocks[(ack->blockno)%NUM_BLOCKS].len - csk->blocks[(ack->blockno)%NUM_BLOCKS].dofs;
+        ack->dof_rec = csk->blocks[(ack->blockno)%NUM_BLOCKS].dofs;
     }
 
     ack->tstamp = msg->tstamp;
@@ -854,7 +854,7 @@ marshallAck(Ack_Pckt msg, char* buf){
     index += part;
     memcpy(buf + index, &msg.blockno, (part = sizeof(msg.blockno)));
     index += part;
-    memcpy(buf + index, &msg.dof_req, (part = sizeof(msg.dof_req)));
+    memcpy(buf + index, &msg.dof_rec, (part = sizeof(msg.dof_rec)));
     index += part;
 
     /*
