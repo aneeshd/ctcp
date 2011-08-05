@@ -63,6 +63,9 @@ typedef struct{
 
 typedef struct{ // TODO: this datastructure can store the dof's and other state related to the blocks
   pthread_mutex_t block_mutex;
+  pthread_rwlock_t block_rwlock;
+  pthread_cond_t  block_free_condv;
+  pthread_cond_t  block_ready_condv;
   uint32_t len; // Number of bare packets inside the block
   char** content; // Array of pointers that point to the marshalled data of the bare packets
 } Block_t;

@@ -21,8 +21,9 @@
  */
 void
 ctrlc(srvctcp_sock* sk){
-    endSession(sk);
-    exit(1);
+  sk->total_time = getTime() - sk->start_time;
+  endSession(sk);
+  exit(1);
 }
 
 void
@@ -38,7 +39,7 @@ usage()
 int
 main (int argc, char** argv){
 
-    char *file_name = "Honda";
+    char *file_name = "Avatar.mov";
     FILE *snd_file; // The file to be sent
     char *version = "$version 0.0$";
     char *configfile = "config/vegas";
@@ -81,7 +82,7 @@ main (int argc, char** argv){
      } else{
        // read from the file and send over ctcp socket
 
-       size_t buf_size = 20000000;
+       size_t buf_size = 10000000;
        size_t f_bytes_read, bytes_sent;
        char *file_buff = malloc(buf_size*sizeof(char));
        size_t total_bytes_sent =0;
@@ -100,6 +101,7 @@ main (int argc, char** argv){
        }
        
      printf("Total bytes sent %d\n", total_bytes_sent);
+
      }
      
      fclose(snd_file);
@@ -219,6 +221,10 @@ open_srvctcp(char *port){
             return NULL;
           }
           
+          pthread_t daemon_thread;
+
+          rv = pthread_create( &daemon_thread, NULL, server_worker, (void *) sk);
+          
           return sk;
     } else{
       printf("Expecting SYN packet, received something else\n");
@@ -230,8 +236,69 @@ open_srvctcp(char *port){
 /*
  * This is contains the main functionality and flow of the client program
  */
-uint32_t
+size_t
 send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
+
+  printf("Calling send ctcp\n");
+  if (usr_buf_len == 0){
+    return 0;
+  }
+
+  uint32_t bytes_left = usr_buf_len;
+  int block_len_tmp;
+
+  int i = sk->curr_block;
+  while (bytes_left > 0){
+    pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+
+    if (i == sk->curr_block + NUM_BLOCKS){
+      //printf("waiting on block free %d\n", sk->curr_block);
+      pthread_cond_wait( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv), &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
+    }
+
+    pthread_rwlock_wrlock(&(sk->blocks[i%NUM_BLOCKS].block_rwlock));
+
+    block_len_tmp = sk->blocks[i%NUM_BLOCKS].len;   // keep the block len before reading
+    
+    bytes_left -= readBlock(&(sk->blocks[i%NUM_BLOCKS]), usr_buf+usr_buf_len-bytes_left, bytes_left);
+    printf("bytes_read %d bytes_left %d maxblockno %d currblock %d\n", usr_buf_len - bytes_left, bytes_left,  sk->maxblockno, sk->curr_block);
+
+    coding_job_t* job = malloc(sizeof(coding_job_t));
+    job->socket = sk;
+    job->blockno = i;
+    job->dof_request = sk->blocks[i%NUM_BLOCKS].len - block_len_tmp;   //(int) ceil(BLOCK_SIZE*1.0);
+    job->coding_wnd = 0; //INIT_CODING_WND;  TODO: remove comment if stable
+    sk->dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+    addJob(&(sk->workers), &coding_job, job, &free, LOW);
+
+    sk->maxblockno = i;
+    sk->dof_req_latest = job->dof_request;
+
+    pthread_rwlock_unlock(&(sk->blocks[i%NUM_BLOCKS].block_rwlock));
+    pthread_cond_signal( &(sk->blocks[i%NUM_BLOCKS].block_ready_condv));
+    pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+
+    i++;
+  }
+  /*
+  i = sk->curr_block;
+  while (i <= sk->maxblockno){
+    pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+    pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
+    pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+    i++;
+  }
+  */
+
+  return usr_buf_len - bytes_left;
+
+}
+
+
+void 
+*server_worker(void *arg){
+
+  srvctcp_sock* sk = (srvctcp_sock*) arg;
 
   char *buff = malloc(BUFFSIZE);
   int numbytes;
@@ -245,36 +312,6 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
   int path_index=0;              // Connection identifier
 
 
-  /* ----- START READING THE BUFFER INTO BLOCKS ------- */
-
-  if (usr_buf_len == 0){
-    return 0;
-  }
-
-  uint32_t bytes_left = usr_buf_len;
-  int block_len_tmp;
-  // read the user buffer into blocks of packets
-  for (i = sk->curr_block; i < sk->curr_block+NUM_BLOCKS && bytes_left > 0; i++){
-    block_len_tmp = sk->blocks[i%NUM_BLOCKS].len;   // keep the block len before reading
-
-    bytes_left -= readBlock(&(sk->blocks[i%NUM_BLOCKS]), usr_buf+usr_buf_len-bytes_left, bytes_left);
-    //printf("bytes_left %d maxblockno %d\n", bytes_left, sk->maxblockno);
-
-    coding_job_t* job = malloc(sizeof(coding_job_t));
-    job->socket = sk;
-    job->blockno = i;
-    job->dof_request = sk->blocks[i%NUM_BLOCKS].len - block_len_tmp;   //(int) ceil(BLOCK_SIZE*1.0);
-    job->coding_wnd = 0; //INIT_CODING_WND;  TODO: remove comment if stable
-    sk->dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
-    addJob(&(sk->workers), &coding_job, job, &free, LOW);
-  }
-
-  if (bytes_left > 0){
-    sk->maxblockno = sk->curr_block + NUM_BLOCKS - 1;
-  } else{
-    sk->maxblockno = i-1;
-  }
-
   // printf("Time %f Read from %d to %d\n \n ", getTime(), sk->curr_block, sk->maxblockno);
     
   /* ----- DONE READING THE BUFFER INTO BLOCKS ------- */
@@ -284,7 +321,10 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
   memset(buff,0,BUFFSIZE);        /* pretouch */
   sk->start_time = getTime();
 
+  pthread_rwlock_rdlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
   sk->dof_req_latest = sk->blocks[sk->curr_block%NUM_BLOCKS].len ;     // reset the dof counter for the current block
+  pthread_rwlock_unlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
+
 
   /* send out initial segments, then go for it */  // First send_seg
   send_segs(sk, path_index);
@@ -308,7 +348,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       // The recvfrom should be done to a separate buffer (not buff)
       if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
         perror("Error in receveing ACKs\n");
-        return 0;   // TODO should count the number of bytes that was delivered so far
+        continue;  
       }
 
       sk->idle_total += getTime() - idle_timer;
@@ -400,7 +440,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
     }
   }  /* while more pkts */
 
-  sk->total_time += getTime() - sk->start_time;
+
   free(ack);
 
   //      send_FIN_CLI(sk);
@@ -413,7 +453,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
   free(active_paths);
   */  
 
-  return usr_buf_len - bytes_left;
+  return NULL;
 }
 
 void
@@ -513,6 +553,15 @@ send_FIN_CLI(srvctcp_sock* sk){
 void
 send_segs(srvctcp_sock* sk, int pin){
 
+  if (sk->dof_req_latest == 0){
+    //printf("waiting on block ready %d\n", sk->curr_block);
+    pthread_mutex_lock(   &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex) );
+    pthread_cond_signal(  &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv));
+    pthread_cond_wait(    &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_ready_condv), &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
+    pthread_mutex_unlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex) );
+  }
+
+
   Substream_Path* subpath = sk->active_paths[pin];
 
   int win = 0;
@@ -554,7 +603,12 @@ send_segs(srvctcp_sock* sk, int pin){
     if (blockno == sk->curr_block){
       dof_request_tmp = sk->dof_req_latest;
     }else{
-      dof_request_tmp = BLOCK_SIZE;
+
+      pthread_rwlock_rdlock(&(sk->blocks[blockno%NUM_BLOCKS].block_rwlock));
+      dof_request_tmp = sk->blocks[blockno%NUM_BLOCKS].len;
+      pthread_rwlock_unlock(&(sk->blocks[blockno%NUM_BLOCKS].block_rwlock));
+
+      
       for (j = 0; j < sk->num_active; j++){
         CurrOnFly[j] = sk->active_paths[j]->packets_sent[blockno%NUM_BLOCKS];
       }
@@ -809,6 +863,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // Moving on to a new block
 
     pthread_mutex_lock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
+    pthread_rwlock_wrlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
+
 
     freeBlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS]));
     
@@ -824,28 +880,15 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
     sk->curr_block++;            // Update the current block identifier
 
+    sk->dof_req_latest =  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec;     // reset the dof counter for the current block
+
+    pthread_rwlock_unlock(&(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_rwlock));
+    pthread_cond_signal( &(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_free_condv));
     pthread_mutex_unlock(&(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_mutex));
 
 
-    if(sk->maxblockno && ack->blockno > sk->maxblockno && sk->curr_block > sk->maxblockno){
-      //printf("THIS IS THE LAST ACK - maxblockno %d curr_block %d\n", maxblockno, curr_block);
-      return 1; // goes back to the beginning of the while loop in send_ctcp() and exits
-    }
 
-    if (!sk->maxblockno){
-
-      coding_job_t* job = malloc(sizeof(coding_job_t));
-      job->socket = sk;
-      job->blockno = sk->curr_block+NUM_BLOCKS-1;
-      job->dof_request = BLOCK_SIZE;
-      sk->dof_remain[(job->blockno)%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
-      job->coding_wnd = 1;
-
-      addJob(&(sk->workers), &coding_job, job, &free, LOW);
-    }
-
-    sk->dof_req_latest =  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec;     // reset the dof counter for the current block
-    
+     
     for (j =0; j < sk->num_active; j++){
       sk->active_paths[j]->packets_sent[(sk->curr_block-1)%NUM_BLOCKS]=0;
     }
@@ -916,7 +959,10 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // The MIN is to avoid outdated infromation by out of order ACKs or ACKs on different paths
 
 	if (ack->blockno == sk->curr_block){
-	    sk->dof_req_latest = MIN(sk->dof_req_latest,  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec);
+    pthread_rwlock_rdlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock) );
+    sk->dof_req_latest = MIN(sk->dof_req_latest,  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec);
+    pthread_rwlock_unlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock) );
+    
 	}
   advance_cwnd(sk, pin);
 
@@ -1051,7 +1097,7 @@ coding_job(void *a){
   int coding_wnd = job->coding_wnd;
   srvctcp_sock* sk = job->socket;
 
-  pthread_mutex_lock(&(sk->blocks[blockno%NUM_BLOCKS].block_mutex));
+  pthread_rwlock_rdlock(&(sk->blocks[blockno%NUM_BLOCKS].block_rwlock));
 
   // Check if the blockno is already done
  
@@ -1059,7 +1105,7 @@ coding_job(void *a){
       if (sk->debug > 5){
         printf("Coding job request for old block - curr_block %d blockno %d dof_request %d \n\n", sk->curr_block,  blockno, dof_request);
       }
-      pthread_mutex_unlock( &(sk->blocks[blockno%NUM_BLOCKS].block_mutex) );
+      pthread_rwlock_unlock(&(sk->blocks[blockno%NUM_BLOCKS].block_rwlock));
       return NULL;
   }
   
@@ -1072,7 +1118,7 @@ coding_job(void *a){
   if (block_len  == 0){
     printf("Error: Block not read yet\n");
 
-    pthread_mutex_unlock( &(sk->blocks[blockno%NUM_BLOCKS].block_mutex) );
+    pthread_rwlock_unlock( &(sk->blocks[blockno%NUM_BLOCKS].block_rwlock) );
     return NULL;
   } 
   
@@ -1188,7 +1234,7 @@ coding_job(void *a){
   //printf("Almost done with block %d - q size %d\n", blockno, coded_q[blockno%NUM_BLOCKS].size);
   //pthread_mutex_unlock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
 
-  pthread_mutex_unlock( &(sk->blocks[blockno%NUM_BLOCKS].block_mutex) );
+  pthread_rwlock_unlock( &(sk->blocks[blockno%NUM_BLOCKS].block_rwlock) );
   return NULL;
 }
 
@@ -1495,6 +1541,9 @@ create_srvctcp_sock(void){
   // Initialize the block mutexes and queue of coded packets and counters
   for(i = 0; i < NUM_BLOCKS; i++){
     pthread_mutex_init( &(sk->blocks[i].block_mutex), NULL );
+    pthread_rwlock_init( &(sk->blocks[i].block_rwlock), NULL );
+    pthread_cond_init( &(sk->blocks[i].block_free_condv), NULL );
+    pthread_cond_init( &(sk->blocks[i].block_ready_condv), NULL );
     q_init(&(sk->coded_q[i]), 2*BLOCK_SIZE);
   }
 

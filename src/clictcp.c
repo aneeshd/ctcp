@@ -133,7 +133,7 @@ main(int argc, char** argv){
       printf("Calling read ctcp... \n");
 
       uint32_t total_bytes = 0;
-      while(total_bytes < 11492499){
+      while(total_bytes < 198594549){ //11492499){
       
         bytes_read = read_ctcp(csk, f_buffer, f_buf_size);  
         fwrite(f_buffer, 1, bytes_read, rcv_file);
