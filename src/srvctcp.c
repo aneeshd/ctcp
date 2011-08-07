@@ -908,6 +908,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     q_free(&(sk->coded_q[sk->curr_block%NUM_BLOCKS]), &free_coded_pkt);
 
     sk->curr_block++;            // Update the current block identifier
+    sk->maxblockno = MAX(sk->curr_block, sk->maxblockno);
 
     sk->dof_req_latest =  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec;     // reset the dof counter for the current block
 
