@@ -135,7 +135,7 @@ main(int argc, char** argv){
       printf("Calling read ctcp... \n");
 
       uint32_t total_bytes = 0;
-      while(total_bytes < 198594549){ //11492499){
+      while(total_bytes < 11492499){
       
         bytes_read = read_ctcp(csk, f_buffer, f_buf_size);  
         fwrite(f_buffer, 1, bytes_read, rcv_file);
@@ -448,6 +448,9 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
             // THE while loop!
             while(!isEmpty(msg->packet_coeff, msg->num_packets)){
                 if(csk->blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
+
+                    msg->num_packets = MIN(msg->num_packets, BLOCK_SIZE - start);
+
                     // Allocate the memory for the coefficients in the matrix for this block
                     csk->blocks[blockno%NUM_BLOCKS].rows[start] = malloc(msg->num_packets);
                     csk->blocks[blockno%NUM_BLOCKS].row_len[start] = msg->num_packets;
@@ -466,6 +469,11 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
 
                     // Put the payload into the corresponding place
                     memcpy(csk->blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
+
+
+                    if (csk->blocks[blockno%NUM_BLOCKS].rows[start][0] != 1){
+                      printf("blockno %d\n", blockno);
+                    }
 
                     // We got an innovative eqn
                     csk->blocks[blockno%NUM_BLOCKS].max_coding_wnd = msg->num_packets;
@@ -555,8 +563,10 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     //----------------------------------------------------------------
     //      CHECK IF ANYTHING CAN BE PUSHED TO THE APPLICATION     //
 
-    partial_write(csk);
-
+    if (csk->blocks[csk->curr_block%NUM_BLOCKS].dofs < csk->blocks[csk->curr_block%NUM_BLOCKS].len){
+      partial_write(csk);
+    }
+    
     // Always try decoding the curr_block first, even if the next block is decodable, it is not useful
     while(csk->blocks[csk->curr_block%NUM_BLOCKS].dofs == csk->blocks[csk->curr_block%NUM_BLOCKS].len){
         // We have enough dofs to decode, DECODE!
@@ -719,6 +729,16 @@ unwrap(Coded_Block_t *blk){
     int byte;
     //prettyPrint(blocks[blockno%NUM_BLOCKS].rows, MAX_CODING_WND);
     for(row = blk->max_packet_index-2; row >= blk->dofs_pushed; row--){
+      
+      /*
+        int k;
+        printf("row[%d] = ", row);
+        for (k = 0; k < blk->row_len[row]; k++){
+          printf("%d, ", blk->rows[row][k]);
+        }
+        printf("\n");
+      */
+
         for(offset = 1; offset <  blk->row_len[row]; offset++){
             if(blk->rows[row][offset] == 0)
                 continue;
@@ -728,6 +748,8 @@ unwrap(Coded_Block_t *blk){
                               blk->content[row+offset][byte] );
             }
         }
+
+        blk->row_len[row] = 1;   // Now this row has only the diagonal entry
     }
 }
 
@@ -755,7 +777,7 @@ writeAndFreeBlock(Coded_Block_t *blk, fifo_t *buffer){
         // TODO remove the if condition (This is to avoid seg fault for the last block)
         //if (blocks[blockno%NUM_BLOCKS].len == BLOCK_SIZE){
             // Free the content
-            //    free(blocks[blockno%NUM_BLOCKS].content[i]);
+            free(blk->content[i]);
 
             // Free the matrix
             free(blk->rows[i]);
