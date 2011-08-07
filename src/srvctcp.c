@@ -21,7 +21,7 @@
  */
 void
 ctrlc(srvctcp_sock* sk){
-  sk->total_time = getTime() - sk->start_time;
+  sk->total_time = getTime() - sk->start_time -2;
   endSession(sk);
   exit(1);
 }
@@ -104,6 +104,8 @@ main (int argc, char** argv){
 
      }
      
+     sleep(2);
+
      fclose(snd_file);
 
      ctrlc(sk);
@@ -220,6 +222,8 @@ open_srvctcp(char *port){
             perror("write");
             return NULL;
           }
+
+          free(buff);
           
           pthread_t daemon_thread;
 
@@ -239,15 +243,16 @@ open_srvctcp(char *port){
 size_t
 send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
-  printf("Calling send ctcp\n");
+  printf("Calling send ctcp curr block %d maxblockno %d maxblockno.len %d\n", sk->curr_block, sk->maxblockno,  sk->blocks[sk->maxblockno%NUM_BLOCKS].len);
   if (usr_buf_len == 0){
     return 0;
   }
 
+  size_t bytes_read;
   uint32_t bytes_left = usr_buf_len;
   int block_len_tmp;
 
-  int i = sk->curr_block;
+  int i = sk->maxblockno;
   while (bytes_left > 0){
     pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
 
@@ -260,24 +265,31 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
     block_len_tmp = sk->blocks[i%NUM_BLOCKS].len;   // keep the block len before reading
     
-    bytes_left -= readBlock(&(sk->blocks[i%NUM_BLOCKS]), usr_buf+usr_buf_len-bytes_left, bytes_left);
-    printf("bytes_read %d bytes_left %d maxblockno %d currblock %d\n", usr_buf_len - bytes_left, bytes_left,  sk->maxblockno, sk->curr_block);
+    bytes_read = readBlock(&(sk->blocks[i%NUM_BLOCKS]), usr_buf+usr_buf_len-bytes_left, bytes_left);
+    bytes_left -= bytes_read;
+    printf("bytes_read %d bytes_left %d maxblockno %d blockno %d\n", bytes_read, bytes_left,  sk->maxblockno, i);
 
-    coding_job_t* job = malloc(sizeof(coding_job_t));
-    job->socket = sk;
-    job->blockno = i;
-    job->dof_request = sk->blocks[i%NUM_BLOCKS].len - block_len_tmp;   //(int) ceil(BLOCK_SIZE*1.0);
-    job->coding_wnd = 0; //INIT_CODING_WND;  TODO: remove comment if stable
-    sk->dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
-    addJob(&(sk->workers), &coding_job, job, &free, LOW);
 
-    sk->maxblockno = i;
-    sk->dof_req_latest = job->dof_request;
+    if (bytes_read > 0) {
+      coding_job_t* job = malloc(sizeof(coding_job_t));
+      job->socket = sk;
+      job->blockno = i;
+      job->dof_request = sk->blocks[i%NUM_BLOCKS].len - block_len_tmp;   //(int) ceil(BLOCK_SIZE*1.0);
+      job->coding_wnd = 0; //INIT_CODING_WND;  TODO: remove comment if stable
+      sk->dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+      addJob(&(sk->workers), &coding_job, job, &free, LOW);
+
+      sk->maxblockno = i;
+      if (i == sk->curr_block){
+        sk->dof_req_latest += job->dof_request;
+      }
+    }
 
     pthread_rwlock_unlock(&(sk->blocks[i%NUM_BLOCKS].block_rwlock));
     pthread_cond_signal( &(sk->blocks[i%NUM_BLOCKS].block_ready_condv));
     pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
 
+    printf("Total bytes_read %d bytes_left %d maxblockno %d currblock %d\n", usr_buf_len - bytes_left, bytes_left,  sk->maxblockno, sk->curr_block);
     i++;
   }
   /*
@@ -547,6 +559,7 @@ send_FIN_CLI(srvctcp_sock* sk){
   }
   free(msg->payload);
   free(msg);
+  free(buff);
   return 0;
 }
 
@@ -777,6 +790,7 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
   free(msg->packet_coeff);
   free(msg->payload);
   free(msg);
+  free(buff);
   //printf("---------- Done Freeing the message\n-------------");
 }
 
@@ -1097,18 +1111,17 @@ coding_job(void *a){
   int coding_wnd = job->coding_wnd;
   srvctcp_sock* sk = job->socket;
 
-  pthread_rwlock_rdlock(&(sk->blocks[blockno%NUM_BLOCKS].block_rwlock));
-
   // Check if the blockno is already done
  
   if( blockno < sk->curr_block ){
       if (sk->debug > 5){
         printf("Coding job request for old block - curr_block %d blockno %d dof_request %d \n\n", sk->curr_block,  blockno, dof_request);
       }
-      pthread_rwlock_unlock(&(sk->blocks[blockno%NUM_BLOCKS].block_rwlock));
       return NULL;
   }
   
+
+  pthread_mutex_lock(&(sk->blocks[blockno%NUM_BLOCKS].block_mutex));
 
   // Check whether the requested blockno is already read, if not, read it from the file
   // generate the first set of degrees of freedom according toa  random permutation
@@ -1118,10 +1131,12 @@ coding_job(void *a){
   if (block_len  == 0){
     printf("Error: Block not read yet\n");
 
-    pthread_rwlock_unlock( &(sk->blocks[blockno%NUM_BLOCKS].block_rwlock) );
+    pthread_mutex_unlock(&(sk->blocks[blockno%NUM_BLOCKS].block_mutex));
     return NULL;
   } 
   
+  ////////////////////////////// UNCODED PACKETIZATION REQUEST ///////////////////////
+
   if (coding_wnd == 0){
 
     coding_wnd = 1;
@@ -1187,6 +1202,8 @@ coding_job(void *a){
     dof_request = MAX(0, dof_request - block_len);  // This many more to go
   }
 
+  ///////////////////// ACTUAL RANDOM LINEAR CODING ///////////////////
+
   if (dof_request > 0){
     // Extra degrees of freedom are generated by picking a row randomly
 
@@ -1234,7 +1251,9 @@ coding_job(void *a){
   //printf("Almost done with block %d - q size %d\n", blockno, coded_q[blockno%NUM_BLOCKS].size);
   //pthread_mutex_unlock(&coded_q[blockno%NUM_BLOCKS].q_mutex_);
 
-  pthread_rwlock_unlock( &(sk->blocks[blockno%NUM_BLOCKS].block_rwlock) );
+
+  pthread_mutex_unlock(&(sk->blocks[blockno%NUM_BLOCKS].block_mutex));
+
   return NULL;
 }
 
@@ -1388,7 +1407,7 @@ marshallData(Data_Pckt msg, char* buf){
     + sizeof(msg.num_packets)
     + msg.num_packets*sizeof(msg.packet_coeff);
 
-  //Set to zeroes before starting
+  //Set to zeroes before startingr
   memset(buf, 0, size);
 
   // Marshall the fields of the packet into the buffer
@@ -1529,7 +1548,7 @@ create_srvctcp_sock(void){
 
   sk->dof_req_latest = BLOCK_SIZE;
   sk->curr_block = 1;
-  sk->maxblockno = 0;
+  sk->maxblockno = 1;
 
   for(i = 0; i < NUM_BLOCKS; i++){
     sk->dof_remain[i] = 0;
