@@ -98,6 +98,7 @@ typedef struct{
 
 typedef struct{
   uint32_t blockno;
+  int start;
   int dof_request;
   int coding_wnd;
   srvctcp_sock* socket;

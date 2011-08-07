@@ -82,7 +82,7 @@ main (int argc, char** argv){
      } else{
        // read from the file and send over ctcp socket
 
-       size_t buf_size = 10000000;
+       size_t buf_size = 2000000;
        size_t f_bytes_read, bytes_sent;
        char *file_buff = malloc(buf_size*sizeof(char));
        size_t total_bytes_sent =0;
@@ -243,7 +243,7 @@ open_srvctcp(char *port){
 size_t
 send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
-  printf("Calling send ctcp curr block %d maxblockno %d maxblockno.len %d\n", sk->curr_block, sk->maxblockno,  sk->blocks[sk->maxblockno%NUM_BLOCKS].len);
+  //printf("Calling send ctcp curr block %d maxblockno %d maxblockno.len %d\n", sk->curr_block, sk->maxblockno,  sk->blocks[sk->maxblockno%NUM_BLOCKS].len);
   if (usr_buf_len == 0){
     return 0;
   }
@@ -267,15 +267,16 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
     
     bytes_read = readBlock(&(sk->blocks[i%NUM_BLOCKS]), usr_buf+usr_buf_len-bytes_left, bytes_left);
     bytes_left -= bytes_read;
-    printf("bytes_read %d bytes_left %d maxblockno %d blockno %d\n", bytes_read, bytes_left,  sk->maxblockno, i);
+    //printf("bytes_read %d bytes_left %d maxblockno %d blockno %d\n", bytes_read, bytes_left,  sk->maxblockno, i);
 
 
     if (bytes_read > 0) {
       coding_job_t* job = malloc(sizeof(coding_job_t));
       job->socket = sk;
       job->blockno = i;
-      job->dof_request = sk->blocks[i%NUM_BLOCKS].len - block_len_tmp;   //(int) ceil(BLOCK_SIZE*1.0);
-      job->coding_wnd = 0; //INIT_CODING_WND;  TODO: remove comment if stable
+      job->start = block_len_tmp;
+      job->dof_request = sk->blocks[i%NUM_BLOCKS].len - block_len_tmp;
+      job->coding_wnd = 0;
       sk->dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
       addJob(&(sk->workers), &coding_job, job, &free, LOW);
 
@@ -289,7 +290,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
     pthread_cond_signal( &(sk->blocks[i%NUM_BLOCKS].block_ready_condv));
     pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
 
-    printf("Total bytes_read %d bytes_left %d maxblockno %d currblock %d\n", usr_buf_len - bytes_left, bytes_left,  sk->maxblockno, sk->curr_block);
+    //printf("Total bytes_read %d bytes_left %d maxblockno %d currblock %d\n", usr_buf_len - bytes_left, bytes_left,  sk->maxblockno, sk->curr_block);
     i++;
   }
   /*
@@ -557,7 +558,8 @@ send_FIN_CLI(srvctcp_sock* sk){
     perror("send_Fin_Cli error: sent fewer bytes");
     return -1;
   }
-  free(msg->payload);
+  
+  //free(msg->payload);
   free(msg);
   free(buff);
   return 0;
@@ -568,10 +570,14 @@ send_segs(srvctcp_sock* sk, int pin){
 
   if (sk->dof_req_latest == 0){
     //printf("waiting on block ready %d\n", sk->curr_block);
+    
     pthread_mutex_lock(   &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex) );
     pthread_cond_signal(  &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv));
     pthread_cond_wait(    &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_ready_condv), &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
     pthread_mutex_unlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex) );
+    
+    //printf("Returned from block ready %d\n", sk->curr_block);
+
   }
 
 
@@ -693,6 +699,7 @@ send_segs(srvctcp_sock* sk, int pin){
       coding_job_t* job = malloc(sizeof(coding_job_t));
       job->socket = sk;
       job->blockno = blockno;
+      job->start = 0;
       job->dof_request = MIN_DOF_REQUEST + dof_needed - sk->dof_remain[blockno%NUM_BLOCKS];
       sk->dof_remain[blockno%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
       job->coding_wnd = MAX_CODING_WND;
@@ -788,7 +795,9 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
   //printf("Freeing the message - blockno %d snd_nxt[path_id] %d ....", blockno, snd_nxt[path_id]);
   sk->opkts++;
   free(msg->packet_coeff);
-  free(msg->payload);
+  if (msg->num_packets > 1){
+    free(msg->payload);
+  }
   free(msg);
   free(buff);
   //printf("---------- Done Freeing the message\n-------------");
@@ -875,6 +884,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
   while (ack->blockno > sk->curr_block){
     // Moving on to a new block
+
+    //printf("waiting on block mutex to free block %d\n", sk->curr_block);
 
     pthread_mutex_lock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
     pthread_rwlock_wrlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
@@ -1107,6 +1118,7 @@ coding_job(void *a){
   //printf("Job processed by thread %lu: blockno %d dof %d\n", pthread_self(), job->blockno, job->dof_request);
 
   uint32_t blockno = job->blockno;
+  int start = job->start;
   int dof_request = job->dof_request;
   int coding_wnd = job->coding_wnd;
   srvctcp_sock* sk = job->socket;
@@ -1141,50 +1153,31 @@ coding_job(void *a){
 
     coding_wnd = 1;
   
-    // Compute a random permutation of the rows
-
-    uint8_t order[dof_request];
-    int i, j, swap_temp;
-    for (i=0; i < dof_request; i++){
-      order[i] = i + block_len - dof_request;
-    }
-
-    // Permutations disabled 
     /*
-    for (i=block_len - 1; i > 0; i--){
-      j = random()%(i+1);
-      swap_temp = order[i];
-      order[i] = order[j];
-      order[j] = swap_temp;
-      } */ 
-
-    // Make sure this never happens!
     if (dof_request < block_len){
       printf("Error: the initially requested dofs are less than the block length - blockno %d dof_request %d block_len %d\n\n\n\n\n",  blockno, dof_request, block_len);
     }
-
+    */
 
     // Generate random combination by picking rows based on order
-    int dof_ix, row;
-    for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
-      uint8_t num_packets = MIN(coding_wnd, block_len);
-      Data_Pckt *msg = dataPacket(0, blockno, num_packets);
+    int row;
+    int end = MIN((start + dof_request), block_len);
+    for (row = start; row < end; row++){
 
-      row = order[dof_ix];
+      //      Data_Pckt *msg = dataPacket(0, blockno, num_packets);
 
-      // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
-      msg->start_packet = MIN(MAX(row%block_len - (coding_wnd-1)/2, 0), MAX(block_len - coding_wnd, 0));
-      //memset(msg->payload, 0, PAYLOAD_SIZE);
+      // creat a new data packet 
+      Data_Pckt* msg    = (Data_Pckt*) malloc(sizeof(Data_Pckt));
+      msg->flag         = NORMAL;
+      msg->blockno      = blockno;
+      msg->num_packets  = 1;
+      msg->packet_coeff = (uint8_t*) malloc(sizeof(uint8_t));
+
+      msg->start_packet = row;
       msg->packet_coeff[0] = 1;
-      memcpy(msg->payload, sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet], PAYLOAD_SIZE);
 
-      for(i = 1; i < num_packets; i++){
-        msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
-        for(j = 0; j < PAYLOAD_SIZE; j++){
-          msg->payload[j] ^= FFmult(msg->packet_coeff[i], sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j]);
-        }
-      }
-      
+      msg->payload = sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet];
+
       /*
         printf("Pushing ... block %d, row %d \t start pkt %d\n", blockno, row, msg->start_packet);
         fprintf(stdout, "before BEFORE push  queue size %d HEAD %d, TAIL %d\n",coded_q[blockno%NUM_BLOCKS].size, coded_q[blockno%NUM_BLOCKS].head, coded_q[blockno%NUM_BLOCKS].tail);
@@ -1199,7 +1192,7 @@ coding_job(void *a){
       */
       q_push_back(&(sk->coded_q[blockno%NUM_BLOCKS]), msg);
     }  // Done with forming the initial set of coded packets
-    dof_request = MAX(0, dof_request - block_len);  // This many more to go
+    dof_request = MAX(0, dof_request - (block_len - start));  // This many more to go
   }
 
   ///////////////////// ACTUAL RANDOM LINEAR CODING ///////////////////
@@ -1266,7 +1259,9 @@ free_coded_pkt(void* a)
   Data_Pckt* msg = (Data_Pckt*) a;
   //printf("freeing msg blockno %d start pkt %d\n", msg->blockno, msg->start_packet);
   free(msg->packet_coeff);
-  free(msg->payload);
+  if (msg->num_packets > 1){
+    free(msg->payload);
+  }
   free(msg);
 }
 

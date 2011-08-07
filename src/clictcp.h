@@ -22,7 +22,7 @@ typedef struct{
 #define MAX_SUBSTREAMS 5
 
 #define SYN_ACK_TO 5000   // in milliseconds
-#define TIMEOUT 1000
+#define TIMEOUT 5000
 #define POLL_TO_FLG -7
 
 FILE *rcv_file;
