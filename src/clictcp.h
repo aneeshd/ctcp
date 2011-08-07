@@ -22,7 +22,7 @@ typedef struct{
 #define MAX_SUBSTREAMS 5
 
 #define SYN_ACK_TO 5000   // in milliseconds
-#define TIMEOUT 1000
+#define TIMEOUT 5000
 #define POLL_TO_FLG -7
 
 FILE *rcv_file;
@@ -79,7 +79,7 @@ int  poll_SYN_ACK(clictcp_sock *csk);
 
 clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file);
 uint32_t  read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count);
-
+void partial_write(clictcp_sock* csk);
  
 #endif // ATOUSRV_H_
 

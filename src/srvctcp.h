@@ -97,6 +97,7 @@ typedef struct{
 
 typedef struct{
   uint32_t blockno;
+  int start;
   int dof_request;
   int coding_wnd;
   srvctcp_sock* socket;
@@ -137,8 +138,8 @@ int sockaddr_cmp(struct sockaddr* addr1, struct sockaddr* addr2);
 srvctcp_sock* create_srvctcp_sock(void);
 srvctcp_sock* open_srvctcp(char *port);
 
-uint32_t send_ctcp(srvctcp_sock* sk, const void *usr_buf, size_t usr_buf_len);
-
+size_t send_ctcp(srvctcp_sock* sk, const void *usr_buf, size_t usr_buf_len);
+void *server_worker(void *arg);
 
 #endif // ATOUCLI_H_
 
