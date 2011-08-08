@@ -279,7 +279,9 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
     pthread_rwlock_wrlock(&(sk->blocks[i%NUM_BLOCKS].block_rwlock));
 
     block_len_tmp = sk->blocks[i%NUM_BLOCKS].len;   // keep the block len before reading
-    
+    if(i < sk->curr_block){
+      printf("**ERROR** reading block %d, currblock %d\n", i, sk->curr_block);
+    }
     bytes_read = readBlock(&(sk->blocks[i%NUM_BLOCKS]), usr_buf+usr_buf_len-bytes_left, bytes_left);
     bytes_left -= bytes_read;
     //printf("bytes_read %d bytes_left %d maxblockno %d blockno %d\n", bytes_read, bytes_left,  sk->maxblockno, i);

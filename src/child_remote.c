@@ -58,6 +58,20 @@ int handle_con(int ctcp_port)
   ** Start autodestruct timer and begin 
   ** SOCKS connection negotiation
   */
+
+  sprintf(buf, "%d", ctcp_port);
+  ctcp_sk = open_srvctcp(buf);
+
+  if (ctcp_sk == NULL){
+    sprintf(buf,"Failed to create the CTCP socket\n");
+    logstr(buf,NULL);
+    res = ERR_SRVCTCP;
+    return res;
+  } else{
+    sprintf(buf,"Successfully created the CTCP socket\n");
+    logstr(buf,NULL);
+  }
+
   start_timer(neg_timeo);
   res = negotiate(&ad_cl_local, ctcp_port);
 
@@ -79,18 +93,6 @@ int handle_con(int ctcp_port)
     return res;
   }
     
-  sprintf(buf, "%d", ctcp_port);
-  ctcp_sk = open_srvctcp(buf);
-
-  if (ctcp_sk == NULL){
-    sprintf(buf,"Failed to create the CTCP socket\n");
-    logstr(buf,NULL);
-    res = ERR_SRVCTCP;
-    return res;
-  } else{
-    sprintf(buf,"Successfully created the CTCP socket\n");
-    logstr(buf,NULL);
-  }
 
   /*
   ** No errors encountered so far. Let the client
