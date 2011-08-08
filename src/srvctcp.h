@@ -6,7 +6,7 @@
 #include "thr_pool.h"
 #include "qbuffer.h"
 // ------------ Connection parameters ---------------//
-#define BUFFSIZE    65535
+#define BUFFSIZE    3000
 #define MAX_CONNECT 5
 
 // ------------ CTCP parameters ---------------//

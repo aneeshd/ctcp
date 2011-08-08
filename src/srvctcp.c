@@ -238,6 +238,7 @@ open_srvctcp(char *port){
       printf("Expecting SYN packet, received something else\n");
     }
 
+    free(buff);
     return NULL;
 }
 
@@ -545,7 +546,7 @@ send_FIN_CLI(srvctcp_sock* sk){
   Data_Pckt *msg = dataPacket(0, sk->curr_block, 0);
   msg->tstamp = getTime();
   // FIN_CLI
-  msg->flag = FIN_CLI;
+  msg->flag = FIN;
 
   int size = marshallData(*msg, buff);
 

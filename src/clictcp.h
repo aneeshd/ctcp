@@ -13,7 +13,7 @@ typedef struct{
 } dhcp_lease;
 
 //---------------- DEFAULT CONNECTION PARAMETERS ------------------//
-#define BUFFSIZE  65536
+#define BUFFSIZE  3000
 #define PORT "9999"
 #define HOST "127.0.0.1"
 #define FILE_NAME "Honda"

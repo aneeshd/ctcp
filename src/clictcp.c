@@ -160,8 +160,6 @@ main(int argc, char** argv){
 clictcp_sock*
 connect_ctcp(char *host, char *port, char *lease_file){
     int optlen,rlth;
-    double dbuff[BUFFSIZE/8];
-    char *buff = (char *)dbuff;  
     struct addrinfo *result;
     int k; // for loop counter
     int rv;
@@ -254,6 +252,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
     }
     printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
+    char* buff = malloc(BUFFSIZE);
     memset(buff,0,BUFFSIZE);        /* pretouch */
 
     // ------------  Send a SYN packet for any new connection ----------------
@@ -266,6 +265,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
       if((numbytes = sendto(csk->sockfd[k], buff, size, 0,
                             result->ai_addr, result->ai_addrlen)) == -1){
         perror("Failed to send SYN packet");
+        free(buff);
         return NULL;
       }
       printf("New connection request sent to server on socket %d\n", k+1);
@@ -273,6 +273,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
 
     if (poll_SYN_ACK(csk) == -1){
       printf("Did not receive SYN ACK\n");
+      free(buff);
       return NULL;
     }
 
@@ -285,7 +286,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
     rv = pthread_create( &daemon_thread, NULL, handle_connection, (void *) csk);
 
     // TODO TODO We need to have a close function to join the threads and gracefully close the connection
-
+    free(buff);
     return csk;
 }
 
@@ -301,11 +302,9 @@ void
 *handle_connection(void* arg){
 
   clictcp_sock* csk = (clictcp_sock*) arg;
-
   socklen_t srvlen;
-  double dbuff[BUFFSIZE/8];
-  char *buff = (char *)dbuff;
   int k, numbytes;//[MAX_SUBSTREAMS];
+  char *buff = malloc(BUFFSIZE);
 
   // READING FROM MULTIPLE SOCKET
   struct pollfd read_set[csk->substreams];
@@ -352,7 +351,7 @@ void
 
           switch (msg->flag){
 
-          case FIN_CLI:
+          case FIN:
             ctrlc(csk);
             break;
 
@@ -389,6 +388,7 @@ void
     // NOTE that the ones that are not active can be zero, or any value.
   }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc
 
+  free(buff);
   ctrlc(csk);
 
   pthread_exit(NULL);
@@ -407,8 +407,7 @@ err_sys(char *s, clictcp_sock *csk){
 void
 bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
   socklen_t srvlen;
-  double dbuff[BUFFSIZE/8];
-  char *buff = (char *)dbuff;
+  char *buff = malloc(BUFFSIZE);
   double elimination_timer = getTime();
   uint32_t blockno = msg->blockno;    //The block number of incoming packet
   uint8_t start;
@@ -593,6 +592,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
         }
     } // end if the block is done
 
+    free(buff);
 }
 //========================== END Build Ack ===============================================================
 
@@ -1103,9 +1103,7 @@ create_clictcp_sock(void){
 
 int 
 poll_SYN_ACK(clictcp_sock *csk){
-  
-  double dbuff[BUFFSIZE/8];
-  char *buff = (char *)dbuff;  
+  char *buff = malloc(BUFFSIZE);
   Data_Pckt *msg = malloc(sizeof(Data_Pckt));
   int k, ready, numbytes;
   int curr_substream = 0;
@@ -1123,9 +1121,11 @@ poll_SYN_ACK(clictcp_sock *csk){
 
   if(ready == -1){
     perror("poll");
+    free(buff);
     return -1;
   }else if (ready == 0){
     printf("Timeout occurred during poll!\n");
+    free(buff);
     return -1;
   }else{
     srvlen = sizeof(csk->srv_addr);
@@ -1136,14 +1136,19 @@ poll_SYN_ACK(clictcp_sock *csk){
                                 &(csk->srv_addr), &srvlen)) == -1){
           err_sys("recvfrom",csk);
         }
-        if(numbytes <= 0) return -1;
+        if(numbytes <= 0) {
+          free(buff);
+          return -1;
+        }
           
         // Unmarshall the packet
         bool match = unmarshallData(msg, buff, csk);
         if (msg->flag == SYN_ACK){
+          free(buff);
           return 0;
         }else{
           printf("Expected SYN ACK, received something else!\n");
+          free(buff);
           return -1;
         }
       }
@@ -1151,7 +1156,7 @@ poll_SYN_ACK(clictcp_sock *csk){
       curr_substream++;
     }  /* end while */
   }
-
+  free(buff);
   return -1;
 
 }
