@@ -270,9 +270,10 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
   int i = sk->maxblockno;
   while (bytes_left > 0){
     pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+    i = MAX(i, sk->maxblockno);
 
     if (i == sk->curr_block + NUM_BLOCKS){
-      //printf("waiting on block free %d\n", sk->curr_block);
+      printf("waiting on block free %d\n", sk->curr_block);
       pthread_cond_wait( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv), &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
     }
 
@@ -295,6 +296,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       job->dof_request = sk->blocks[i%NUM_BLOCKS].len - block_len_tmp;
       job->coding_wnd = 0;
       sk->dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
+      //printf("send_ctcp adding job: blockno %d, dofrequested %d \n", i, job->dof_request);
       addJob(&(sk->workers), &coding_job, job, &free, LOW);
 
       sk->maxblockno = i;
@@ -1159,7 +1161,7 @@ coding_job(void *a){
   uint8_t block_len = sk->blocks[blockno%NUM_BLOCKS].len;
   
   if (block_len  == 0){
-    printf("Error: Block not read yet\n");
+    printf("Error: Block %d not read yet\n", blockno);
 
     pthread_mutex_unlock(&(sk->blocks[blockno%NUM_BLOCKS].block_mutex));
     return NULL;

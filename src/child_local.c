@@ -319,7 +319,7 @@ int connect_client()
     host_ip.s_addr = (unsigned long)pcon->proxy->ip;
 
     host_addr = inet_ntoa(host_ip);
-    printf("Sending CTCP request to %s port %s pcon->ctcp_port %s\n", host_addr, ctcp_port, pcon->ctcp_port);
+    printf("Sending CTCP request to %s port %s\n", host_addr, ctcp_port);
 
     csk = connect_ctcp(host_addr, ctcp_port, NULL);
 
@@ -571,8 +571,6 @@ void
     // read a few bytes from ctcp
     bptr = 0;
     btop = read_ctcp(csk, buf, buf_size);  
-    printf("read_ctcp: %d\n", btop);
-
     //fprintf(stdout, "received %d bytes over CTCP\n", btop);
 
     //write those bytes to sk_client (TCP) socket using a while loop

@@ -646,7 +646,7 @@ partial_write(clictcp_sock* csk){
           bytes_pushed += fifo_push(&(csk->usr_cache), csk->blocks[blockno%NUM_BLOCKS].content[start]+2+bytes_pushed, payload_len - bytes_pushed);
         }
 
-        printf("blockno %d dofs %d max_pkt_ix %d dofs_pushed %d payload_len %d\n", blockno, csk->blocks[blockno%NUM_BLOCKS].dofs, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start, payload_len);
+        //printf("blockno %d dofs %d max_pkt_ix %d dofs_pushed %d payload_len %d\n", blockno, csk->blocks[blockno%NUM_BLOCKS].dofs, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start, payload_len);
         start++;
 
       }else{
