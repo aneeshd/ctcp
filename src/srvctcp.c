@@ -117,14 +117,9 @@ main (int argc, char** argv){
 
 
 srvctcp_sock*
-open_srvctcp(char *port){
-
-    char *buff = malloc(BUFFSIZE);
+open_srvctcp(char *port){ 
     int numbytes;
-    struct sockaddr cli_addr;
-    socklen_t clilen = sizeof(cli_addr);
-    char* log_name = NULL; // Name of the log
-    
+  
     struct addrinfo *result; //This is where the info about the server is stored
     struct addrinfo hints, *servinfo;
     int rv;
@@ -166,6 +161,7 @@ open_srvctcp(char *port){
         return NULL;
     }
 
+    freeaddrinfo(result);
 
     int sndbuf     = MSS*MAX_CWND;/* UDP send buff, bigger than mss */
     int rcvbuf     = MSS*MAX_CWND;/* UDP recv buff for ACKs*/
@@ -182,64 +178,78 @@ open_srvctcp(char *port){
     //printf("Trying to bind to address %s port %d\n", inet_ntoa(((struct sockaddr_in*) &(result->ai_addr))->sin_addr), ((struct sockaddr_in*)&(result->ai_addr))->sin_port);
 
     /*------------------------WAIT FOR SYN PACKETS TO COME--------------------------------------------------*/
-
     printf("Listening for SYN on port %s\n", port);
+    return sk;
+}
 
-    Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
-    memset(buff,0,BUFFSIZE);        /* pretouch */
+/*
+  returns 0 success
+  returns -1 error
+ */
 
-    if((numbytes = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) == -1){
-      perror("recvfrom: Failed to receive the request\n");
-      return NULL;
-    }
+int
+listen_srvctcp(srvctcp_sock* sk){
+  struct sockaddr cli_addr;
+  socklen_t clilen = sizeof(cli_addr);
+  int numbytes, rv;
+  char *buff = malloc(BUFFSIZE);
+  char* log_name = NULL; // Name of the log
+  
+  Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
+  memset(buff,0,BUFFSIZE);        /* pretouch */
+  
+  if((numbytes = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) == -1){
+    perror("recvfrom: Failed to receive the request\n");
+    return -1;
+  }
     
-    unmarshallAck(ack, buff);
+  unmarshallAck(ack, buff);
 
-    if (ack->flag == SYN){
-          printf("Request for a new session: Client address %s Client port %d\n", 
-                 inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
-                 ((struct sockaddr_in*)&cli_addr)->sin_port);
+  if (ack->flag == SYN){
+    printf("Request for a new session: Client address %s Client port %d\n", 
+           inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
+           ((struct sockaddr_in*)&cli_addr)->sin_port);
 
-          if (sk->debug > 3) openLog(sk, log_name);
+    if (sk->debug > 3) openLog(sk, log_name);
 
-          Substream_Path *stream = malloc(sizeof(Substream_Path));
-          init_stream(sk, stream);
-          // Save the client address as the primary client
-          // cli_addr set the main loop...
-          stream->cli_addr = cli_addr;
-          sk->active_paths[0] = stream;
-          sk->num_active++;
+    Substream_Path *stream = malloc(sizeof(Substream_Path));
+    init_stream(sk, stream);
+    // Save the client address as the primary client
+    // cli_addr set the main loop...
+    stream->cli_addr = cli_addr;
+    sk->active_paths[0] = stream;
+    sk->num_active++;
 
 
-          Data_Pckt* msg = dataPacket(0, 0, 0);
-          msg->flag = SYN_ACK;
-          // Marshall msg into buf
-          int message_size = marshallData(*msg, buff);
+    Data_Pckt* msg = dataPacket(0, 0, 0);
+    msg->flag = SYN_ACK;
+    // Marshall msg into buf
+    int message_size = marshallData(*msg, buff);
 
-          if((numbytes = sendto(sk->sockfd, buff, message_size, 0,
-                                &cli_addr, clilen)) == -1){
-            perror("Could not send the SYN_ACK");
-            return NULL;
-          }
+    if((numbytes = sendto(sk->sockfd, buff, message_size, 0,
+                          &cli_addr, clilen)) == -1){
+      perror("Could not send the SYN_ACK");
+      return -1;
+    }
 
-          if(numbytes != message_size){
-            perror("write");
-            return NULL;
-          }
-
-          free(buff);
-          
-          pthread_t daemon_thread;
-
-          rv = pthread_create( &daemon_thread, NULL, server_worker, (void *) sk);
-          
-          return sk;
-    } else{
-      printf("Expecting SYN packet, received something else\n");
+    if(numbytes != message_size){
+      perror("write");
+      return -1;
     }
 
     free(buff);
-    return NULL;
+          
+    pthread_t daemon_thread;
+
+    rv = pthread_create( &daemon_thread, NULL, server_worker, (void *) sk);
+          
+    return 0;
+  } else{
+    printf("Expecting SYN packet, received something else\n");
+  }
+
+  free(buff);
+  return -1;
 }
 
 /*

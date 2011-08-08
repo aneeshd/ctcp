@@ -27,7 +27,7 @@ typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK} flag_t;
     + sizeof(int)               \
     + sizeof(uint32_t)          \
     + sizeof(uint32_t)          \
-    + sizeof(uint8_t)
+    + sizeof(uint8_t)           
 
 #define PAYLOAD_SIZE (MSS \
   - UDP_HEADER_SIZE \
@@ -37,7 +37,7 @@ typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK} flag_t;
    + sizeof(uint32_t) \
    + sizeof(uint8_t) \
    + sizeof(uint8_t) \
-   + MAX_CODING_WND*sizeof(uint8_t) ) )
+   + MAX_CODING_WND*sizeof(uint8_t) ) ) 
 
 typedef int socket_t;
 typedef struct timeval timeval_t;

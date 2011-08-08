@@ -79,6 +79,19 @@ int handle_con(int ctcp_port)
     return res;
   }
     
+  sprintf(buf, "%d", ctcp_port);
+  ctcp_sk = open_srvctcp(buf);
+
+  if (ctcp_sk == NULL){
+    sprintf(buf,"Failed to create the CTCP socket\n");
+    logstr(buf,NULL);
+    res = ERR_SRVCTCP;
+    return res;
+  } else{
+    sprintf(buf,"Successfully created the CTCP socket\n");
+    logstr(buf,NULL);
+  }
+
   /*
   ** No errors encountered so far. Let the client
   ** know that the negotiation succeeded.
@@ -102,18 +115,11 @@ int handle_con(int ctcp_port)
   logstr(buf,&ad_client);
     
 
-  sprintf(buf, "%d", ctcp_port);
-  ctcp_sk = open_srvctcp(buf);
-
-  if (ctcp_sk == NULL){
-    sprintf(buf,"Failed to create the CTCP socket\n");
-    logstr(buf,NULL);
+  if(listen_srvctcp(ctcp_sk)==-1){
+    printf("Failed to listen..\n");
     res = ERR_SRVCTCP;
-  } else{
-    sprintf(buf,"Successfully created the CTCP socket\n");
-    logstr(buf,NULL);
+    return res;
   }
-
 
   /*
   ** Handle the actual data traffic between the client

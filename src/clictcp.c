@@ -612,7 +612,7 @@ partial_write(clictcp_sock* csk){
     unwrap(&(csk->blocks[blockno%NUM_BLOCKS]));
  }
 
-  //printf("blockno %d dofs %d max_pkt_ix %d dofs_pushed %d\n", blockno, csk->blocks[blockno%NUM_BLOCKS].dofs, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start);
+
 
   do {
     if ( csk->blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
@@ -629,14 +629,15 @@ partial_write(clictcp_sock* csk){
     if (push_ready){
       // check the queue size
       // if enough room, push, otherwise, exit the push process
-      if (fifo_getspace(&(csk->usr_cache)) >= PAYLOAD_SIZE){
-        // push the packet to user cache
-
         // Read the first two bytes containing the length of the useful data
         memcpy(&payload_len, csk->blocks[blockno%NUM_BLOCKS].content[start], 2);
 
         // Convert to host order
         payload_len = ntohs(payload_len);
+      if (fifo_getspace(&(csk->usr_cache)) >= payload_len){
+        // push the packet to user cache
+
+
         // Write the contents of the decode block into the file
         //fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
 
@@ -645,7 +646,9 @@ partial_write(clictcp_sock* csk){
           bytes_pushed += fifo_push(&(csk->usr_cache), csk->blocks[blockno%NUM_BLOCKS].content[start]+2+bytes_pushed, payload_len - bytes_pushed);
         }
 
+        printf("blockno %d dofs %d max_pkt_ix %d dofs_pushed %d payload_len %d\n", blockno, csk->blocks[blockno%NUM_BLOCKS].dofs, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start, payload_len);
         start++;
+
       }else{
         push_ready = FALSE;
       }

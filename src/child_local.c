@@ -571,6 +571,7 @@ void
     // read a few bytes from ctcp
     bptr = 0;
     btop = read_ctcp(csk, buf, buf_size);  
+    printf("read_ctcp: %d\n", btop);
 
     //fprintf(stdout, "received %d bytes over CTCP\n", btop);
 
