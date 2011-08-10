@@ -136,6 +136,11 @@ int handle_con()
   sprintf(buf,"TCP Connection closed (%s)",sz_error[res]);
   logstr(buf,&ad_client);
 
+  pthread_join(clictcp_thread, NULL);
+  close_clictcp(csk);
+  
+  printf("CTCP socket (port %s) successfully closed\n", ctcp_port);
+
   close(sk_target);
   return ERR_NONE;
 }
@@ -456,7 +461,7 @@ int handle_traffic()
 	
   while( 1 ) {
 
-    fprintf(stdout, "\n \n handle_traffic: while loop\n", res, bown);
+    //fprintf(stdout, "\n \n handle_traffic: while loop\n", res, bown);
     /*
     ** Setup event masks: if the buffer is not empty, we're
     ** interested in writing to the other socket than the
@@ -466,12 +471,12 @@ int handle_traffic()
     if( bptr < btop ) {
 	    pfd[bown].events  = 0;
 	    pfd[!bown].events = POLLOUT;
-      fprintf(stdout, "handle_traffic: poll out\n", res, bown);
+      //fprintf(stdout, "handle_traffic: poll out\n", res, bown);
     }
     else {
 	    pfd[0].events = POLLIN;
 	    pfd[1].events = POLLIN;
-      fprintf(stdout, "handle_traffic: poll in\n", res, bown);
+      //fprintf(stdout, "handle_traffic: poll in\n", res, bown);
     }
 
     /*
@@ -502,7 +507,7 @@ int handle_traffic()
 	    break;
     }
 
-    fprintf(stdout, "\n bptr %d < btop %d\n", bptr, btop);
+    //fprintf(stdout, "\n bptr %d < btop %d\n", bptr, btop);
     /*
     ** If the buffer is not empty, poll() has returned telling us 
     ** that writting now will not block. Else, there is data to
@@ -515,7 +520,7 @@ int handle_traffic()
         res = ERR_SKFATAL;
         break;
 	    }
-      fprintf(stdout, "\n handle_traffic: write returned %d for %d bown\n", res, bown);
+      //fprintf(stdout, "\n handle_traffic: write returned %d for %d bown\n", res, bown);
 	    bptr += res;
     }
     else {
@@ -527,7 +532,7 @@ int handle_traffic()
         res = ERR_SKFATAL;
         break;
 	    }
-      fprintf(stdout, "\n handle_traffic: read returned %d for %d bown\n", res, bown);
+      //fprintf(stdout, "\n handle_traffic: read returned %d for %d bown\n", res, bown);
 	    if( !res ) {
         // Check that remote closed or client closed -- if remote, then ignore
         res = ERR_NONE;
@@ -577,22 +582,26 @@ void
     // read a few bytes from ctcp
     bptr = 0;
     btop = read_ctcp(csk, buf, buf_size);  
-    fprintf(stdout, "read_ctcp: buf_size %d\n", buf_size);
+    if (btop == -1){
+      free(buf);
+      return NULL;
+    }
+
+    //fprintf(stdout, "read_ctcp: buf_size %d\n", buf_size);
     //fprintf(stdout, "received %d bytes over CTCP\n", btop);
 
     //write those bytes to sk_client (TCP) socket using a while loop
     while( bptr < btop ) {
-      fprintf(stdout, "*** writing to sk_client ");
+      //fprintf(stdout, "*** writing to sk_client ");
 	    while( (res=write(sk_client, buf+bptr, btop-bptr)) < 0 && errno==EINTR ){
-        fprintf(stdout, "*** wrote %d bytes\n", res);
+        //fprintf(stdout, "*** wrote %d bytes\n", res);
       }
 	    if( res<0 ) {
         res = ERR_SKFATAL;
         free(buf);
-        exit(1);
-        //return res;
+        return NULL;
 	    }
-      fprintf(stdout, "%d bytes\n", res);
+      //fprintf(stdout, "%d bytes\n", res);
 	    bptr += res;
     }
   }
@@ -602,7 +611,6 @@ void
   ** Free buffer
   */
   free(buf);
+  return NULL;
 
-  //return res;
-  exit(1);
 }

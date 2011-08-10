@@ -204,6 +204,8 @@ connect_ctcp(char *host, char *port, char *lease_file){
       break;
     }
 
+    csk->srv_addr = *(result->ai_addr);
+
     // If we got here, it means that we couldn't initialize the socket.
     if(result  == NULL){
       perror("Failed to create socket");
@@ -252,28 +254,15 @@ connect_ctcp(char *host, char *port, char *lease_file){
     }
     printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
-    char* buff = malloc(BUFFSIZE);
-    memset(buff,0,BUFFSIZE);        /* pretouch */
-
     // ------------  Send a SYN packet for any new connection ----------------
     for (k = 0; k < csk->substreams; k++){
-      Ack_Pckt* SYN_pkt = ackPacket(0, 0, 0);
-      SYN_pkt->tstamp = 0;
-      SYN_pkt->flag = SYN;
-      int size = marshallAck(*SYN_pkt, buff);
-
-      if((numbytes = sendto(csk->sockfd[k], buff, size, 0,
-                            result->ai_addr, result->ai_addrlen)) == -1){
-        perror("Failed to send SYN packet");
-        free(buff);
-        return NULL;
+      while(send_flag(csk, k, SYN) == -1){
+        printf("Could not send SYN packet \n");
       }
-      printf("New connection request sent to server on socket %d\n", k+1);
     }
 
-    if (poll_SYN_ACK(csk) == -1){
+    if (poll_flag(csk, SYN_ACK) == -1){
       printf("Did not receive SYN ACK\n");
-      free(buff);
       return NULL;
     }
 
@@ -281,20 +270,22 @@ connect_ctcp(char *host, char *port, char *lease_file){
 
     // Let another thread do the job and return the socket
 
-    pthread_t daemon_thread;
-
-    rv = pthread_create( &daemon_thread, NULL, handle_connection, (void *) csk);
+    rv = pthread_create( &(csk->daemon_thread), NULL, handle_connection, (void *) csk);
 
     // TODO TODO We need to have a close function to join the threads and gracefully close the connection
-    free(buff);
-    printf("Done with connecting...\n");
     return csk;
 }
 
 uint32_t 
 read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
+
+  if (csk->status != ACTIVE){
+    csk->error = SRVHUP;
+    return -1;
+  }
+
   size_t res = fifo_pop(&(csk->usr_cache), usr_buf, count);
-  printf("read_ctcp: pop %d bytes, csk->usr_cache size %d\n", res, csk->usr_cache.size);
+  //  printf("read_ctcp: pop %d bytes, csk->usr_cache size %d\n", res, csk->usr_cache.size);
   return res;
 
 }
@@ -354,7 +345,14 @@ void
           switch (msg->flag){
 
           case FIN:
-            ctrlc(csk);
+            csk->status = CLOSED;
+            while(send_flag(csk, 0, FIN_ACK) == -1){
+              printf("Could not send FIN_ACK\n");
+            }
+            break;
+
+          case FIN_ACK:
+            csk->status = CLOSED;
             break;
 
           case SYN_ACK:
@@ -363,7 +361,7 @@ void
 
           case SYN:
             printf("ERROR: received SYN on the client side\n");
-            ctrlc(csk);
+            //            ctrlc(csk);
             break;
 
           default:
@@ -388,10 +386,11 @@ void
     }
     // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
     // NOTE that the ones that are not active can be zero, or any value.
-  }while(numbytes > 0); // TODO doesn't ever seem to exit the loop! Need to ctrlc
+  }while(csk->status == ACTIVE); 
 
+
+  free(msg);
   free(buff);
-  ctrlc(csk);
 
   pthread_exit(NULL);
   
@@ -648,8 +647,8 @@ partial_write(clictcp_sock* csk){
           bytes_pushed += fifo_push(&(csk->usr_cache), csk->blocks[blockno%NUM_BLOCKS].content[start]+2+bytes_pushed, payload_len - bytes_pushed);
         }
 
-        printf("write_ctcp: pushed %d bytes blockno %d max_pkt_ix %d start %d\n", 
-               bytes_pushed, blockno, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start);
+        //printf("write_ctcp: pushed %d bytes blockno %d max_pkt_ix %d start %d\n", 
+        //       bytes_pushed, blockno, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start);
         //printf("blockno %d dofs %d max_pkt_ix %d dofs_pushed %d payload_len %d\n", blockno, csk->blocks[blockno%NUM_BLOCKS].dofs, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start, payload_len);
         start++;
 
@@ -1091,6 +1090,9 @@ create_clictcp_sock(void){
  
   fifo_init(&(sk->usr_cache), NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE);
 
+  sk->status = ACTIVE;
+  sk->error = NONE;
+
   //---------------- STATISTICS & ACCOUTING ------------------//
   sk->pkts = 0;
   sk->acks = 0;
@@ -1108,8 +1110,46 @@ create_clictcp_sock(void){
   return sk;
 }
 
+
+int
+send_flag(clictcp_sock *csk, int path_id, flag_t flag){
+
+  char *buff = malloc(BUFFSIZE);
+  int numbytes;
+  Ack_Pckt *msg = ackPacket(0,0,0);
+  msg->tstamp = getTime();
+  msg->flag = flag;
+
+  int size = marshallAck(*msg, buff);
+
+  do{
+    socklen_t srvlen = sizeof(csk->srv_addr);
+    if((numbytes = sendto(csk->sockfd[path_id], buff, size, 0, &(csk->srv_addr), srvlen)) == -1){
+      perror("send_flag error: sendto");
+      free(msg);
+      free(buff);
+      return -1;
+    }
+  } while(errno == ENOBUFS); // use the while to increment enobufs if the condition is met
+
+  if(numbytes != size){
+    perror("send_flag error: sent fewer bytes");
+    free(msg);
+    free(buff);
+    return -1;
+  }
+  
+  printf("Sent flag *** %d ***\n\n", flag);
+
+  //free(msg->payload);
+  free(msg);
+  free(buff);
+  return 0;
+}
+
+
 int 
-poll_SYN_ACK(clictcp_sock *csk){
+poll_flag(clictcp_sock *csk, flag_t flag){
   char *buff = malloc(BUFFSIZE);
   Data_Pckt *msg = malloc(sizeof(Data_Pckt));
   int k, ready, numbytes;
@@ -1124,7 +1164,7 @@ poll_SYN_ACK(clictcp_sock *csk){
   }
 
   // value -1 blocks until something is ready to read
-  ready = poll(read_set, csk->substreams, SYN_ACK_TO);
+  ready = poll(read_set, csk->substreams, POLL_ACK_TO);
 
   if(ready == -1){
     perror("poll");
@@ -1144,17 +1184,20 @@ poll_SYN_ACK(clictcp_sock *csk){
           err_sys("recvfrom",csk);
         }
         if(numbytes <= 0) {
+          free(msg);
           free(buff);
           return -1;
         }
           
         // Unmarshall the packet
         bool match = unmarshallData(msg, buff, csk);
-        if (msg->flag == SYN_ACK){
+        if (msg->flag == flag){
+          free(msg);
           free(buff);
           return 0;
         }else{
-          printf("Expected SYN ACK, received something else!\n");
+          printf("Expected flag ACK, received something else!\n");
+          free(msg);
           free(buff);
           return -1;
         }
@@ -1163,7 +1206,34 @@ poll_SYN_ACK(clictcp_sock *csk){
       curr_substream++;
     }  /* end while */
   }
+  
+  printf("poll flag *** %d *** \n", flag);
+  free(msg);
   free(buff);
   return -1;
 
+}
+
+
+void
+close_clictcp(clictcp_sock* csk){
+
+  if (csk->status != CLOSED){
+    
+    while(send_flag(csk, 0, FIN) == -1){
+      printf("Could not send the FIN packet\n");
+    }
+
+    csk->status = CLOSED;
+
+    if (poll_flag(csk, FIN_ACK) == -1){
+      printf("Did not receive FIN ACK\n");
+      csk->error = CLOSE_ERR;
+    } 
+  }
+
+  pthread_join(csk->daemon_thread, NULL);
+  free(csk);
+
+  return;
 }
