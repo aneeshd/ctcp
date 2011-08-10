@@ -130,9 +130,11 @@ int handle_con(int ctcp_port)
   res = handle_traffic(ctcp_port);
   sprintf(buf,"Connection closed (%s)",sz_error[res]);
   logstr(buf,&ad_client);
-    
+  
   close(sk_target);
+  close_srvctcp(ctcp_sk);
     
+  // CLOSE CTCP_SRV
   return ERR_NONE;
 }
 

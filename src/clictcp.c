@@ -287,13 +287,15 @@ connect_ctcp(char *host, char *port, char *lease_file){
 
     // TODO TODO We need to have a close function to join the threads and gracefully close the connection
     free(buff);
+    printf("Done with connecting...\n");
     return csk;
 }
 
 uint32_t 
 read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
-
-  return fifo_pop(&(csk->usr_cache), usr_buf, count);
+  size_t res = fifo_pop(&(csk->usr_cache), usr_buf, count);
+  printf("read_ctcp: pop %d bytes, csk->usr_cache size %d\n", res, csk->usr_cache.size);
+  return res;
 
 }
 
@@ -646,6 +648,8 @@ partial_write(clictcp_sock* csk){
           bytes_pushed += fifo_push(&(csk->usr_cache), csk->blocks[blockno%NUM_BLOCKS].content[start]+2+bytes_pushed, payload_len - bytes_pushed);
         }
 
+        printf("write_ctcp: pushed %d bytes blockno %d max_pkt_ix %d start %d\n", 
+               bytes_pushed, blockno, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start);
         //printf("blockno %d dofs %d max_pkt_ix %d dofs_pushed %d payload_len %d\n", blockno, csk->blocks[blockno%NUM_BLOCKS].dofs, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start, payload_len);
         start++;
 

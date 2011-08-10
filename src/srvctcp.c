@@ -13,7 +13,6 @@
 #include <signal.h>
 #include <errno.h>
 #include <time.h>
-
 #include "srvctcp.h"
 
 /*
@@ -24,16 +23,6 @@ ctrlc(srvctcp_sock* sk){
   sk->total_time = getTime() - sk->start_time -2;
   endSession(sk);
   exit(1);
-}
-
-void
-usage()
-{
-    fprintf(stderr, "Usage: srvctcp [-options] \n                   \
-      -c    configuration file to be used ex: config/vegas\n        \
-      -l    set the log name. Defaults to current datetime\n        \
-      -p    port number to listen to. Defaults to 9999\n");
-    exit(0);
 }
 
 /*
@@ -118,74 +107,72 @@ main (int argc, char** argv){
 
 srvctcp_sock*
 open_srvctcp(char *port){ 
-    int numbytes;
+  int numbytes, rv;  
+  struct addrinfo *result; //This is where the info about the server is stored
+  struct addrinfo hints, *servinfo;
+  srvctcp_sock* sk =  create_srvctcp_sock();
   
-    struct addrinfo *result; //This is where the info about the server is stored
-    struct addrinfo hints, *servinfo;
-    int rv;
+  // signal(SIGINT, ctrlc);
 
-    srvctcp_sock* sk =  create_srvctcp_sock();
-  
-    //signal(SIGINT, ctrlc);
+  // Setup the hints struct
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family   = AF_UNSPEC;
+  hints.ai_socktype = SOCK_DGRAM;
+  hints.ai_flags    = AI_PASSIVE;
 
-    // Setup the hints struct
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family   = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags    = AI_PASSIVE;
-
-    // Get the server's info
-    if((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0){
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        perror("");
-        return NULL;
-    }
-    // Loop through all the results and connect to the first possible
-    for(result = servinfo; result != NULL; result = result->ai_next) {
-        if((sk->sockfd = socket(result->ai_family,
+  // Get the server's info
+  if((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0){
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    perror("");
+    return NULL;
+  }
+  // Loop through all the results and connect to the first possible
+  for(result = servinfo; result != NULL; result = result->ai_next) {
+    if((sk->sockfd = socket(result->ai_family,
                             result->ai_socktype,
                             result->ai_protocol)) == -1){
-            perror("Error during socket initialization");
-            continue;
-        }
-        if (bind(sk->sockfd, result->ai_addr, result->ai_addrlen) == -1) {
-            close(sk->sockfd);
-            perror("Can't bind local address");
-            continue;
-        }
-        break;
+      perror("Error during socket initialization");
+      continue;
     }
-
-    if (result == NULL) { // If we are here, we failed to initialize the socket
-        perror("Failed to initialize socket");
-        return NULL;
+    if (bind(sk->sockfd, result->ai_addr, result->ai_addrlen) == -1) {
+      close(sk->sockfd);
+      perror("Can't bind local address");
+      continue;
     }
+    break;
+  }
 
-    freeaddrinfo(result);
+  if (result == NULL) { // If we are here, we failed to initialize the socket
+    perror("Failed to initialize socket");
+    return NULL;
+  }
 
-    int sndbuf     = MSS*MAX_CWND;/* UDP send buff, bigger than mss */
-    int rcvbuf     = MSS*MAX_CWND;/* UDP recv buff for ACKs*/
+  freeaddrinfo(result);
 
-    int i = sizeof(sndbuf);
-    //--------------- Setting the UDP socket options -----------------------------//
-    setsockopt(sk->sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,i);
-    getsockopt(sk->sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,(socklen_t*)&i);
-    setsockopt(sk->sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,i);
-    getsockopt(sk->sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,(socklen_t*)&i);
-    //printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
-    //---------------------------------------------------------------------------//
+  int sndbuf     = MSS*MAX_CWND;/* UDP send buff, bigger than mss */
+  int rcvbuf     = MSS*MAX_CWND;/* UDP recv buff for ACKs*/
 
-    //printf("Trying to bind to address %s port %d\n", inet_ntoa(((struct sockaddr_in*) &(result->ai_addr))->sin_addr), ((struct sockaddr_in*)&(result->ai_addr))->sin_port);
+  int i = sizeof(sndbuf);
+  //--------------- Setting the UDP socket options -----------------------------//
+  setsockopt(sk->sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,i);
+  getsockopt(sk->sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,(socklen_t*)&i);
+  setsockopt(sk->sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,i);
+  getsockopt(sk->sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,(socklen_t*)&i);
+  //printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
+  //---------------------------------------------------------------------------//
 
-    /*------------------------WAIT FOR SYN PACKETS TO COME--------------------------------------------------*/
-    printf("Listening for SYN on port %s\n", port);
-    return sk;
+  //printf("Trying to bind to address %s port %d\n", inet_ntoa(((struct sockaddr_in*) &(result->ai_addr))->sin_addr), ((struct sockaddr_in*)&(result->ai_addr))->sin_port);
+
+  /*------------------------WAIT FOR SYN PACKETS TO COME--------------------------------------------------*/
+  printf("Listening for SYN on port %s\n", port);
+  return sk;
 }
 
 /*
+  listen_srvctcp
   returns 0 success
   returns -1 error
- */
+*/
 
 int
 listen_srvctcp(srvctcp_sock* sk){
@@ -194,7 +181,6 @@ listen_srvctcp(srvctcp_sock* sk){
   int numbytes, rv;
   char *buff = malloc(BUFFSIZE);
   char* log_name = NULL; // Name of the log
-  
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
   memset(buff,0,BUFFSIZE);        /* pretouch */
   
@@ -220,45 +206,40 @@ listen_srvctcp(srvctcp_sock* sk){
     sk->active_paths[0] = stream;
     sk->num_active++;
 
-
-    Data_Pckt* msg = dataPacket(0, 0, 0);
-    msg->flag = SYN_ACK;
-    // Marshall msg into buf
-    int message_size = marshallData(*msg, buff);
-
-    if((numbytes = sendto(sk->sockfd, buff, message_size, 0,
-                          &cli_addr, clilen)) == -1){
-      perror("Could not send the SYN_ACK");
-      return -1;
-    }
-
-    if(numbytes != message_size){
-      perror("write");
-      return -1;
-    }
-
+    send_flag(sk, SYN_ACK);
     free(buff);
-          
-    pthread_t daemon_thread;
+    free(ack);
 
-    rv = pthread_create( &daemon_thread, NULL, server_worker, (void *) sk);
+    rv = pthread_create( &(sk->daemon_thread), NULL, server_worker, (void *) sk);
           
     return 0;
+
   } else{
     printf("Expecting SYN packet, received something else\n");
   }
 
+  free(ack);
   free(buff);
   return -1;
 }
 
 /*
  * This is contains the main functionality and flow of the client program
+ * returns no of bytes normally, 
+ * -1 on error, and sets socket->error.
  */
 size_t
 send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
-  //printf("Calling send ctcp curr block %d maxblockno %d maxblockno.len %d\n", sk->curr_block, sk->maxblockno,  sk->blocks[sk->maxblockno%NUM_BLOCKS].len);
+  if(sk->status != ACTIVE){
+    sk->error = CLIHUP;
+    return -1;
+  }
+
+  /*
+    printf("Calling send ctcp curr block %d maxblockno %d maxblockno.len %d\n", 
+    sk->curr_block, sk->maxblockno,  sk->blocks[sk->maxblockno%NUM_BLOCKS].len);
+  */
   if (usr_buf_len == 0){
     return 0;
   }
@@ -282,7 +263,8 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
     if (i == sk->curr_block + NUM_BLOCKS){
       printf("waiting on block free %d\n", sk->curr_block);
-      pthread_cond_wait( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv), &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
+      pthread_cond_wait( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv), 
+                         &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
     }
 
     pthread_rwlock_wrlock(&(sk->blocks[i%NUM_BLOCKS].block_rwlock));
@@ -320,16 +302,6 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
     //printf("Total bytes_read %d bytes_left %d maxblockno %d currblock %d\n", usr_buf_len - bytes_left, bytes_left,  sk->maxblockno, sk->curr_block);
     i++;
   }
-  /*
-  i = sk->curr_block;
-  while (i <= sk->maxblockno){
-    pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
-    pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
-    pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
-    i++;
-  }
-  */
-
   return usr_buf_len - bytes_left;
 
 }
@@ -337,54 +309,39 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
 void 
 *server_worker(void *arg){
-
   srvctcp_sock* sk = (srvctcp_sock*) arg;
-
   char *buff = malloc(BUFFSIZE);
-  int numbytes;
-  
+  int numbytes, i, r;
   struct sockaddr cli_addr;
   socklen_t clilen = sizeof cli_addr;
-
-  int i, r;
   double idle_timer;
-
   int path_index=0;              // Connection identifier
 
-
   // printf("Time %f Read from %d to %d\n \n ", getTime(), sk->curr_block, sk->maxblockno);
-    
   /* ----- DONE READING THE BUFFER INTO BLOCKS ------- */
 
-
-  int done = 0;
   memset(buff,0,BUFFSIZE);        /* pretouch */
   sk->start_time = getTime();
-
   pthread_rwlock_rdlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
-  sk->dof_req_latest = sk->blocks[sk->curr_block%NUM_BLOCKS].len ;     // reset the dof counter for the current block
+  sk->dof_req_latest = sk->blocks[sk->curr_block%NUM_BLOCKS].len ;     
+  // reset the dof counter for the current block
   pthread_rwlock_unlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
-
 
   /* send out initial segments, then go for it */  // First send_seg
   send_segs(sk, path_index);
 
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
 
-  while(done == 0){
-
+  while(sk->status == ACTIVE){
     double rto_max = 0;
     for (i=0; i < sk->num_active; i++){
       if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto;
     }
 
     idle_timer = getTime();
-
-
     r = timedread(sk->sockfd, rto_max + RTO_BIAS);
 
     if (r > 0){  /* ack ready */
-
       // The recvfrom should be done to a separate buffer (not buff)
       if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
         perror("Error in receveing ACKs\n");
@@ -392,7 +349,6 @@ void
       }
 
       sk->idle_total += getTime() - idle_timer;
-
       unmarshallAck(ack, buff);
 
       if (sk->debug > 6){
@@ -413,10 +369,11 @@ void
           // add the client address info to the client lookup table
           sk->active_paths[sk->num_active]->cli_addr = cli_addr;
           sk->active_paths[sk->num_active]->last_ack_time = getTime();
-
           sk->num_active++;
 
-          printf("Request for a new path: Client address %s Client port %d\n", inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), ((struct sockaddr_in*)&cli_addr)->sin_port);
+          printf("Request for a new path: Client address %s Client port %d\n", 
+                 inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
+                 ((struct sockaddr_in*)&cli_addr)->sin_port);
 
           // Initially send a few packets to keep it going
           send_segs(sk,sk->num_active -1);
@@ -437,9 +394,13 @@ void
         sk->ipkts++;
         sk->active_paths[path_index]->last_ack_time = rcvt;
 
-        if((done = handle_ack(sk, ack, path_index)) == 0){
+        if(handle_ack(sk, ack, path_index) == 0){
           send_segs(sk, path_index);
         }
+      }else if (ack->flag == FIN) {
+        sk->status = CLOSED;
+        sk->error = NONE;
+        send_flag(sk, FIN_ACK);
       }
 
       // Check all the other paths, and see if any of them timed-out.
@@ -474,27 +435,85 @@ void
       }
     }
     if(sk->num_active==0){
+      free(ack);
+      free(buff);
       // no path alive, terminate
-      endSession(sk);
-      return 0;
+      // endSession(sk);
+      return NULL;
     }
   }  /* while more pkts */
 
 
   free(ack);
-
-  //      send_FIN_CLI(sk);
-
-
-  /*
-  for(i=1; i<num_active; i++){
-    free(active_paths[i]);
+  free(buff);
+  for(i=1; i<sk->num_active; i++){
+    free(sk->active_paths[i]);
   }
-  free(active_paths);
-  */  
+  free(sk->active_paths);
 
   return NULL;
 }
+
+/*
+  closes srvctcp_sock
+  if closer = 1, then the server is the initiating the closing
+  if closer = 0, then the server is receiving the FIN
+ */
+void
+close_srvctcp(srvctcp_sock* sk){
+  int r;
+  char *buff = malloc(BUFFSIZE);
+  struct sockaddr cli_addr;
+  socklen_t clilen = sizeof(cli_addr);
+  Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
+  // Check whether send_segs have finished
+  if( sk->dof_req_latest != 0){
+    int i = sk->curr_block;
+    while (i <= sk->maxblockno){
+      pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+      pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
+      pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+      i++;
+    }
+    // Now all blocks are freed, and we have received all the acks
+  }
+  // Send FIN or FIN_ACK
+  if(sk->status != CLOSED){
+    send_flag(sk, FIN);
+    // Send FIN to the client, and wait <10 seconds for FIN_ACK
+    r = timedread(sk->sockfd, 10);
+    if (r > 0){  /* ready */
+      // The recvfrom should be done to a separate buffer (not buff)
+      if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
+        perror("Error in receveing ACKs\n");
+      }else{
+        unmarshallAck(ack, buff);
+        
+        if (ack->flag == FIN_ACK){
+          sk->status = CLOSED;
+          sk->error = NONE;
+        }else{
+          // TODO  should we wait longer for the FIN_ACK?
+          // for now, we just return error and continue with closing... 
+          sk->status = CLOSED;
+          sk->error = CLOSE_ERR;
+        }
+      }
+    }else { /* r <=0 */
+      err_sys(sk, "close");
+    }    
+  }
+  thrpool_kill( &(sk->workers));
+  pthread_join(sk->daemon_thread, NULL);
+  free(sk);
+  free(buff);
+  free(ack);
+  return;
+}
+
+
+
+
 
 void
 removePath(srvctcp_sock* sk, int dead_index){
@@ -559,21 +578,22 @@ timeout(srvctcp_sock* sk, int pin){
 
 }
 
-int
-send_FIN_CLI(srvctcp_sock* sk){
 
+/*
+  sends control message with the flag
+ */
+int 
+send_flag(srvctcp_sock* sk, flag_t flag ){
   char *buff = malloc(BUFFSIZE);
   int numbytes;
   // FIN_CLI sequence number is meaningless
   Data_Pckt *msg = dataPacket(0, sk->curr_block, 0);
   msg->tstamp = getTime();
-  // FIN_CLI
-  msg->flag = FIN;
+  msg->flag = flag;
 
   int size = marshallData(*msg, buff);
 
   do{
-    // THE CLI_ADDR HERE IS SET IN THE MAIN LOOP
     socklen_t clilen = sizeof(sk->active_paths[0]->cli_addr);
     if((numbytes = sendto(sk->sockfd, buff, size, 0, &(sk->active_paths[0]->cli_addr), clilen)) == -1){
       perror("send_Fin_Cli error: sendto");
@@ -582,7 +602,7 @@ send_FIN_CLI(srvctcp_sock* sk){
   } while(errno == ENOBUFS && ++(sk->enobufs)); // use the while to increment enobufs if the condition is met
 
   if(numbytes != size){
-    perror("send_Fin_Cli error: sent fewer bytes");
+    perror("send_flag error: sent fewer bytes");
     return -1;
   }
   
@@ -591,6 +611,9 @@ send_FIN_CLI(srvctcp_sock* sk){
   free(buff);
   return 0;
 }
+
+
+
 
 void
 send_segs(srvctcp_sock* sk, int pin){
@@ -606,8 +629,6 @@ send_segs(srvctcp_sock* sk, int pin){
     //printf("Returned from block ready %d\n", sk->curr_block);
 
   }
-
-
   Substream_Path* subpath = sk->active_paths[pin];
 
   int win = 0;
@@ -705,7 +726,9 @@ send_segs(srvctcp_sock* sk, int pin){
 
 
       if (sk->debug > 6 && sk->num_active == 2){
-        printf("path_id %d blockno %d mean OnFly %f dof_request tmp %d win %d CurrOnFly[0] %d CurrOnFly[1] %d srtt[0] %f srtt[1] %f\n", pin, blockno, mean_OnFly, dof_request_tmp, win, CurrOnFly[0], CurrOnFly[1], sk->active_paths[0]->srtt*1000, sk->active_paths[1]->srtt*1000);
+        printf("path_id %d blockno %d mean OnFly %f dof_request tmp %d win %d CurrOnFly[0] %d CurrOnFly[1] %d srtt[0] %f srtt[1] %f\n", 
+               pin, blockno, mean_OnFly, dof_request_tmp, win, 
+               CurrOnFly[0], CurrOnFly[1], sk->active_paths[0]->srtt*1000, sk->active_paths[1]->srtt*1000);
       }
 
     }
@@ -745,7 +768,6 @@ send_segs(srvctcp_sock* sk, int pin){
   blockno++;
 
   } //////////////////////// END CHECKING BLOCKS ////////////////////
-
 }
 
 
@@ -938,8 +960,6 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     pthread_rwlock_unlock(&(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_rwlock));
     pthread_cond_signal( &(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_free_condv));
     pthread_mutex_unlock(&(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_mutex));
-
-
 
      
     for (j =0; j < sk->num_active; j++){
@@ -1589,6 +1609,8 @@ create_srvctcp_sock(void){
     q_init(&(sk->coded_q[i]), 2*BLOCK_SIZE);
   }
 
+  sk->status = ACTIVE;
+  sk->error = NONE;
 
   //----------------- configurable variables -----------------//
   sk->rcvrwin    = 20;          /* rcvr window in mss-segments */
