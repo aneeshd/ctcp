@@ -283,9 +283,8 @@ read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
     csk->error = SRVHUP;
     return -1;
   }
-
   size_t res = fifo_pop(&(csk->usr_cache), usr_buf, count);
-  //  printf("read_ctcp: pop %d bytes, csk->usr_cache size %d\n", res, csk->usr_cache.size);
+  //printf("read_ctcp: pop %d bytes, csk->usr_cache size %d\n", res, csk->usr_cache.size);
   return res;
 
 }

@@ -136,10 +136,11 @@ int handle_con()
   sprintf(buf,"TCP Connection closed (%s)",sz_error[res]);
   logstr(buf,&ad_client);
 
+  fprintf(stdout, "pthread_join\n");
   pthread_join(clictcp_thread, NULL);
-  close_clictcp(csk);
-  
-  printf("CTCP socket (port %s) successfully closed\n", ctcp_port);
+  fprintf(stdout, "close_clictcp\n");
+  close_clictcp(csk);  
+  fprintf(stdout, "CTCP socket (port %s) successfully closed\n", ctcp_port);
 
   close(sk_target);
   return ERR_NONE;
@@ -568,7 +569,11 @@ void
   int           bptr = 0;
   int           bown = -1;
   int           res;
-    
+  struct pollfd pfd;  
+
+
+  pfd.fd = sk_client;
+  pfd.events = POLLOUT;
   //fprintf(stdout, "Starting to handle CTCP traffic from port %s\n", ctcp_port);
 
   /*
@@ -581,8 +586,10 @@ void
 
     // read a few bytes from ctcp
     bptr = 0;
+    //fprintf(stdout, "\n while loop....\n");
     btop = read_ctcp(csk, buf, buf_size);  
     if (btop == -1){
+      //fprintf(stdout, "read_ctcp returned -1\n");
       free(buf);
       return NULL;
     }
@@ -592,16 +599,25 @@ void
 
     //write those bytes to sk_client (TCP) socket using a while loop
     while( bptr < btop ) {
-      //fprintf(stdout, "*** writing to sk_client ");
-	    while( (res=write(sk_client, buf+bptr, btop-bptr)) < 0 && errno==EINTR ){
-        //fprintf(stdout, "*** wrote %d bytes\n", res);
+      while( (res=poll(&pfd, 1 , con_idle_timeo*1000))<0 && errno==EINTR );
+      if (res <= 0){
+        free(buf);
+        return NULL;
       }
+      
+      if (pfd.revents & POLLHUP) {
+        res = ERR_NONE;
+        free(buf);
+        return NULL;
+      }
+	    while( (res=write(sk_client, buf+bptr, btop-bptr)) < 0 && errno==EINTR );        
+        // fprintf(stdout, "*** wrote %d bytes\n", res);
+      
 	    if( res<0 ) {
         res = ERR_SKFATAL;
         free(buf);
         return NULL;
 	    }
-      //fprintf(stdout, "%d bytes\n", res);
 	    bptr += res;
     }
   }
