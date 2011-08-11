@@ -249,16 +249,13 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
   int block_len_tmp;
 
   int i = sk->maxblockno;
-  int i_temp;
   while (bytes_left > 0){
     pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));    
-    i_temp = MAX(i, sk->maxblockno);
 
-    while(i_temp != i){
+    while(i < sk->maxblockno){
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));    
-      i = i_temp;
+      i = sk->maxblockno;
       pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));    
-      i_temp = MAX(i, sk->maxblockno);
     }
 
     if (i == sk->curr_block + NUM_BLOCKS){

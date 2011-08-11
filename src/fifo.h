@@ -27,6 +27,7 @@ void fifo_init(fifo_t* Q, int max_size);
 size_t fifo_getspace(fifo_t* Q);
 size_t fifo_push(fifo_t* Q, const void *buf, size_t n);
 size_t fifo_pop(fifo_t* Q, void *buf, size_t n);
+void fifo_release(fifo_t* Q);
 void fifo_free(fifo_t* Q);
 
 

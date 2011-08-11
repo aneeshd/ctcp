@@ -252,7 +252,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
       setsockopt(csk->sockfd[k],SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
       getsockopt(csk->sockfd[k], SOL_SOCKET, SO_RCVBUF, (char *) &rlth, (socklen_t*)&optlen);
     }
-    printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
+    //printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
     // ------------  Send a SYN packet for any new connection ----------------
     for (k = 0; k < csk->substreams; k++){
@@ -283,10 +283,18 @@ read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
     csk->error = SRVHUP;
     return -1;
   }
+
   size_t res = fifo_pop(&(csk->usr_cache), usr_buf, count);
   //printf("read_ctcp: pop %d bytes, csk->usr_cache size %d\n", res, csk->usr_cache.size);
-  return res;
 
+  if (res == 0){
+    // fifo is released because the connection is somehow terminated
+    csk->error = SRVHUP;
+    res = -1;
+    printf("FIFO IS RELEASED\n");
+  }
+
+  return res;
 }
 
 
@@ -348,6 +356,7 @@ void
             while(send_flag(csk, 0, FIN_ACK) == -1){
               printf("Could not send FIN_ACK\n");
             }
+            fifo_release(&(csk->usr_cache));
             break;
 
           case FIN_ACK:
@@ -1232,6 +1241,10 @@ close_clictcp(clictcp_sock* csk){
   }
 
   pthread_join(csk->daemon_thread, NULL);
+  // TODO free the last remaining blocks
+  // TODO close UDP sockets
+
+  fifo_free(&(csk->usr_cache));   
   free(csk);
 
   return;

@@ -113,6 +113,16 @@ size_t fifo_pop(fifo_t* Q, void *buf, size_t n){
   return pop_size;
 }
 
+void 
+fifo_release(fifo_t *Q){
+  pthread_mutex_lock(&Q->q_mutex_);
+
+  pthread_cond_signal( &(Q->q_condv_push_) );
+  pthread_cond_signal( &(Q->q_condv_pop_) );
+
+  pthread_mutex_unlock(&Q->q_mutex_);
+}
+
 void
 fifo_free(fifo_t *Q){
   pthread_mutex_lock(&Q->q_mutex_);
