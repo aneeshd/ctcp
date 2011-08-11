@@ -322,7 +322,7 @@ int connect_client()
     host_ip.s_addr = (unsigned long)pcon->proxy->ip;
 
     host_addr = inet_ntoa(host_ip);
-    printf("Sending CTCP request to %s port %s ... ", host_addr, ctcp_port);
+    printf("Sending CTCP request to %s port %s\n", host_addr, ctcp_port);
 
     csk = connect_ctcp(host_addr, ctcp_port, NULL);
 
