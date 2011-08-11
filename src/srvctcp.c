@@ -464,9 +464,11 @@ close_srvctcp(srvctcp_sock* sk){
   socklen_t clilen = sizeof(cli_addr);
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
   // Check whether send_segs have finished
+
+  int i = sk->curr_block;
   if( sk->dof_req_latest != 0){
-    int i = sk->curr_block;
     while (i <= sk->maxblockno){
+      //  printf("Waiting on block %d to get free\n", i);
       pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
       pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
@@ -474,6 +476,7 @@ close_srvctcp(srvctcp_sock* sk){
     }
     // Now all blocks are freed, and we have received all the acks
   }
+
   // Send FIN or FIN_ACK
   if(sk->status != CLOSED){
     send_flag(sk, FIN);
@@ -483,6 +486,8 @@ close_srvctcp(srvctcp_sock* sk){
       // The recvfrom should be done to a separate buffer (not buff)
       if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
         perror("Error in receveing ACKs\n");
+	sk->status = CLOSED;
+	sk->error = CLOSE_ERR;
       }else{
         unmarshallAck(ack, buff);
         
@@ -497,11 +502,18 @@ close_srvctcp(srvctcp_sock* sk){
         }
       }
     }else { /* r <=0 */
-      err_sys(sk, "close");
+      //err_sys(sk, "close");
+      printf("TIMEOUT ON FIN ACK... Closing the socket\n");
+      sk->status = CLOSED;
+      sk->error = CLOSE_ERR;
     }    
   }
+
+  //Signal the worker thread to exit
+  pthread_cond_signal(&(sk->blocks[(sk->maxblockno)%NUM_BLOCKS].block_ready_condv));
   thrpool_kill( &(sk->workers));
   pthread_join(sk->daemon_thread, NULL);
+
   free(sk);
   free(buff);
   free(ack);
@@ -615,8 +627,12 @@ send_flag(srvctcp_sock* sk, flag_t flag ){
 void
 send_segs(srvctcp_sock* sk, int pin){
 
+  if (sk->status == CLOSED){
+    return;
+  }
+
   if (sk->dof_req_latest == 0){
-    //printf("waiting on block ready %d\n", sk->curr_block);
+    //    printf("waiting on block ready %d\n", sk->curr_block);
     
     pthread_mutex_lock(   &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex) );
     pthread_cond_signal(  &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv));
@@ -624,8 +640,13 @@ send_segs(srvctcp_sock* sk, int pin){
     pthread_mutex_unlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex) );
     
     //printf("Returned from block ready %d\n", sk->curr_block);
-
   }
+
+  if (sk->status == CLOSED){
+    return;
+  }
+
+
   Substream_Path* subpath = sk->active_paths[pin];
 
   int win = 0;
@@ -1069,7 +1090,7 @@ void
   sk->rcvrwin    = 20;          /* rcvr window in mss-segments */
   sk->increment  = 1;           /* cc increment */
   sk->multiplier = 0.5;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
-  sk->initsegs   = 2;          /* slowstart initial */
+  sk->initsegs   = 8;          /* slowstart initial */
   sk->ssincr     = 1;           /* slow start increment */
   sk->maxidle    = 10;          /* max idle before abort */
   sk->valpha     = 0.05;        /* vegas parameter */
