@@ -15,6 +15,7 @@ typedef struct{
   pthread_cond_t q_condv_pop_;
   pthread_cond_t q_condv_push_;
 
+  int released;
   int max_size; // Maximum size of the buffer
   int head; // Index of the first element in the queue
   int tail; // Index of the last element in the queue

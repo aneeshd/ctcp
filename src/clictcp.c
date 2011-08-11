@@ -291,7 +291,6 @@ read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
     // fifo is released because the connection is somehow terminated
     csk->error = SRVHUP;
     res = -1;
-    printf("FIFO IS RELEASED\n");
   }
 
   return res;
@@ -1147,7 +1146,7 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
     return -1;
   }
   
-  printf("Sent flag *** %d ***\n\n", flag);
+  printf("Sent flag *** %d ***\n", flag);
 
   //free(msg->payload);
   free(msg);

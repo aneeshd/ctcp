@@ -45,6 +45,7 @@ uint16_t        target_port;
 char*           ctcp_port;
 clictcp_sock*   csk;
 
+
 /**********************************************************************
  * handle_con() : this takes control whenever a client connection
  *                to the SOCKS server is accepted.
@@ -132,15 +133,14 @@ int handle_con()
   res = pthread_create( &clictcp_thread, NULL, handle_ctcp_traffic, NULL);
   res = handle_traffic();
     
-  fprintf(stdout, "\n\n******* handle_traffic: returned\n", buf_size);
+  fprintf(stdout, "\n******* handle_traffic returned *******\n", buf_size);
   sprintf(buf,"TCP Connection closed (%s)",sz_error[res]);
   logstr(buf,&ad_client);
 
-  fprintf(stdout, "pthread_join\n");
   pthread_join(clictcp_thread, NULL);
-  fprintf(stdout, "close_clictcp\n");
   close_clictcp(csk);  
-  fprintf(stdout, "CTCP socket (port %s) successfully closed\n", ctcp_port);
+  fprintf(stdout, "CTCP socket (port %s) successfully closed\n\n", ctcp_port);
+
 
   close(sk_target);
   return ERR_NONE;
@@ -585,50 +585,46 @@ void
 
 	
   while( 1 ) {
-
     // read a few bytes from ctcp
     bptr = 0;
-    //fprintf(stdout, "\n while loop....\n");
     btop = read_ctcp(csk, buf, buf_size);  
     if (btop == -1){
-      fprintf(stdout, "read_ctcp returned -1\n");
       free(buf);
-      return NULL;
+      pthread_exit(NULL);
     }
 
     //fprintf(stdout, "read_ctcp: buf_size %d\n", buf_size);
     //fprintf(stdout, "received %d bytes over CTCP\n", btop);
 
     //write those bytes to sk_client (TCP) socket using a while loop
+
     while( bptr < btop ) {
       while( (res=poll(&pfd, 1 , con_idle_timeo*1000))<0 && errno==EINTR );
       if (res <= 0){
         free(buf);
-        return NULL;
+        pthread_exit(NULL);
+        //return NULL;
       }
-      
       if (pfd.revents & POLLHUP) {
         res = ERR_NONE;
         free(buf);
-        return NULL;
+        pthread_exit(NULL);
+        //return NULL;
       }
+
 	    while( (res=write(sk_client, buf+bptr, btop-bptr)) < 0 && errno==EINTR );        
-        // fprintf(stdout, "*** wrote %d bytes\n", res);
-      
 	    if( res<0 ) {
         res = ERR_SKFATAL;
         free(buf);
-        return NULL;
+        pthread_exit(NULL);
+        //return NULL;
 	    }
 	    bptr += res;
     }
   }
-
-
   /*
   ** Free buffer
   */
   free(buf);
-  return NULL;
-
+  pthread_exit(NULL);
 }

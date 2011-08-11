@@ -29,6 +29,7 @@ fifo_init(fifo_t* Q, int max_size){
   Q->head = 0;
   Q->tail = 0;
   Q->size = 0;
+  Q->released = 0;
 
   Q->q_ = (char*) calloc(max_size, sizeof(char));
 }
@@ -49,7 +50,8 @@ size_t
 fifo_push(fifo_t* Q, const void *buf, size_t n){
   pthread_mutex_lock(&Q->q_mutex_);
 
-  while(Q->size == Q->max_size){
+  while(Q->size == Q->max_size && !(Q->released)){
+    printf("fifo_push: waiting on condv_push...\n");
     pthread_cond_signal( &(Q->q_condv_pop_) );
     pthread_cond_wait( &(Q->q_condv_push_), &(Q->q_mutex_) );
   }
@@ -75,6 +77,9 @@ fifo_push(fifo_t* Q, const void *buf, size_t n){
   pthread_cond_signal( &(Q->q_condv_push_) );
 
   pthread_mutex_unlock(&Q->q_mutex_);
+  if(push_size == 0){
+    printf("fifo_push: push_size = 0...\n");
+  }
 
   return push_size;
 }
@@ -83,7 +88,7 @@ fifo_push(fifo_t* Q, const void *buf, size_t n){
 size_t fifo_pop(fifo_t* Q, void *buf, size_t n){
   pthread_mutex_lock(&Q->q_mutex_);
 
-  while(Q->size == 0){
+  while(Q->size == 0 && !(Q->released)){
     pthread_cond_signal( &(Q->q_condv_push_) );
     pthread_cond_wait( &(Q->q_condv_pop_), &(Q->q_mutex_) );
   }
@@ -119,6 +124,7 @@ fifo_release(fifo_t *Q){
 
   pthread_cond_signal( &(Q->q_condv_push_) );
   pthread_cond_signal( &(Q->q_condv_pop_) );
+  Q->released = 1;
 
   pthread_mutex_unlock(&Q->q_mutex_);
 }
@@ -130,6 +136,7 @@ fifo_free(fifo_t *Q){
   Q->head = 0;
   Q->tail = 0;
   Q->size = 0;
+  Q->released = 0;
 
   free(Q->q_);
 

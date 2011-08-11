@@ -192,7 +192,7 @@ listen_srvctcp(srvctcp_sock* sk){
   unmarshallAck(ack, buff);
 
   if (ack->flag == SYN){
-    printf("Request for a new session: Client address %s Client port %d\n", 
+    printf("Request for a new session: Client address %s Client port %d ... ", 
            inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
            ((struct sockaddr_in*)&cli_addr)->sin_port);
 
