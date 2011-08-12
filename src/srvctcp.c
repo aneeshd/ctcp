@@ -368,6 +368,10 @@ void
             break;
           }
         }
+        if (i < sk->num_active){
+          // SYN_retx: so send back a SYN_ACK
+          send_flag(sk, i, SYN_ACK);
+        }
         
         if (sk->num_active < MAX_CONNECT && i < sk->num_active){
           sk->active_paths[sk->num_active] = malloc(sizeof(Substream_Path));
@@ -533,6 +537,7 @@ close_srvctcp(srvctcp_sock* sk){
         sk->status = CLOSED;
         sk->error = CLOSE_ERR;
       }
+      tries++;
     }while(tries < FIN_MAX_RETRIES && !success);
   }
 

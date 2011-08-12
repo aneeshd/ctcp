@@ -274,6 +274,8 @@ connect_ctcp(char *host, char *port, char *lease_file){
     if(rv >= POLL_MAX_TRIES){
       printf("Did not receive SYN ACK\n");
       return NULL;
+    }else{
+      printf("Received SYN ACK after %d tries\n", rv);
     }
 
     ///////////////////////   CONNECTION SETUP UP TO HERE  ///////////////
@@ -1251,6 +1253,8 @@ close_clictcp(clictcp_sock* csk){
     if(tries >= POLL_MAX_TRIES){
       printf("Did not receive FIN ACK... Closing anyway\n");
       csk->error = CLOSE_ERR;
+    }else{
+      printf("Received FIN ACK after %d tries\n", tries);
     }
     csk->status = CLOSED;
   }
