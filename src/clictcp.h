@@ -12,8 +12,11 @@ typedef struct{
   char* netmask;
 } dhcp_lease;
 
+typedef enum {ACTIVE=0, CLOSED} status_t;
+typedef enum {NONE=0, CLOSE_ERR, SRVHUP} ctcp_err_t;
+
 //---------------- DEFAULT CONNECTION PARAMETERS ------------------//
-#define BUFFSIZE  65536
+#define BUFFSIZE  3000
 #define PORT "9999"
 #define HOST "127.0.0.1"
 #define FILE_NAME "Honda"
@@ -21,7 +24,7 @@ typedef struct{
 #define NUM_BLOCKS 4
 #define MAX_SUBSTREAMS 5
 
-#define SYN_ACK_TO 5000   // in milliseconds
+#define POLL_ACK_TO 5000   // in milliseconds
 #define TIMEOUT 5000
 #define POLL_TO_FLG -7
 
@@ -39,6 +42,11 @@ typedef struct{
 
   fifo_t usr_cache;
 
+  pthread_t daemon_thread;
+  
+  status_t status;
+  ctcp_err_t error;
+  
   //---------------- STATISTICS & ACCOUTING ------------------//
   uint32_t pkts;
   uint32_t acks;
@@ -75,7 +83,9 @@ void delete_table(int table_number, int mark_number);
 
 void *handle_connection(void* arg);
 clictcp_sock* create_clictcp_sock(void);
-int  poll_SYN_ACK(clictcp_sock *csk);
+int  poll_flag(clictcp_sock *csk, flag_t flag);
+int  send_flag(clictcp_sock *csk, int path_id, flag_t flag);
+void close_clictcp(clictcp_sock* csk);
 
 clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file);
 uint32_t  read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count);

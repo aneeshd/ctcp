@@ -10,7 +10,7 @@ typedef int bool;
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
 // flags for Data_Pckt
-typedef enum {NORMAL=0, FIN_CLI, SYN, SYN_ACK} flag_t;
+typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK} flag_t;
 
 //---------------- CTCP parameters ------------------//
 #define MSS 1450 // XXX: make sure that this is fine...
@@ -27,7 +27,7 @@ typedef enum {NORMAL=0, FIN_CLI, SYN, SYN_ACK} flag_t;
     + sizeof(int)               \
     + sizeof(uint32_t)          \
     + sizeof(uint32_t)          \
-    + sizeof(uint8_t)
+    + sizeof(uint8_t)           
 
 #define PAYLOAD_SIZE (MSS \
   - UDP_HEADER_SIZE \
@@ -37,7 +37,7 @@ typedef enum {NORMAL=0, FIN_CLI, SYN, SYN_ACK} flag_t;
    + sizeof(uint32_t) \
    + sizeof(uint8_t) \
    + sizeof(uint8_t) \
-   + MAX_CODING_WND*sizeof(uint8_t) ) )
+   + MAX_CODING_WND*sizeof(uint8_t) ) ) 
 
 typedef int socket_t;
 typedef struct timeval timeval_t;

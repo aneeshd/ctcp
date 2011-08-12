@@ -15,6 +15,7 @@ typedef struct{
   pthread_cond_t q_condv_pop_;
   pthread_cond_t q_condv_push_;
 
+  int released;
   int max_size; // Maximum size of the buffer
   int head; // Index of the first element in the queue
   int tail; // Index of the last element in the queue
@@ -27,6 +28,7 @@ void fifo_init(fifo_t* Q, int max_size);
 size_t fifo_getspace(fifo_t* Q);
 size_t fifo_push(fifo_t* Q, const void *buf, size_t n);
 size_t fifo_pop(fifo_t* Q, void *buf, size_t n);
+void fifo_release(fifo_t* Q);
 void fifo_free(fifo_t* Q);
 
 
