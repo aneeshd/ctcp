@@ -207,7 +207,7 @@ listen_srvctcp(srvctcp_sock* sk){
     sk->active_paths[0] = stream;
     sk->num_active++;
 
-    send_flag(sk, SYN_ACK);
+    send_flag(sk, 0, SYN_ACK);
     free(buff);
     free(ack);
 
@@ -216,6 +216,7 @@ listen_srvctcp(srvctcp_sock* sk){
     return 0;
 
   } else{
+    // TODO perhaps we should not exit immediately, if the first packet is not SYN?
     printf("Expecting SYN packet, received something else\n");
   }
 
@@ -360,8 +361,15 @@ void
       /* ---- Decide if the ack is a request for new connections ------- */
       /* -------- Check which path the ack belong to --------------------*/
       if (ack->flag == SYN){
-        if (sk->num_active < MAX_CONNECT){
 
+        // check if this path is already active, then ignore SYN retx
+        for(i=0; i< sk->num_active; i++){
+          if (sockaddr_cmp(&cli_addr, &(sk->active_paths[i]->cli_addr))==0){
+            break;
+          }
+        }
+        
+        if (sk->num_active < MAX_CONNECT && i < sk->num_active){
           sk->active_paths[sk->num_active] = malloc(sizeof(Substream_Path));
           init_stream(sk, sk->active_paths[sk->num_active]);
           // add the client address info to the client lookup table
@@ -372,6 +380,10 @@ void
           printf("Request for a new path: Client address %s Client port %d\n", 
                  inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
                  ((struct sockaddr_in*)&cli_addr)->sin_port);
+
+          // TODO probably should send SYN_ACK to this path... may make the path management easier. 
+          // send_flag(sk, sk->num_active-1, SYN_ACK);
+          // then start sending...?
 
           // Initially send a few packets to keep it going
           send_segs(sk,sk->num_active -1);
@@ -398,7 +410,7 @@ void
       }else if (ack->flag == FIN) {
         sk->status = CLOSED;
         sk->error = NONE;
-        send_flag(sk, FIN_ACK);
+        send_flag(sk, 0, FIN_ACK);
       }
 
       // Check all the other paths, and see if any of them timed-out.
@@ -463,12 +475,16 @@ void
  */
 void
 close_srvctcp(srvctcp_sock* sk){
-  int r;
+  int r, tries, success;
   char *buff = malloc(BUFFSIZE);
   struct sockaddr cli_addr;
   socklen_t clilen = sizeof(cli_addr);
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
   // Check whether send_segs have finished
+
+  // counters for FIN_RETX
+  tries = 0;
+  success = 0;
 
   int i = sk->curr_block;
   if( sk->dof_req_latest != 0){
@@ -485,34 +501,45 @@ close_srvctcp(srvctcp_sock* sk){
   // Send FIN or FIN_ACK
   if(sk->status != CLOSED){
     printf("Sending the FIN packet\n");
-    send_flag(sk, FIN);
-    // Send FIN to the client, and wait <10 seconds for FIN_ACK
-    r = timedread(sk->sockfd, 10);
-    if (r > 0){  /* ready */
-      // The recvfrom should be done to a separate buffer (not buff)
-      if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
-        perror("Error in receveing ACKs\n");
-	sk->status = CLOSED;
-	sk->error = CLOSE_ERR;
-      }else{
-        unmarshallAck(ack, buff);
-        
-        if (ack->flag == FIN_ACK){
-          sk->status = CLOSED;
-          sk->error = NONE;
-        }else{
-          // TODO  should we wait longer for the FIN_ACK?
-          // for now, we just return error and continue with closing... 
+
+    do{
+      // TODO assume that sending FIN/receiving FIN_ACK on path 0
+      send_flag(sk, 0, FIN);
+      // Send FIN to the client, and wait <10 seconds for FIN_ACK
+      r = timedread(sk->sockfd, sk->active_paths[0]->rto);
+      if (r > 0){  /* ready */
+        // The recvfrom should be done to a separate buffer (not buff)
+        if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
+          perror("Error in receveing ACKs\n");
           sk->status = CLOSED;
           sk->error = CLOSE_ERR;
+        }else{
+          unmarshallAck(ack, buff);
+          
+          if (ack->flag == FIN_ACK){
+            sk->status = CLOSED;
+            sk->error = NONE;
+            success = 1;
+          }else{
+            // TODO  should we wait longer for the FIN_ACK?
+            // for now, we just return error and continue with closing... 
+            sk->status = CLOSED;
+            sk->error = CLOSE_ERR;
+          }
         }
+      }else { /* r <=0 */
+        //err_sys(sk, "close");
+        printf("r<=0 in close_srvctcp\n");
+        sk->status = CLOSED;
+        sk->error = CLOSE_ERR;
       }
-    }else { /* r <=0 */
-      //err_sys(sk, "close");
-      printf("TIMEOUT ON FIN ACK... Closing the socket\n");
-      sk->status = CLOSED;
-      sk->error = CLOSE_ERR;
-    }    
+    }while(tries < FIN_MAX_RETRIES && !success);
+  }
+
+  if(success){
+    printf("Successfully received FIN_ACK after %d tries\n", tries);
+  }else{
+    printf("Did not receive FIN_ACK after %d tries... Closing anyway\n", tries);
   }
 
   //Signal the worker thread to exit
@@ -601,7 +628,7 @@ timeout(srvctcp_sock* sk, int pin){
   sends control message with the flag
  */
 int 
-send_flag(srvctcp_sock* sk, flag_t flag ){
+send_flag(srvctcp_sock* sk, int path_id, flag_t flag ){
   char *buff = malloc(BUFFSIZE);
   int numbytes;
   // FIN_CLI sequence number is meaningless
@@ -612,8 +639,8 @@ send_flag(srvctcp_sock* sk, flag_t flag ){
   int size = marshallData(*msg, buff);
 
   do{
-    socklen_t clilen = sizeof(sk->active_paths[0]->cli_addr);
-    if((numbytes = sendto(sk->sockfd, buff, size, 0, &(sk->active_paths[0]->cli_addr), clilen)) == -1){
+    socklen_t clilen = sizeof(sk->active_paths[path_id]->cli_addr);
+    if((numbytes = sendto(sk->sockfd, buff, size, 0, &(sk->active_paths[path_id]->cli_addr), clilen)) == -1){
       perror("send_Fin_Cli error: sendto");
       return -1;
     }

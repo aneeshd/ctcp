@@ -21,6 +21,7 @@ typedef enum {NONE=0, CLOSE_ERR, CLIHUP} ctcp_err_t;
 #define RTO_BIAS 0.010      // (seconds) Bias the time-out timer
 #define INIT_RTO 1
 #define INIT_CODING_WND 5
+#define FIN_MAX_RETRIES 10
 
 //---------------Constants -----------------------//
 #define slr_mem          1.0/BLOCK_SIZE      // The memory of smoothing function
@@ -117,7 +118,7 @@ void ctrlc(srvctcp_sock* sk);
 void endSession(srvctcp_sock* sk);
 void removePath(srvctcp_sock* sk, int dead_index);
 void init_stream(srvctcp_sock* sk, Substream_Path *sp);
-int send_flag(srvctcp_sock* sk, flag_t flag);
+int send_flag(srvctcp_sock* sk, int pin, flag_t flag);
 int timeout(srvctcp_sock* sk, int pin);
 void send_segs(srvctcp_sock* sk, int pin);
 socket_t timedread(socket_t fd, double t);

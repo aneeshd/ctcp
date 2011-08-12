@@ -234,7 +234,8 @@ connect_ctcp(char *host, char *port, char *lease_file){
         }
 
         for(result_cli = cli_info; result_cli != NULL; result_cli = result_cli->ai_next) {
-          printf("IP address trying to bind to %s \n\n", inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
+          printf("IP address trying to bind to %s \n\n", 
+                 inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
      
           if (bind(csk->sockfd[k], result_cli->ai_addr, result_cli->ai_addrlen) == -1) {
             close(csk->sockfd[k]);
@@ -260,13 +261,17 @@ connect_ctcp(char *host, char *port, char *lease_file){
     //printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
     // ------------  Send a SYN packet for any new connection ----------------
-    for (k = 0; k < csk->substreams; k++){
-      while(send_flag(csk, k, SYN) == -1){
-        printf("Could not send SYN packet \n");
+    rv = 0;
+    do{
+      for (k = 0; k < csk->substreams; k++){
+        while(send_flag(csk, k, SYN) == -1){
+          printf("Could not send SYN packet \n");
+        }
       }
-    }
+      rv++;
+    }while(poll_flag(csk, SYN_ACK) == -1 && rv < POLL_MAX_TRIES );
 
-    if (poll_flag(csk, SYN_ACK) == -1){
+    if(rv >= POLL_MAX_TRIES){
       printf("Did not receive SYN ACK\n");
       return NULL;
     }
@@ -370,6 +375,7 @@ void
 
           case SYN_ACK:
             // ACK the SYN-ACK
+            // TODO Should active the corresponding path.. if we send SYN_ACKS for each path.
             break;
 
           case SYN:
@@ -1231,18 +1237,22 @@ poll_flag(clictcp_sock *csk, flag_t flag){
 void
 close_clictcp(clictcp_sock* csk){
 
+  int tries = 0;
   if (csk->status != CLOSED){
-    
-    while(send_flag(csk, 0, FIN) == -1){
-      printf("Could not send the FIN packet\n");
-    }
+    // TODO  if we want to close and open each path independantly, we may want to change this.
 
-    csk->status = CLOSED;
+    do{
+      while(send_flag(csk, 0, FIN) == -1){
+        printf("Could not send the FIN packet\n");
+      }
+      tries++;      
+    } while(poll_flag(csk, FIN_ACK)== -1 && tries < POLL_MAX_TRIES );
 
-    if (poll_flag(csk, FIN_ACK) == -1){
-      printf("Did not receive FIN ACK\n");
+    if(tries >= POLL_MAX_TRIES){
+      printf("Did not receive FIN ACK... Closing anyway\n");
       csk->error = CLOSE_ERR;
-    } 
+    }
+    csk->status = CLOSED;
   }
 
   pthread_join(csk->daemon_thread, NULL);
