@@ -24,7 +24,8 @@ typedef enum {NONE=0, CLOSE_ERR, SRVHUP} ctcp_err_t;
 #define NUM_BLOCKS 4
 #define MAX_SUBSTREAMS 5
 
-#define POLL_ACK_TO 5000   // in milliseconds
+#define POLL_ACK_TO 200   // in milliseconds
+#define POLL_MAX_TRIES 10
 #define TIMEOUT 5000
 #define POLL_TO_FLG -7
 

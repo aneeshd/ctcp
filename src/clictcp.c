@@ -135,26 +135,31 @@ main(int argc, char** argv){
       printf("Calling read ctcp... \n");
 
       uint32_t total_bytes = 0;
-      while(total_bytes < 11492499){
+      while(total_bytes < 500000000){
       
-        bytes_read = read_ctcp(csk, f_buffer, f_buf_size);  
+        bytes_read = read_ctcp(csk, f_buffer, f_buf_size); 
+        
+        if (bytes_read == -1){
+          printf("read_ctcp is done!\n");
+          break;
+        }
+
         fwrite(f_buffer, 1, bytes_read, rcv_file);
         total_bytes += bytes_read;
-        //printf(" %d bytes receieved\n", bytes_read);
+        //        printf(" %d Total bytes receieved\n", total_bytes);
       }
 
-      fclose(rcv_file);
+      close_clictcp(csk);
 
+      fclose(rcv_file);
       printf("Closed file successfully\n");
 
-      fifo_free(&(csk->usr_cache));    // TODO should go to the close function
     }
 
     return 0;
 }
 
 */
-
 
 
 clictcp_sock*
@@ -229,7 +234,8 @@ connect_ctcp(char *host, char *port, char *lease_file){
         }
 
         for(result_cli = cli_info; result_cli != NULL; result_cli = result_cli->ai_next) {
-          printf("IP address trying to bind to %s \n\n", inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
+          printf("IP address trying to bind to %s \n\n", 
+                 inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
      
           if (bind(csk->sockfd[k], result_cli->ai_addr, result_cli->ai_addrlen) == -1) {
             close(csk->sockfd[k]);
@@ -255,15 +261,21 @@ connect_ctcp(char *host, char *port, char *lease_file){
     //printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
     // ------------  Send a SYN packet for any new connection ----------------
-    for (k = 0; k < csk->substreams; k++){
-      while(send_flag(csk, k, SYN) == -1){
-        printf("Could not send SYN packet \n");
+    rv = 0;
+    do{
+      for (k = 0; k < csk->substreams; k++){
+        while(send_flag(csk, k, SYN) == -1){
+          printf("Could not send SYN packet \n");
+        }
       }
-    }
+      rv++;
+    }while(poll_flag(csk, SYN_ACK) == -1 && rv < POLL_MAX_TRIES );
 
-    if (poll_flag(csk, SYN_ACK) == -1){
+    if(rv >= POLL_MAX_TRIES){
       printf("Did not receive SYN ACK\n");
       return NULL;
+    }else{
+      printf("Received SYN ACK after %d tries\n", rv);
     }
 
     ///////////////////////   CONNECTION SETUP UP TO HERE  ///////////////
@@ -351,6 +363,7 @@ void
           switch (msg->flag){
 
           case FIN:
+            printf("received FIN packet\n");
             csk->status = CLOSED;
             while(send_flag(csk, 0, FIN_ACK) == -1){
               printf("Could not send FIN_ACK\n");
@@ -364,6 +377,7 @@ void
 
           case SYN_ACK:
             // ACK the SYN-ACK
+            // TODO Should active the corresponding path.. if we send SYN_ACKS for each path.
             break;
 
           case SYN:
@@ -1225,18 +1239,24 @@ poll_flag(clictcp_sock *csk, flag_t flag){
 void
 close_clictcp(clictcp_sock* csk){
 
+  int tries = 0;
   if (csk->status != CLOSED){
-    
-    while(send_flag(csk, 0, FIN) == -1){
-      printf("Could not send the FIN packet\n");
-    }
+    // TODO  if we want to close and open each path independantly, we may want to change this.
 
-    csk->status = CLOSED;
+    do{
+      while(send_flag(csk, 0, FIN) == -1){
+        printf("Could not send the FIN packet\n");
+      }
+      tries++;      
+    } while(poll_flag(csk, FIN_ACK)== -1 && tries < POLL_MAX_TRIES );
 
-    if (poll_flag(csk, FIN_ACK) == -1){
-      printf("Did not receive FIN ACK\n");
+    if(tries >= POLL_MAX_TRIES){
+      printf("Did not receive FIN ACK... Closing anyway\n");
       csk->error = CLOSE_ERR;
-    } 
+    }else{
+      printf("Received FIN ACK after %d tries\n", tries);
+    }
+    csk->status = CLOSED;
   }
 
   pthread_join(csk->daemon_thread, NULL);
