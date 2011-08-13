@@ -269,8 +269,9 @@ connect_ctcp(char *host, char *port, char *lease_file){
         }
       }
       rv++;
-    }while(poll_flag(csk, SYN_ACK) == -1 && rv < POLL_MAX_TRIES );
-
+    }while(poll_flag(csk, SYN_ACK, rv*POLL_ACK_TO) == -1 && rv < POLL_MAX_TRIES );
+    // poll backing off the timeout value (above) by rv*POLL_ACK_TO
+    
     if(rv >= POLL_MAX_TRIES){
       printf("Did not receive SYN ACK\n");
       return NULL;
@@ -1170,7 +1171,7 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
 
 
 int 
-poll_flag(clictcp_sock *csk, flag_t flag){
+poll_flag(clictcp_sock *csk, flag_t flag, int timeout){
   char *buff = malloc(BUFFSIZE);
   Data_Pckt *msg = malloc(sizeof(Data_Pckt));
   int k, ready, numbytes;
@@ -1185,7 +1186,7 @@ poll_flag(clictcp_sock *csk, flag_t flag){
   }
 
   // value -1 blocks until something is ready to read
-  ready = poll(read_set, csk->substreams, POLL_ACK_TO);
+  ready = poll(read_set, csk->substreams, timeout);
 
   if(ready == -1){
     perror("poll");
@@ -1248,7 +1249,8 @@ close_clictcp(clictcp_sock* csk){
         printf("Could not send the FIN packet\n");
       }
       tries++;      
-    } while(poll_flag(csk, FIN_ACK)== -1 && tries < POLL_MAX_TRIES );
+    } while(poll_flag(csk, FIN_ACK, POLL_ACK_TO*tries)== -1 && tries < POLL_MAX_TRIES );
+    // doing multiplicative backoff for poll_flag -- may need to do this in wireless
 
     if(tries >= POLL_MAX_TRIES){
       printf("Did not receive FIN ACK... Closing anyway\n");

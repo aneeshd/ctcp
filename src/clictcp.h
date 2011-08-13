@@ -84,7 +84,7 @@ void delete_table(int table_number, int mark_number);
 
 void *handle_connection(void* arg);
 clictcp_sock* create_clictcp_sock(void);
-int  poll_flag(clictcp_sock *csk, flag_t flag);
+int  poll_flag(clictcp_sock *csk, flag_t flag, int timeout);
 int  send_flag(clictcp_sock *csk, int path_id, flag_t flag);
 void close_clictcp(clictcp_sock* csk);
 

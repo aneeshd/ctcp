@@ -509,8 +509,8 @@ close_srvctcp(srvctcp_sock* sk){
     do{
       // TODO assume that sending FIN/receiving FIN_ACK on path 0
       send_flag(sk, 0, FIN);
-      // Send FIN to the client, and wait <10 seconds for FIN_ACK
       r = timedread(sk->sockfd, sk->active_paths[0]->rto);
+      // For timedread above, perhaps we should do exponential backoff, but not as necessary, since using rto-estimate
       if (r > 0){  /* ready */
         // The recvfrom should be done to a separate buffer (not buff)
         if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
