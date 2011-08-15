@@ -209,6 +209,7 @@ listen_srvctcp(srvctcp_sock* sk){
 
     // We could try to send SYN_ACK until successful with a while loop, but that would be blocking.
     if(send_flag(sk, 0, SYN_ACK)== 0){
+      printf("Send SYN_ACK\n");
       stream->pathstate = SYN_ACK_SENT;
     }
 
@@ -406,6 +407,7 @@ void
             printf("State %d: Received NORMAL\n", sk->active_paths[path_index]->pathstate);
           }else if( sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
             // path is now established, and we send data packets
+	    printf("Established path %d\n", path_index);
             sk->active_paths[path_index]->pathstate = ESTABLISHED;
             send_segs(sk, path_index);
           }else{
@@ -420,6 +422,7 @@ void
           }
         }else if (ack->flag == SYN){
           if (sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
+	    printf("Sending SYN_ACK path %d\n", path_index);
             send_flag(sk, path_index, SYN_ACK);
           }else{
             printf("State %d: Received SYN\n", sk->active_paths[path_index]->pathstate);
@@ -429,20 +432,22 @@ void
           if (sk->active_paths[path_index]->pathstate != ESTABLISHED &&
               sk->active_paths[path_index]->pathstate != SYN_ACK_SENT){
             printf("State %d: Received FIN\n", sk->active_paths[path_index]->pathstate);
-          }
-          sk->status = CLOSED;
-          sk->error = NONE;
-          
-          // at this moment, setting FIN status on paths not very meaningful, since we set sk-<status = CLOSED.
-          sk->active_paths[path_index]->pathstate = FIN_RECV;
-          if(send_flag(sk, path_index, FIN_ACK)==0){
-            sk->active_paths[path_index]->pathstate = FIN_ACK_SENT;
-          }
+          }else{
+	    sk->status = CLOSED;
+	    sk->error = NONE;
+	    printf("Sending FIN_ACK path %d\n", path_index);
+	    // at this moment, setting FIN status on paths not very meaningful, since we set sk-<status = CLOSED.
+	    sk->active_paths[path_index]->pathstate = FIN_RECV;
+	    if(send_flag(sk, path_index, FIN_ACK)==0){
+	      sk->active_paths[path_index]->pathstate = FIN_ACK_SENT;
+	    }
+	  }
         }else if (ack->flag == FIN_ACK_ACK){
           if( sk->active_paths[path_index]->pathstate != FIN_ACK_SENT){ 
             // discard inappropriate FIN_ACK_ACK
             printf("State %d: Recevied FIN_ACK_ACK\n", sk->active_paths[path_index]->pathstate);
           }else {
+	    printf("Recv FIN_ACK_ACK. Closing %d\n", path_index);
             sk->status = CLOSED;
             sk->error = NONE;
             sk->active_paths[path_index]->pathstate = CLOSING;
@@ -454,37 +459,44 @@ void
       printf("Timedread error: returned -1\n");
     }else{
       printf("Timedread expired: returned 0\n");
-    }
+    
 
-    // Done with processing the received packet. 
-
-    // Check all the other paths, and see if any of them timed-out.
-    for (i = 0; i < sk->num_active; i++){
-      path_index = (path_index+i)%(sk->num_active);
-      if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto + RTO_BIAS){
-        if (timeout(sk, path_index)==TRUE){
-          // Path timed out, but still alive
-          if(sk->active_paths[path_index]->pathstate == ESTABLISHED){
-            send_segs(sk, path_index);
-          }else if(sk->active_paths[path_index]->pathstate == SYN_RECV || 
-                   sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
+      // Done with processing the received packet. 
+      
+      // Check all the other paths, and see if any of them timed-out.
+      for (i = 0; i < sk->num_active; i++){
+	path_index = (path_index+i)%(sk->num_active);
+	if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto + RTO_BIAS){
+	  if (timeout(sk, path_index)==TRUE){
+	    printf("Timeout %d:", path_index);
+	    // Path timed out, but still alive
+	    if(sk->active_paths[path_index]->pathstate == ESTABLISHED){
+	      printf("Sending data\n");
+	      send_segs(sk, path_index);
+	    }else if(sk->active_paths[path_index]->pathstate == SYN_RECV || 
+		     sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
+	    printf("Sending SYN_ACK\n");
             send_flag(sk, path_index, SYN_ACK);
-          }else if(sk->active_paths[path_index]->pathstate == FIN_SENT){
-            send_flag(sk, path_index, FIN);
-          }else if(sk->active_paths[path_index]->pathstate == FIN_ACK_RECV){
+	    }else if(sk->active_paths[path_index]->pathstate == FIN_SENT){
+	      printf("Sending FIN\n");
+	      send_flag(sk, path_index, FIN);
+	    }else if(sk->active_paths[path_index]->pathstate == FIN_ACK_RECV){
+	    printf("Sending FIN_ACK_ACK\n");
             send_flag(sk, path_index, FIN_ACK_ACK);
-          }else if(sk->active_paths[path_index]->pathstate == FIN_RECV ||
-                   sk->active_paths[path_index]->pathstate == FIN_ACK_SENT){
-            send_flag(sk, path_index, FIN_ACK);
-          }else{
-            // Should be in CLOSING state. Just continuing to close. 
-            printf("Still closing\n");
-          }
-        }else{
-          // Path is dead and is being removed
-          removePath(sk, path_index);
-          path_index--;
-        }
+	    }else if(sk->active_paths[path_index]->pathstate == FIN_RECV ||
+		     sk->active_paths[path_index]->pathstate == FIN_ACK_SENT){
+	      printf("Sending FIN_ACK\n");
+	      send_flag(sk, path_index, FIN_ACK);
+	    }else{
+	      // Should be in CLOSING state. Just continuing to close. 
+	      printf("Still closing\n");
+	    }
+	  }else{
+	    // Path is dead and is being removed
+	    removePath(sk, path_index);
+	    path_index--;
+	  }
+	}
       }
     }
     
@@ -513,8 +525,6 @@ void
 
 /*
   closes srvctcp_sock
-  if closer = 1, then the server is the initiating the closing
-  if closer = 0, then the server is receiving the FIN
  */
 void
 close_srvctcp(srvctcp_sock* sk){
