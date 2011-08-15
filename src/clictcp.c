@@ -55,16 +55,20 @@ ctrlc(clictcp_sock *csk){
   if (csk->end_time==0) csk->end_time = 0.1;
 
   /* don't include first pkt in data/pkt rate */
-  printf("\n \n**Packets** %d pkts  %d acks  %d bytes\n**THRU** %f KBs %f Mbs %f secs \n",
+  printf("\n\n******* Priniting Statistics for Connection ********\n");
+  printf("**Packets** %d pkts  %d acks  %d bytes\n**THRU** %f KBs %f Mbs %f secs \n",
          csk->pkts,csk->acks,PAYLOAD_SIZE*csk->pkts,1.e-3*PAYLOAD_SIZE*(csk->pkts)/csk->end_time,
          8.e-6*PAYLOAD_SIZE*(csk->pkts)/csk->end_time,csk->end_time);
 
   //printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
   printf("**Ndofs** %d  coding loss rate %f\n", csk->ndofs, (double)csk->ndofs/(double)csk->pkts);
-  printf("**Old packets** %d  old pkt loss rate %f\n", csk->old_blk_pkts, (double)csk->old_blk_pkts/(double)csk->pkts);
-  printf("**Next Block packets** %d  nxt pkt loss rate %f\n", csk->nxt_blk_pkts, (double)csk->nxt_blk_pkts/(double)csk->pkts);
+  printf("**Old packets** %d  old pkt loss rate %f\n", 
+         csk->old_blk_pkts, (double)csk->old_blk_pkts/(double)csk->pkts);
+  printf("**Next Block packets** %d  nxt pkt loss rate %f\n", 
+         csk->nxt_blk_pkts, (double)csk->nxt_blk_pkts/(double)csk->pkts);
   printf("Total Channel loss rate %f\n", (double)csk->total_loss/(double)csk->last_seqno);
-  printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", csk->idle_total, csk->elimination_delay, csk->decoding_delay);
+  printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", 
+         csk->idle_total, csk->elimination_delay, csk->decoding_delay);
 
 
   //  exit(0);
@@ -267,6 +271,9 @@ connect_ctcp(char *host, char *port, char *lease_file){
       for (k = 0; k < csk->substreams; k++){
         if(send_flag(csk, k, SYN) == -1){
           printf("Could not send SYN packet \n");
+        }else{
+          csk->pathstate[k] = SYN_SENT;
+          csk->lastrcvt[k] = getTime();
         }
       }
       rv++;
@@ -278,6 +285,12 @@ connect_ctcp(char *host, char *port, char *lease_file){
       return NULL;
     }else{
       printf("Received SYN ACK after %d tries\n", rv);
+      csk->pathstate[k] = SYN_ACK_RECV;
+      csk->lastrcvt[k] = getTime();
+      if(send_flag(csk, k, NORMAL) == 0){
+        csk->pathstate[k] = ESTABLISHED;
+        printf("Sent ACK for the SYN ACK\n");
+      }
     }
 
     ///////////////////////   CONNECTION SETUP UP TO HERE  ///////////////
@@ -294,6 +307,7 @@ uint32_t
 read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
 
   if (csk->status != ACTIVE){
+    printf("read_ctcp: not active\n");
     csk->error = SRVHUP;
     return -1;
   }
@@ -302,6 +316,7 @@ read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
   //printf("read_ctcp: pop %d bytes, csk->usr_cache size %d\n", res, csk->usr_cache.size);
 
   if (res == 0){
+    printf("read_ctcp: nothing to read\n");
     // fifo is released because the connection is somehow terminated
     csk->error = SRVHUP;
     res = -1;
@@ -330,8 +345,11 @@ void
   double idle_timer;
   int curr_substream=0;
   int ready;
+
   do{
+
     idle_timer = getTime();
+
     // value -1 blocks until something is ready to read
     ready = poll(read_set, csk->substreams, -1);
 
@@ -342,21 +360,22 @@ void
       ready = POLL_TO_FLG;
     }else{
       srvlen = sizeof(csk->srv_addr); // TODO: this is not necessary -> remove
-      //printf("ready! %d\n", ready);
 
       do{
         if(read_set[curr_substream].revents & POLLIN){
-          //printf("reading substream %d\n", curr_substream);
+
           if((numbytes = recvfrom(csk->sockfd[curr_substream], buff, MSS, 0,
                                   &(csk->srv_addr), &srvlen)) == -1){
             err_sys("recvfrom",csk);
           }
           if(numbytes <= 0) break;
+          
+          csk->lastrcvt[curr_substream] = getTime();
+          csk->idle_time[curr_substream] = INIT_IDLE_TIME;
 
-          csk->idle_total += getTime() - idle_timer;
-
+          csk->idle_total += csk->lastrcvt[curr_substream] - idle_timer;
           csk->pkts++;
-          csk->end_time = getTime();  /* last read */
+          csk->end_time = csk->lastrcvt[curr_substream];  /* last read */
           if (csk->start_time == 0) csk->start_time = csk->end_time;  /* first pkt time */
 
           // Unmarshall the packet
@@ -367,6 +386,7 @@ void
           case FIN:
             printf("received FIN packet\n");
             csk->status = CLOSED;
+            csk->pathstate[curr_substream] = FIN_RECV;
             while(send_flag(csk, 0, FIN_ACK) == -1){
               printf("Could not send FIN_ACK\n");
             }
@@ -377,14 +397,23 @@ void
             csk->status = CLOSED;
             break;
 
+          case FIN_ACK_ACK:
+            csk->status = CLOSED;
+            csk->pathstate[curr_substream] = CLOSING;
+            fifo_release(&(csk->usr_cache));
+            break;
+          
           case SYN_ACK:
-            // ACK the SYN-ACK
-            // TODO Should active the corresponding path.. if we send SYN_ACKS for each path.
+            if(csk->pathstate[curr_substream] == SYN_SENT){
+              csk->pathstate[curr_substream] = SYN_ACK_RECV;
+              send_flag(csk, curr_substream, NORMAL);
+            }else{
+              printf("State %d: Received SYN_ACK\n", csk->pathstate[curr_substream]);
+            }
             break;
 
           case SYN:
             printf("ERROR: received SYN on the client side\n");
-            //            ctrlc(csk);
             break;
 
           default:
@@ -396,8 +425,16 @@ void
             if (csk->debug > 6 && msg->blockno != csk->curr_block ){
               printf("exp %d got %d\n", csk->curr_block, msg->blockno);
             }
-
-            bldack(csk, msg, match, curr_substream);            
+            
+            if(csk->pathstate[curr_substream] == ESTABLISHED){
+              bldack(csk, msg, match, curr_substream);            
+            }else if(csk->pathstate[curr_substream] == SYN_ACK_RECV ||
+                     csk->pathstate[curr_substream] == SYN_SENT){
+              csk->pathstate[curr_substream] = ESTABLISHED;
+              bldack(csk, msg, match, curr_substream);            
+            }else{
+              printf("State %d: Received a data packet\n", csk->pathstate[curr_substream]);
+            }
           }
            
           ready--;    // decrease the number of ready sockets
@@ -406,9 +443,25 @@ void
         if(curr_substream == csk->substreams) curr_substream = 0;
 
       }while(ready>0);
+
     }
-    // TODO Should this be such that all sockfd are not -1? or should it be just the maximum..?
-    // NOTE that the ones that are not active can be zero, or any value.
+
+    for(k = 0; k<csk->substreams; k++){
+      if(getTime() - csk->lastrcvt[k] > csk->idle_time[k]){     
+        if(csk->pathstate[k] == ESTABLISHED){
+          continue;
+        }else if(csk->pathstate[k] == SYN_SENT){
+          send_flag(csk, k, SYN);
+        }else if(csk->pathstate[k] == SYN_ACK_RECV){
+          send_flag(csk, k, NORMAL);
+        }else{
+          printf("\nIn FIN/CLOSE state, should deal with this separately\n");
+        }
+        csk->idle_time[k] = 2*csk->idle_time[k];
+        // TODO currently, the client backs off indefinitely on a path if there are no replies
+      }
+    }
+
   }while(csk->status == ACTIVE); 
 
 
@@ -448,101 +501,99 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
         // Discard the packet if it is coming from a decoded block or it is too far ahead
         // Send an appropriate ack to return the token
       if (csk->debug > 5){
-        printf("Old packet  curr block %d packet blockno %d seqno %d substream %d \n", csk->curr_block, blockno, msg->seqno, curr_substream);
+        printf("Old packet  curr block %d packet blockno %d seqno %d substream %d \n", 
+               csk->curr_block, blockno, msg->seqno, curr_substream);
       }
       csk->old_blk_pkts++;
     }else if (blockno >= csk->curr_block + NUM_BLOCKS){
         printf("BAD packet: The block does not exist yet.\n");
     }else{
-        int prev_dofs = csk->blocks[blockno%NUM_BLOCKS].dofs;
-
         // Otherwise, the packet should go to one of the blocks in the memory
         // perform the Gaussian elimination on the packet and put in proper block
+
+        int prev_dofs = csk->blocks[blockno%NUM_BLOCKS].dofs;
 
         // If the block is already full, skip Gaussian elimination
         if(csk->blocks[blockno%NUM_BLOCKS].dofs < csk->blocks[blockno%NUM_BLOCKS].len){
 
           start = msg->start_packet;
+          
+          // Shift the row to make SHURE the leading coefficient is not zero
+          int shift = shift_row(msg->packet_coeff, msg->num_packets);
+          start += shift;
+          
+          // THE while loop!
+          while(!isEmpty(msg->packet_coeff, msg->num_packets)){
+            if(csk->blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
+              
+              msg->num_packets = MIN(msg->num_packets, BLOCK_SIZE - start);
+              
+              // Allocate the memory for the coefficients in the matrix for this block
+              csk->blocks[blockno%NUM_BLOCKS].rows[start] = (char *) malloc(msg->num_packets*sizeof(char));
+              csk->blocks[blockno%NUM_BLOCKS].row_len[start] = msg->num_packets;              
+              // Allocate the memory for the content of the packet
+              csk->blocks[blockno%NUM_BLOCKS].content[start] = malloc(PAYLOAD_SIZE);
+              // Set the coefficients to be all zeroes (for padding if necessary)
+              memset(csk->blocks[blockno%NUM_BLOCKS].rows[start], 0, msg->num_packets);
+              // Normalize the coefficients and the packet contents
+              normalize(msg->packet_coeff, msg->payload, msg->num_packets);
+              // Put the coefficients into the matrix
+              memcpy(csk->blocks[blockno%NUM_BLOCKS].rows[start], msg->packet_coeff, msg->num_packets);
+              // Put the payload into the corresponding place
+              memcpy(csk->blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
 
-            // Shift the row to make SHURE the leading coefficient is not zero
-            int shift = shift_row(msg->packet_coeff, msg->num_packets);
-            start += shift;
+              if (csk->blocks[blockno%NUM_BLOCKS].rows[start][0] != 1){
+                printf("blockno %d\n", blockno);
+              }
 
-            // THE while loop!
-            while(!isEmpty(msg->packet_coeff, msg->num_packets)){
-                if(csk->blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
+              // We got an innovative eqn
+              csk->blocks[blockno%NUM_BLOCKS].max_coding_wnd = 
+                MAX(csk->blocks[blockno%NUM_BLOCKS].max_coding_wnd, msg->num_packets);
+              csk->blocks[blockno%NUM_BLOCKS].dofs++;
+              break;
+            }else{
+              uint8_t pivot = msg->packet_coeff[0];
+              int i;
 
-                    msg->num_packets = MIN(msg->num_packets, BLOCK_SIZE - start);
-
-                    // Allocate the memory for the coefficients in the matrix for this block
-                    csk->blocks[blockno%NUM_BLOCKS].rows[start] = (char *) malloc(msg->num_packets*sizeof(char));
-                    csk->blocks[blockno%NUM_BLOCKS].row_len[start] = msg->num_packets;
-
-                    // Allocate the memory for the content of the packet
-                    csk->blocks[blockno%NUM_BLOCKS].content[start] = malloc(PAYLOAD_SIZE);
-
-                    // Set the coefficients to be all zeroes (for padding if necessary)
-                    memset(csk->blocks[blockno%NUM_BLOCKS].rows[start], 0, msg->num_packets);
-
-                    // Normalize the coefficients and the packet contents
-                    normalize(msg->packet_coeff, msg->payload, msg->num_packets);
-
-                    // Put the coefficients into the matrix
-                    memcpy(csk->blocks[blockno%NUM_BLOCKS].rows[start], msg->packet_coeff, msg->num_packets);
-
-                    // Put the payload into the corresponding place
-                    memcpy(csk->blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
-
-
-                    if (csk->blocks[blockno%NUM_BLOCKS].rows[start][0] != 1){
-                      printf("blockno %d\n", blockno);
-                    }
-
-                    // We got an innovative eqn
-                    csk->blocks[blockno%NUM_BLOCKS].max_coding_wnd = MAX(csk->blocks[blockno%NUM_BLOCKS].max_coding_wnd, msg->num_packets);
-                    csk->blocks[blockno%NUM_BLOCKS].dofs++;
-                    break;
-                }else{
-                    uint8_t pivot = msg->packet_coeff[0];
-                    int i;
-
-                    if (csk->debug > 9){
-                        int ix;
-                        for (ix = 0; ix < msg->num_packets; ix++){
-                            printf(" %d ", msg->packet_coeff[ix]);
-                        }
-                        printf("seqno %d start%d isEmpty %d \n Row coeff", msg->seqno, start, isEmpty(msg->packet_coeff, msg->num_packets)==1);
-
-                        for (ix = 0; ix < msg->num_packets; ix++){
-                            printf(" %d ",csk->blocks[blockno%NUM_BLOCKS].rows[start][ix]);
-                        }
-                        printf("\n");
-                    }
-
-                    msg->packet_coeff[0] = 0; // TODO; check again
-                    // Subtract row with index start with the row at hand (coffecients)
-                    for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
-                        msg->packet_coeff[i] ^= FFmult(csk->blocks[blockno%NUM_BLOCKS].rows[start][i], pivot);
-                    }
-
-                    // Subtract row with index start with the row at hand (content)
-                    for(i = 0; i < PAYLOAD_SIZE; i++){
-                        msg->payload[i] ^= FFmult(csk->blocks[blockno%NUM_BLOCKS].content[start][i], pivot);
-                    }
-
-                    // Shift the row
-                    shift = shift_row(msg->packet_coeff, msg->num_packets);
-                    start += shift;
+              if (csk->debug > 9){
+                int ix;
+                for (ix = 0; ix < msg->num_packets; ix++){
+                  printf(" %d ", msg->packet_coeff[ix]);
                 }
-            } // end while
+                printf("seqno %d start%d isEmpty %d \n Row coeff", 
+                       msg->seqno, start, isEmpty(msg->packet_coeff, msg->num_packets)==1);
 
-            if(csk->blocks[blockno%NUM_BLOCKS].dofs == prev_dofs){
-              csk->ndofs++;
+                for (ix = 0; ix < msg->num_packets; ix++){
+                  printf(" %d ",csk->blocks[blockno%NUM_BLOCKS].rows[start][ix]);
+                }
+                printf("\n");
+              }
+
+              msg->packet_coeff[0] = 0; // TODO; check again
+              // Subtract row with index start with the row at hand (coffecients)
+              for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
+                msg->packet_coeff[i] ^= FFmult(csk->blocks[blockno%NUM_BLOCKS].rows[start][i], pivot);
+              }
+
+              // Subtract row with index start with the row at hand (content)
+              for(i = 0; i < PAYLOAD_SIZE; i++){
+                msg->payload[i] ^= FFmult(csk->blocks[blockno%NUM_BLOCKS].content[start][i], pivot);
+              }
+
+              // Shift the row
+              shift = shift_row(msg->packet_coeff, msg->num_packets);
+              start += shift;
             }
+          } // end while
+
+          if(csk->blocks[blockno%NUM_BLOCKS].dofs == prev_dofs){
+            csk->ndofs++;
+          }
         } else {  // end if block.dof < block.len
           csk->nxt_blk_pkts++;   // If the block is full rank but not yet decoded, anything arriving is old
           if (csk->debug > 5){
-            printf("NEXT packet  curr block %d packet blockno %d seqno %d substream %d\n", csk->curr_block, blockno, msg->seqno, curr_substream);
+            printf("NEXT packet  curr block %d packet blockno %d seqno %d substream %d\n", 
+                   csk->curr_block, blockno, msg->seqno, curr_substream);
           }
         }
 
@@ -617,7 +668,9 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
 
         csk->decoding_delay += getTime() - decoding_timer;
         if (csk->debug > 4){
-          printf("Done within %f secs   blockno %d max_pkt_ix %d \n", getTime()-decoding_timer, csk->curr_block, csk->blocks[(csk->curr_block)%NUM_BLOCKS].max_packet_index);
+          printf("Done within %f secs   blockno %d max_pkt_ix %d \n", 
+                 getTime()-decoding_timer, 
+                 csk->curr_block, csk->blocks[(csk->curr_block)%NUM_BLOCKS].max_packet_index);
         }
     } // end if the block is done
 
@@ -640,9 +693,6 @@ partial_write(clictcp_sock* csk){
     // We have enough dofs to decode, DECODE!
     unwrap(&(csk->blocks[blockno%NUM_BLOCKS]));
  }
-
-
-
   do {
     if ( csk->blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
       push_ready = FALSE;
@@ -658,21 +708,22 @@ partial_write(clictcp_sock* csk){
     if (push_ready){
       // check the queue size
       // if enough room, push, otherwise, exit the push process
-        // Read the first two bytes containing the length of the useful data
-        memcpy(&payload_len, csk->blocks[blockno%NUM_BLOCKS].content[start], 2);
-
-        // Convert to host order
-        payload_len = ntohs(payload_len);
+      // Read the first two bytes containing the length of the useful data
+      memcpy(&payload_len, csk->blocks[blockno%NUM_BLOCKS].content[start], 2);
+      
+      // Convert to host order
+      payload_len = ntohs(payload_len);
       if (fifo_getspace(&(csk->usr_cache)) >= payload_len){
         // push the packet to user cache
-
-
+                
         // Write the contents of the decode block into the file
         //fwrite(blocks[blockno%NUM_BLOCKS].content[i]+2, 1, len, rcv_file);
-
+        
         bytes_pushed = 0;
         while (bytes_pushed < payload_len){
-          bytes_pushed += fifo_push(&(csk->usr_cache), csk->blocks[blockno%NUM_BLOCKS].content[start]+2+bytes_pushed, payload_len - bytes_pushed);
+          bytes_pushed += fifo_push(&(csk->usr_cache), 
+                                    csk->blocks[blockno%NUM_BLOCKS].content[start]+2+bytes_pushed, 
+                                    payload_len - bytes_pushed);
         }
 
         //printf("write_ctcp: pushed %d bytes blockno %d max_pkt_ix %d start %d\n", 
@@ -1159,6 +1210,7 @@ create_clictcp_sock(void){
   sk->substreams = 1;
  
   for (k=0; k < MAX_SUBSTREAMS; k++){
+    sk->idle_time[k] = INIT_IDLE_TIME;
     sk->ifc_addr[k] = NULL;
   }
 
@@ -1262,7 +1314,7 @@ poll_flag(clictcp_sock *csk, flag_t flag, int timeout){
           free(msg->payload);
           free(msg);
           free(buff);
-          return 0;
+          return curr_substream;
         }else{
           printf("Expected flag ACK, received something else!\n");
           free(msg->packet_coeff);
@@ -1290,13 +1342,18 @@ poll_flag(clictcp_sock *csk, flag_t flag, int timeout){
 void
 close_clictcp(clictcp_sock* csk){
 
+  int i;
   int tries = 0;
   if (csk->status != CLOSED){
     // TODO  if we want to close and open each path independantly, we may want to change this.
 
     do{
-      while(send_flag(csk, 0, FIN) == -1){
-        printf("Could not send the FIN packet\n");
+      for (i =0; i<csk->substreams; i++){
+        if(send_flag(csk, i, FIN) == -1){
+          printf("Could not send the FIN packet\n");
+        }else{
+          csk->pathstate[i] = FIN_SENT;
+        }
       }
       tries++;      
     } while(poll_flag(csk, FIN_ACK, POLL_ACK_TO*(2<<(tries-1)))== -1 && tries < POLL_MAX_TRIES );
@@ -1307,6 +1364,10 @@ close_clictcp(clictcp_sock* csk){
       csk->error = CLOSE_ERR;
     }else{
       printf("Received FIN ACK after %d tries\n", tries);
+      csk->pathstate[i] = FIN_ACK_RECV;
+      if (send_flag(csk, i, FIN_ACK_ACK)==0){
+        csk->pathstate[i] = CLOSING;
+      }
     }
     csk->status = CLOSED;
   }
