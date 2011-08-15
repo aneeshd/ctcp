@@ -67,16 +67,7 @@ ctrlc(clictcp_sock *csk){
   printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", csk->idle_total, csk->elimination_delay, csk->decoding_delay);
 
 
-  // Flush the routing tables and iptables
-  
-  /* TODO TODO add this later for multi-interface
-  int k;
-  for (k=0; k < csk->substreams; k++){
-    delete_table(k+1, k+1);
-  }
-  */
-
-  exit(0);
+  //  exit(0);
 }
 
 
@@ -148,6 +139,8 @@ main(int argc, char** argv){
         total_bytes += bytes_read;
         //        printf(" %d Total bytes receieved\n", total_bytes);
       }
+
+      ctrlc(csk);
 
       close_clictcp(csk);
 
@@ -221,9 +214,12 @@ connect_ctcp(char *host, char *port, char *lease_file){
 
     //-------------- BIND to proper local address ----------------------
     // Only bind if the interface IP address is specified through the command line
-    struct addrinfo *result_cli, *cli_info;
 
     if (lease_file != NULL){
+
+      struct addrinfo *result_cli, *cli_info;
+      int opt = 1;
+    
       for (k=0; k < csk->substreams; k++){
       
         make_new_table(&leases[k], k+1, k+1);
@@ -237,11 +233,19 @@ connect_ctcp(char *host, char *port, char *lease_file){
           printf("IP address trying to bind to %s \n\n", 
                  inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
      
+          setsockopt(csk->sockfd[k], IPPROTO_IP, IP_PKTINFO, (void *)&opt, sizeof(opt));
+
+          csk->ifc_addr[k] = (struct sockaddr*) malloc(sizeof(struct sockaddr));
+          *(csk->ifc_addr[k]) = *(result_cli->ai_addr);
+
+          /*
           if (bind(csk->sockfd[k], result_cli->ai_addr, result_cli->ai_addrlen) == -1) {
             close(csk->sockfd[k]);
             perror("can't bind to local address");
             return NULL;
           }
+          */
+
         }
 
       }
@@ -264,7 +268,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
     rv = 0;
     do{
       for (k = 0; k < csk->substreams; k++){
-        while(send_flag(csk, k, SYN) == -1){
+        if(send_flag(csk, k, SYN) == -1){
           printf("Could not send SYN packet \n");
         }
       }
@@ -473,7 +477,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
                     msg->num_packets = MIN(msg->num_packets, BLOCK_SIZE - start);
 
                     // Allocate the memory for the coefficients in the matrix for this block
-                    csk->blocks[blockno%NUM_BLOCKS].rows[start] = malloc(msg->num_packets);
+                    csk->blocks[blockno%NUM_BLOCKS].rows[start] = (char *) malloc(msg->num_packets*sizeof(char));
                     csk->blocks[blockno%NUM_BLOCKS].row_len[start] = msg->num_packets;
 
                     // Allocate the memory for the content of the packet
@@ -497,7 +501,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
                     }
 
                     // We got an innovative eqn
-                    csk->blocks[blockno%NUM_BLOCKS].max_coding_wnd = msg->num_packets;
+                    csk->blocks[blockno%NUM_BLOCKS].max_coding_wnd = MAX(csk->blocks[blockno%NUM_BLOCKS].max_coding_wnd, msg->num_packets);
                     csk->blocks[blockno%NUM_BLOCKS].dofs++;
                     break;
                 }else{
@@ -569,13 +573,18 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     int size = marshallAck(*ack, buff);
     srvlen = sizeof(csk->srv_addr);
 
-    if(sendto(csk->sockfd[curr_substream],buff, size, 0, &(csk->srv_addr), srvlen) == -1){
+    /*    if(sendto(csk->sockfd[curr_substream],buff, size, 0, &(csk->srv_addr), srvlen) == -1){
       err_sys("bldack: sendto",csk);
-    }
+      } */
+
+    send_over(csk, curr_substream, buff, size);
+
     csk->acks++;
 
-    //free(msg->packet_coeff);
-    //free(msg->payload);
+    free(msg->packet_coeff);
+    free(msg->payload);
+
+    free(ack);
 
     if (csk->debug > 6){
         printf("Sent an ACK: ackno %d blockno %d\n", ack->ackno, ack->blockno);
@@ -671,6 +680,7 @@ partial_write(clictcp_sock* csk){
         //printf("write_ctcp: pushed %d bytes blockno %d max_pkt_ix %d start %d\n", 
         //       bytes_pushed, blockno, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start);
         //printf("blockno %d dofs %d max_pkt_ix %d dofs_pushed %d payload_len %d\n", blockno, csk->blocks[blockno%NUM_BLOCKS].dofs, csk->blocks[blockno%NUM_BLOCKS].max_packet_index, start, payload_len);
+
         start++;
 
       }else{
@@ -708,8 +718,11 @@ int
 shift_row(uint8_t* buf, int len){
     if(len == 0) return 0;
 
+    // Get to the first nonzero element
     int shift;
-    for(shift=0; !buf[shift]; shift++); // Get to the first nonzero element
+    for(shift=0; shift < len; shift++){
+      if (buf[shift] != 0) break;
+    }
 
     if(shift == 0) return shift;
 
@@ -801,14 +814,13 @@ writeAndFreeBlock(Coded_Block_t *blk, fifo_t *buffer){
           bytes_pushed += fifo_push(buffer, blk->content[i]+2+bytes_pushed, len - bytes_pushed);
         }
 
-        // TODO remove the if condition (This is to avoid seg fault for the last block)
-        //if (blocks[blockno%NUM_BLOCKS].len == BLOCK_SIZE){
-            // Free the content
-            free(blk->content[i]);
+    }
 
-            // Free the matrix
-            free(blk->rows[i]);
-            //}
+    for(i = 0; i < blk->len; i++){
+      // Free the content
+      free(blk->content[i]);
+      // Free the matrix
+      free(blk->rows[i]);
     }
 }
 
@@ -840,7 +852,7 @@ unmarshallData(Data_Pckt* msg, char* buf, clictcp_sock *csk){
     }
 
     int coding_wnd = MAX(msg->num_packets, csk->blocks[msg->blockno%NUM_BLOCKS].max_coding_wnd);
-    msg->packet_coeff = malloc(coding_wnd);
+    msg->packet_coeff = (uint8_t *) malloc(coding_wnd*sizeof(uint8_t));
 
     // Padding with zeroes
     memset(msg->packet_coeff, 0, coding_wnd);
@@ -1109,6 +1121,10 @@ create_clictcp_sock(void){
   // MULTIPLE SUBSTREAMS
   sk->substreams = 1;
  
+  for (k=0; k < MAX_SUBSTREAMS; k++){
+    sk->ifc_addr[k] = NULL;
+  }
+
   fifo_init(&(sk->usr_cache), NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE);
 
   sk->status = ACTIVE;
@@ -1143,7 +1159,7 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
 
   int size = marshallAck(*msg, buff);
 
-  do{
+  /*  do{
     socklen_t srvlen = sizeof(csk->srv_addr);
     if((numbytes = sendto(csk->sockfd[path_id], buff, size, 0, &(csk->srv_addr), srvlen)) == -1){
       perror("send_flag error: sendto");
@@ -1153,12 +1169,15 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
     }
   } while(errno == ENOBUFS); // use the while to increment enobufs if the condition is met
 
-  if(numbytes != size){
-    perror("send_flag error: sent fewer bytes");
+  */
+
+  if (send_over(csk, path_id, buff, size) == -1){
+    perror("send_flag error: sendto");
     free(msg);
     free(buff);
     return -1;
   }
+
   
   printf("Sent flag *** %d ***\n", flag);
 
@@ -1205,6 +1224,8 @@ poll_flag(clictcp_sock *csk, flag_t flag){
           err_sys("recvfrom",csk);
         }
         if(numbytes <= 0) {
+          free(msg->packet_coeff);
+          free(msg->payload);
           free(msg);
           free(buff);
           return -1;
@@ -1213,11 +1234,15 @@ poll_flag(clictcp_sock *csk, flag_t flag){
         // Unmarshall the packet
         bool match = unmarshallData(msg, buff, csk);
         if (msg->flag == flag){
+          free(msg->packet_coeff);
+          free(msg->payload);
           free(msg);
           free(buff);
           return 0;
         }else{
           printf("Expected flag ACK, received something else!\n");
+          free(msg->packet_coeff);
+          free(msg->payload);
           free(msg);
           free(buff);
           return -1;
@@ -1229,6 +1254,8 @@ poll_flag(clictcp_sock *csk, flag_t flag){
   }
   
   printf("poll flag *** %d *** \n", flag);
+  free(msg->packet_coeff);
+  free(msg->payload);
   free(msg);
   free(buff);
   return -1;
@@ -1263,8 +1290,91 @@ close_clictcp(clictcp_sock* csk){
   // TODO free the last remaining blocks
   // TODO close UDP sockets
 
-  fifo_free(&(csk->usr_cache));   
+  int k;
+  for(k =0; k < MAX_SUBSTREAMS; k++){
+    if (csk->ifc_addr[k] != NULL){
+      free(csk->ifc_addr[k]);
+      delete_table(k+1, k+1);      // Flush the routing tables and iptables
+    }
+  }
+  
+  fifo_free(&(csk->usr_cache));  
+
+  for(k = 0; k < NUM_BLOCKS; k++){
+    free(csk->blocks[k].rows);
+    free(csk->blocks[k].content);
+    free(csk->blocks[k].row_len);
+  }
+
   free(csk);
 
   return;
 }
+
+/*
+ Send a packet over the interface associated with
+ the specified substream
+
+ returns 0 on success and -1 on failure
+*/
+
+int
+send_over(clictcp_sock* csk, int substream, const void* buf, size_t buf_len){
+
+  if (csk->ifc_addr[substream] == NULL){
+    // fail over sendto
+    if(sendto(csk->sockfd[0], buf, buf_len, 0, &(csk->srv_addr), (socklen_t) sizeof(csk->srv_addr)) == -1){
+      perror("Sendto");
+      return -1;
+    }
+    return 0;
+  }
+
+  struct msghdr msg;
+  char ancillary_buf[CMSG_SPACE(sizeof(struct in_pktinfo))];
+  struct cmsghdr *cmsg;
+  struct iovec iov;
+
+  memset(&msg, 0, sizeof(struct msghdr));
+  memset(ancillary_buf, 0, sizeof(ancillary_buf));
+  //memset(cmsg, 0, sizeof(struct cmsghdr));
+  
+  iov.iov_base = (void *)buf;
+  iov.iov_len = buf_len;
+
+  if (csk->srv_addr.sa_family != AF_INET){
+    printf("SendOver: Does not support the address family of the server\n");
+    return -1;
+  }
+
+  msg.msg_name = (struct sockaddr *)&(csk->srv_addr);
+  msg.msg_namelen = (socklen_t) sizeof(csk->srv_addr);
+  msg.msg_flags = 0;
+  msg.msg_iov = &iov;
+  msg.msg_iovlen = 1;
+  
+  // It gets tricky from here
+  msg.msg_control = ancillary_buf;
+  msg.msg_controllen = sizeof(ancillary_buf);
+
+  cmsg = CMSG_FIRSTHDR(&msg);
+  cmsg->cmsg_level = IPPROTO_IP;
+  cmsg->cmsg_type = IP_PKTINFO;
+  cmsg->cmsg_len = CMSG_LEN(sizeof(struct in_pktinfo));
+
+  //  printf("Using sendmsg - substream %d \n", substream);
+  struct in_pktinfo *packet_info = (struct in_pktinfo *)(CMSG_DATA(cmsg));  
+  packet_info->ipi_spec_dst =  ((struct sockaddr_in*)(csk->ifc_addr[substream]))->sin_addr;
+  packet_info->ipi_ifindex = 0;
+
+  msg.msg_controllen = cmsg->cmsg_len;
+
+  if (sendmsg(csk->sockfd[substream], &msg, 0) == -1){
+    perror("Sendmsg");
+    return -1;
+  }
+
+  return 0;
+}
+
+

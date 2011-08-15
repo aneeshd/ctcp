@@ -33,12 +33,14 @@ FILE *rcv_file;
 
 typedef struct{
   //---------------- CTCP PARAMETERS ------------------//
-  struct sockaddr srv_addr;
   Coded_Block_t blocks[NUM_BLOCKS];
   uint32_t curr_block;
 
   // MULTIPLE SUBSTREAMS
   int substreams;
+
+  struct sockaddr srv_addr;
+  struct sockaddr* ifc_addr[MAX_SUBSTREAMS];
   int sockfd[MAX_SUBSTREAMS];
 
   fifo_t usr_cache;
@@ -91,7 +93,9 @@ void close_clictcp(clictcp_sock* csk);
 clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file);
 uint32_t  read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count);
 void partial_write(clictcp_sock* csk);
- 
+
+int send_over(clictcp_sock* csk, int substream, const void* buf, size_t buf_len);
+
 #endif // ATOUSRV_H_
 
 
