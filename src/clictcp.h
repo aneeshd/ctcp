@@ -14,6 +14,7 @@ typedef struct{
 
 typedef enum {ACTIVE=0, CLOSED} status_t;
 typedef enum {NONE=0, CLOSE_ERR, SRVHUP} ctcp_err_t;
+typedef enum {SYN_SENT=0, SYN_ACK_RECV, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN_RECV, FIN_ACK_SENT, CLOSING} clipath_t;
 
 //---------------- DEFAULT CONNECTION PARAMETERS ------------------//
 #define BUFFSIZE  3000
@@ -42,6 +43,7 @@ typedef struct{
   struct sockaddr srv_addr;
   struct sockaddr* ifc_addr[MAX_SUBSTREAMS];
   int sockfd[MAX_SUBSTREAMS];
+  clipath_t pathstate[MAX_SUBSTREAMS];
 
   fifo_t usr_cache;
 

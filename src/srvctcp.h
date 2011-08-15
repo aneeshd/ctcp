@@ -11,6 +11,7 @@
 #define MAX_CONNECT 5
 typedef enum {ACTIVE=0, CLOSED} status_t;
 typedef enum {NONE=0, CLOSE_ERR, CLIHUP} ctcp_err_t;
+typedef enum {SYN_RECV=0, SYN_ACK_SENT, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN_RECV, FIN_ACK_SENT, CLOSING} srvpath_t;
 
 // ------------ CTCP parameters ---------------//
 #define NUM_BLOCKS 4
@@ -19,9 +20,9 @@ typedef enum {NONE=0, CLOSE_ERR, CLIHUP} ctcp_err_t;
 #define MIN_DOF_REQUEST 0
 #define SLR_LONG_INIT 0.05
 #define RTO_BIAS 0.010      // (seconds) Bias the time-out timer
-#define INIT_RTO 1
+#define INIT_RTO 0.2
 #define INIT_CODING_WND 5
-#define FIN_MAX_RETRIES 10
+#define CONTROL_MAX_RETRIES 10
 
 //---------------Constants -----------------------//
 #define slr_mem          1.0/BLOCK_SIZE      // The memory of smoothing function
@@ -54,7 +55,11 @@ typedef struct{
   double avrgrtt;
   int vdecr;                                // vegas decrements or no adjusts 
   int v0;
-  double max_delta;                         // vegas like tracker 
+  double max_delta;                         // vegas like tracker
+
+  srvpath_t pathstate;                     // connection states
+
+  
 } Substream_Path;
 
 typedef struct{
