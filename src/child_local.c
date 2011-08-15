@@ -42,6 +42,7 @@ struct sockaddr ad_target;
 char            target_ip[MAXIPSTRLEN];
 uint16_t        target_port;
 
+char lease_file[256];
 char*           ctcp_port;
 clictcp_sock*   csk;
 
@@ -133,7 +134,7 @@ int handle_con()
   res = pthread_create( &clictcp_thread, NULL, handle_ctcp_traffic, NULL);
   res = handle_traffic();
     
-  fprintf(stdout, "\n******* handle_traffic returned *******\n", buf_size);
+  fprintf(stdout, "\n******* handle_traffic returned *******\n");
   sprintf(buf,"TCP Connection closed (%s)",sz_error[res]);
   logstr(buf,&ad_client);
 
@@ -161,10 +162,10 @@ int handle_con()
 int negotiate( struct sockaddr *ad_cl_local )
 {
   int            i;
-  uchar          buf[256];
+  char          buf[256];
   int            res;
   int            cmd;
-  int            sksize;
+  socklen_t      sksize;
   struct hostent *he;
 
 
@@ -324,7 +325,7 @@ int connect_client()
     host_addr = inet_ntoa(host_ip);
     printf("Sending CTCP request to %s port %s\n", host_addr, ctcp_port);
 
-    csk = connect_ctcp(host_addr, ctcp_port, NULL);
+    csk = connect_ctcp(host_addr, ctcp_port, lease_file);
 
     if (csk == NULL){
       printf("CTCP negotiation failed \n");
@@ -371,7 +372,7 @@ int connect_client()
 int bind_client()
 {
   int             res;
-  int             sksize;
+  socklen_t       sksize;
   uchar           buf[16];
     
 

@@ -25,15 +25,16 @@ ctrlc(srvctcp_sock* sk){
   return;
 }
 
+
 /*
 int
 main (int argc, char** argv){
 
-    char *file_name = "Avatar.mov";
+    char *file_name = "Honda";
     FILE *snd_file; // The file to be sent
     char *version = "$version 0.0$";
     char *configfile = "config/vegas";
-    char *port = "9999";  // This is the port that the server is listening to
+    char *port = "88";  // This is the port that the server is listening to
     int i, c;
 
     srandom(getpid());
@@ -363,7 +364,7 @@ void
       if (ack->flag == SYN){
 
         // check if this path is already active, then ignore SYN retx
-        for(i=0; i< sk->num_active; i++){
+        for(i=0; i < sk->num_active; i++){
           if (sockaddr_cmp(&cli_addr, &(sk->active_paths[i]->cli_addr))==0){
             break;
           }
@@ -373,7 +374,7 @@ void
           send_flag(sk, i, SYN_ACK);
         }
         
-        if (sk->num_active < MAX_CONNECT && i < sk->num_active){
+        if (sk->num_active < MAX_CONNECT && i >= sk->num_active){
           sk->active_paths[sk->num_active] = malloc(sizeof(Substream_Path));
           init_stream(sk, sk->active_paths[sk->num_active]);
           // add the client address info to the client lookup table
@@ -462,7 +463,7 @@ void
   free(buff);
 
   // Just for printing statistics
-  ctrlc(sk);
+  //ctrlc(sk);
 
   for(i=1; i<sk->num_active; i++){
     free(sk->active_paths[i]);

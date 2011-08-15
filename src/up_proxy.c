@@ -324,7 +324,7 @@ int proxy_poll_connect( struct t_proxy_connection *pcon, int timeout )
   struct pollfd  pfd;
   struct hostent *he;
   int            so_err;
-  int            so_err_len;
+  socklen_t      so_err_len;
   int            adam;
   uint8_t        buf[PROXY_NEGBUFLEN];
   int            buf_len;
