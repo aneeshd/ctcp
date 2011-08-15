@@ -65,7 +65,7 @@ struct sockaddr ad_socks;
 int main( int argc, char **argv )
 {
     int              force_load = FALSE;
-    int              sksize;
+    socklen_t        sksize;
     char             s[256];
     struct sigaction sa;
     int              res;

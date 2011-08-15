@@ -326,9 +326,9 @@ int proxy_poll_connect( struct t_proxy_connection *pcon, int timeout )
   int            so_err;
   socklen_t      so_err_len;
   int            adam;
-  uint8_t        buf[PROXY_NEGBUFLEN];
+  char        buf[PROXY_NEGBUFLEN];
   int            buf_len;
-  uint8_t        auth_buf[PROXY_AUTHBUFLEN];
+  char        auth_buf[PROXY_AUTHBUFLEN];
 
     
   /* 
@@ -915,7 +915,7 @@ int proxy_poll_connect( struct t_proxy_connection *pcon, int timeout )
     /*
      * Read HTTP server response.
      */
-    buf_len = read(pcon->sock,buf,buf_len);
+    buf_len = read(pcon->sock,buf, PROXY_NEGBUFLEN);
 
     if( buf_len <= 0 ) {
 	    proxy_errno = errno;

@@ -154,10 +154,10 @@ int handle_con(int ctcp_port)
 int negotiate( struct sockaddr *ad_cl_local, int ctcp_port )
 {
   int            i;
-  uchar          buf[256];
+  char          buf[256];
   int            res;
   int            cmd;
-  int            sksize;
+  socklen_t      sksize;
   struct hostent *he;
 
   /*
@@ -342,7 +342,7 @@ int connect_client()
 int bind_client()
 {
   int             res;
-  int             sksize;
+  socklen_t       sksize;
   uchar           buf[16];
     
 

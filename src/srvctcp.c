@@ -463,7 +463,7 @@ void
   free(buff);
 
   // Just for printing statistics
-  //ctrlc(sk);
+  ctrlc(sk);
 
   for(i=1; i<sk->num_active; i++){
     free(sk->active_paths[i]);
@@ -1131,7 +1131,7 @@ void
 
   sk->rcvrwin    = 20;          /* rcvr window in mss-segments */
   sk->increment  = 1;           /* cc increment */
-  sk->multiplier = 0.5;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
+  sk->multiplier = 0.85;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
   sk->initsegs   = 8;          /* slowstart initial */
   sk->ssincr     = 1;           /* slow start increment */
   sk->maxidle    = 10;          /* max idle before abort */
