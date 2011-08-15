@@ -106,11 +106,13 @@ main(int argc, char** argv){
         }
     }
 
-    clictcp_sock* csk = connect_ctcp(host, port, lease_file);
+    int num_tables = add_routing_tables(lease_file); 
 
+    clictcp_sock* csk = connect_ctcp(host, port, lease_file);
 
     if (csk == NULL){
       printf("Could not create CTCP socket\n");
+      remove_routing_tables(num_tables);
       return 1;
     } else{
       
@@ -149,6 +151,7 @@ main(int argc, char** argv){
 
     }
 
+    remove_routing_tables(num_tables);
     return 0;
 }
 
@@ -222,9 +225,9 @@ connect_ctcp(char *host, char *port, char *lease_file){
     
       for (k=0; k < csk->substreams; k++){
       
-        make_new_table(&leases[k], k+1, k+1);
+        //        make_new_table(&leases[k], k+1, k+1);
 
-        if((rv = getaddrinfo(leases[k].address, "9999", &hints, &cli_info)) != 0) {
+        if((rv = getaddrinfo(leases[k].address, NULL, &hints, &cli_info)) != 0) {
           fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
           return NULL;
         }
@@ -238,13 +241,6 @@ connect_ctcp(char *host, char *port, char *lease_file){
           csk->ifc_addr[k] = (struct sockaddr*) malloc(sizeof(struct sockaddr));
           *(csk->ifc_addr[k]) = *(result_cli->ai_addr);
 
-          /*
-          if (bind(csk->sockfd[k], result_cli->ai_addr, result_cli->ai_addrlen) == -1) {
-            close(csk->sockfd[k]);
-            perror("can't bind to local address");
-            return NULL;
-          }
-          */
 
         }
 
@@ -986,6 +982,35 @@ readLease(char *leasefile, dhcp_lease *leases){
   return substreams+1; 
 }
 
+int 
+add_routing_tables(char *lease_file){
+  
+  if (lease_file == NULL){
+    return 0;   // Do nothing
+  }
+
+  int k, substreams;
+  dhcp_lease leases[MAX_SUBSTREAMS];
+
+  substreams = readLease(lease_file, leases);
+
+  for (k=0; k < substreams; k++){
+    make_new_table(&leases[k], k+1, k+1);
+  }
+
+  return substreams;
+}
+
+void 
+remove_routing_tables(int substreams){
+  int k;
+  for(k =0; k < substreams; k++){
+      delete_table(k+1, k+1);      // Flush the routing tables and iptables
+    }
+  return;
+}
+
+
 
 
 void 
@@ -1294,7 +1319,6 @@ close_clictcp(clictcp_sock* csk){
   for(k =0; k < MAX_SUBSTREAMS; k++){
     if (csk->ifc_addr[k] != NULL){
       free(csk->ifc_addr[k]);
-      delete_table(k+1, k+1);      // Flush the routing tables and iptables
     }
   }
   
@@ -1376,5 +1400,6 @@ send_over(clictcp_sock* csk, int substream, const void* buf, size_t buf_len){
 
   return 0;
 }
+
 
 

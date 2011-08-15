@@ -33,7 +33,7 @@ main (int argc, char** argv){
     FILE *snd_file; // The file to be sent
     char *version = "$version 0.0$";
     char *configfile = "config/vegas";
-    char *port = "9999";  // This is the port that the server is listening to
+    char *port = "88";  // This is the port that the server is listening to
     int i, c;
 
     srandom(getpid());
