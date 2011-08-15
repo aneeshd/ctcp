@@ -24,6 +24,7 @@ typedef enum {SYN_SENT=0, SYN_ACK_RECV, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 
 #define NUM_BLOCKS 4
 #define MAX_SUBSTREAMS 5
+#define INIT_IDLE_TIME 0.5
 
 #define POLL_ACK_TO 200   // in milliseconds
 #define POLL_MAX_TRIES 10
@@ -44,6 +45,8 @@ typedef struct{
   struct sockaddr* ifc_addr[MAX_SUBSTREAMS];
   int sockfd[MAX_SUBSTREAMS];
   clipath_t pathstate[MAX_SUBSTREAMS];
+  double lastrcvt[MAX_SUBSTREAMS];
+  double idle_time[MAX_SUBSTREAMS];
 
   fifo_t usr_cache;
 

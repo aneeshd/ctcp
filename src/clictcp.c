@@ -62,10 +62,13 @@ ctrlc(clictcp_sock *csk){
 
   //printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
   printf("**Ndofs** %d  coding loss rate %f\n", csk->ndofs, (double)csk->ndofs/(double)csk->pkts);
-  printf("**Old packets** %d  old pkt loss rate %f\n", csk->old_blk_pkts, (double)csk->old_blk_pkts/(double)csk->pkts);
-  printf("**Next Block packets** %d  nxt pkt loss rate %f\n", csk->nxt_blk_pkts, (double)csk->nxt_blk_pkts/(double)csk->pkts);
+  printf("**Old packets** %d  old pkt loss rate %f\n", 
+         csk->old_blk_pkts, (double)csk->old_blk_pkts/(double)csk->pkts);
+  printf("**Next Block packets** %d  nxt pkt loss rate %f\n", 
+         csk->nxt_blk_pkts, (double)csk->nxt_blk_pkts/(double)csk->pkts);
   printf("Total Channel loss rate %f\n", (double)csk->total_loss/(double)csk->last_seqno);
-  printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", csk->idle_total, csk->elimination_delay, csk->decoding_delay);
+  printf("Total idle time %f, Gaussian Elimination delay %f, Decoding delay %f\n", 
+         csk->idle_total, csk->elimination_delay, csk->decoding_delay);
 
 
   //  exit(0);
@@ -269,6 +272,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
           printf("Could not send SYN packet \n");
         }else{
           csk->pathstate[k] = SYN_SENT;
+          csk->lastrcvt[k] = getTime();
         }
       }
       rv++;
@@ -280,8 +284,10 @@ connect_ctcp(char *host, char *port, char *lease_file){
     }else{
       printf("Received SYN ACK after %d tries\n", rv);
       csk->pathstate[k] = SYN_ACK_RECV;
+      csk->lastrcvt[k] = getTime();
       if(send_flag(csk, k, NORMAL) == 0){
         csk->pathstate[k] = ESTABLISHED;
+        printf("Sent ACK for the SYN ACK\n");
       }
     }
 
@@ -299,6 +305,7 @@ uint32_t
 read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
 
   if (csk->status != ACTIVE){
+    printf("read_ctcp: not active\n");
     csk->error = SRVHUP;
     return -1;
   }
@@ -307,6 +314,7 @@ read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
   //printf("read_ctcp: pop %d bytes, csk->usr_cache size %d\n", res, csk->usr_cache.size);
 
   if (res == 0){
+    printf("read_ctcp: nothing to read\n");
     // fifo is released because the connection is somehow terminated
     csk->error = SRVHUP;
     res = -1;
@@ -359,10 +367,13 @@ void
             err_sys("recvfrom",csk);
           }
           if(numbytes <= 0) break;
+          
+          csk->lastrcvt[curr_substream] = getTime();
+          csk->idle_time[curr_substream] = INIT_IDLE_TIME;
 
-          csk->idle_total += getTime() - idle_timer;
+          csk->idle_total += csk->lastrcvt[curr_substream] - idle_timer;
           csk->pkts++;
-          csk->end_time = getTime();  /* last read */
+          csk->end_time = csk->lastrcvt[curr_substream];  /* last read */
           if (csk->start_time == 0) csk->start_time = csk->end_time;  /* first pkt time */
 
           // Unmarshall the packet
@@ -432,16 +443,20 @@ void
       }while(ready>0);
 
     }
-    
+
     for(k = 0; k<csk->substreams; k++){
-      if(csk->pathstate[k] == ESTABLISHED){
-        continue;
-      }else if(csk->pathstate[k] == SYN_SENT){
-        send_flag(csk, k, SYN);
-      }else if(csk->pathstate[k] == SYN_ACK_RECV){
-        send_flag(csk, k, NORMAL);
-      }else{
-        printf("\nIn FIN/CLOSE state, should deal with this separately\n");
+      if(getTime() - csk->lastrcvt[k] > csk->idle_time[k]){     
+        if(csk->pathstate[k] == ESTABLISHED){
+          continue;
+        }else if(csk->pathstate[k] == SYN_SENT){
+          send_flag(csk, k, SYN);
+        }else if(csk->pathstate[k] == SYN_ACK_RECV){
+          send_flag(csk, k, NORMAL);
+        }else{
+          printf("\nIn FIN/CLOSE state, should deal with this separately\n");
+        }
+        csk->idle_time[k] = 2*csk->idle_time[k];
+        // TODO currently, the client backs off indefinitely on a path if there are no replies
       }
     }
 
@@ -1183,6 +1198,7 @@ create_clictcp_sock(void){
   sk->substreams = 1;
  
   for (k=0; k < MAX_SUBSTREAMS; k++){
+    sk->idle_time[k] = INIT_IDLE_TIME;
     sk->ifc_addr[k] = NULL;
   }
 
