@@ -144,9 +144,8 @@ main(int argc, char** argv){
 
         fwrite(f_buffer, 1, bytes_read, rcv_file);
         total_bytes += bytes_read;
-        //        printf(" %d Total bytes receieved\n", total_bytes);
       }
-
+      printf("%d Total bytes receieved\n", total_bytes);
       ctrlc(csk);
 
       close_clictcp(csk);
@@ -337,6 +336,7 @@ void
   char *buff = malloc(BUFFSIZE);
 
   // READING FROM MULTIPLE SOCKET
+  // TODO need to update pollfd with removePath... for now, just keep it as it is.
   struct pollfd read_set[csk->substreams];
   for(k=0; k < csk->substreams; k++){
     read_set[k].fd = csk->sockfd[k];
@@ -346,7 +346,7 @@ void
   Data_Pckt *msg = malloc(sizeof(Data_Pckt));
   double idle_timer;
   int curr_substream=0;
-  int ready;
+  int ready, i;
 
   do{
 
@@ -374,6 +374,7 @@ void
           
           csk->lastrcvt[curr_substream] = getTime();
           csk->idle_time[curr_substream] = INIT_IDLE_TIME;
+          csk->idle_count[curr_substream] = 0;
 
           csk->idle_total += csk->lastrcvt[curr_substream] - idle_timer;
           csk->pkts++;
@@ -387,22 +388,41 @@ void
 
           case FIN:
             printf("received FIN packet\n");
-            csk->status = CLOSED;
-            csk->pathstate[curr_substream] = FIN_RECV;
-            while(send_flag(csk, 0, FIN_ACK) == -1){
-              printf("Could not send FIN_ACK\n");
+            csk->pathstate[curr_substream] = FIN_RECV;            
+            for(i=0; i<csk->substreams; i++){
+              send_flag(csk, curr_substream, FIN_ACK);
+              csk->pathstate[curr_substream] = FIN_ACK_SENT;
             }
-            fifo_release(&(csk->usr_cache));
             break;
 
           case FIN_ACK:
-            csk->status = CLOSED;
+            // We should never really be here, since this should happen in close_clictcp
+            // unless we want to close and open individual paths independently later
+            if(csk->pathstate[curr_substream] == FIN_SENT){
+              printf("received FIN_ACK packet\n");
+              csk->pathstate[curr_substream] = FIN_ACK_RECV;
+              for(i = 0; i<csk->substreams; i++){
+                send_flag(csk, i, FIN_ACK_ACK);
+                csk->pathstate[i] = CLOSING;
+                //remove_substream(csk, i);
+              }
+              csk->status = CLOSED;
+              fifo_release(&(csk->usr_cache));      
+            }else{
+              printf("State %d: received FIN_ACK\n", csk->pathstate[curr_substream]);
+            }
             break;
 
           case FIN_ACK_ACK:
-            csk->status = CLOSED;
-            csk->pathstate[curr_substream] = CLOSING;
-            fifo_release(&(csk->usr_cache));
+            //csk->status = CLOSED;
+            if(csk->pathstate[curr_substream] == FIN_ACK_SENT){
+              for(i=0; i<csk->substreams; i++){
+                csk->pathstate[i] = CLOSING;
+                remove_substream(csk, i);                
+              }
+            }else{
+              printf("State %d: received FIN_ACK_ACK\n", csk->pathstate[curr_substream]);
+            }
             break;
           
           case SYN_ACK:
@@ -456,12 +476,39 @@ void
           send_flag(csk, k, SYN);
         }else if(csk->pathstate[k] == SYN_ACK_RECV){
           send_flag(csk, k, NORMAL);
-        }else{
-          printf("\nIn FIN/CLOSE state, should deal with this separately\n");
-        }
+        }else if(csk->pathstate[k] == FIN_SENT){
+          send_flag(csk, k, FIN);
+        }else if(csk->pathstate[k] == FIN_RECV ||
+                 csk->pathstate[k] == FIN_ACK_SENT){
+          send_flag(csk, k, FIN_ACK);
+        }else if(csk->pathstate[k] == FIN_ACK_RECV){
+          send_flag(csk, k, FIN_ACK_ACK);
+          csk->pathstate[k] = CLOSING;
+          remove_substream(csk, k);
+          k--;
+        }// otherwise, CLOSING
         csk->idle_time[k] = 2*csk->idle_time[k];
-        // TODO currently, the client backs off indefinitely on a path if there are no replies
+        csk->idle_count[k]++;
+        if (csk->idle_count[k] >= IDLE_MAX_COUNT){
+          printf("\nMAX IDLE on path %d\n", k);
+          if(csk->pathstate[k] == SYN_SENT ||
+             csk->pathstate[k] == SYN_ACK_RECV ||
+             csk->pathstate[k] == ESTABLISHED){
+            send_flag(csk, k, FIN);
+            csk->pathstate[k] = FIN_SENT;
+          }else{
+            // Tried enough, should close now
+            printf("\nTried enough on path %d.\n", k);
+            csk->pathstate[k] = CLOSING;
+            remove_substream(csk, k);
+          }
+        }
       }
+    }
+    
+    if(csk->substreams == 0){
+      csk->status = CLOSED;
+      fifo_release(&(csk->usr_cache));      
     }
 
   }while(csk->status == ACTIVE); 
@@ -474,7 +521,26 @@ void
   
 }
 
-
+void
+remove_substream(clictcp_sock* csk, int pin){
+  if(csk->pathstate[pin] != CLOSING){
+    printf("Path %d is not in state CLOSING\n", pin);
+  }else{
+    printf("removing path %d\n", pin);
+    int i;
+    for(i = pin; i<csk->substreams; i++){
+      csk->ifc_addr[i] = csk->ifc_addr[i+1];
+      csk->sockfd[i] = csk->sockfd[i+1];
+      csk->pathstate[i] = csk->pathstate[i+1];
+      csk->lastrcvt[i] = csk->lastrcvt[i+1];
+      csk->idle_time[i] = csk->idle_time[i+1];   
+      csk->idle_count[i] = csk->idle_count[i+1];
+    }
+    csk->substreams--;
+    
+    csk->ifc_addr[csk->substreams] = NULL;
+  }
+}
 
 
 void
@@ -1213,6 +1279,7 @@ create_clictcp_sock(void){
  
   for (k=0; k < MAX_SUBSTREAMS; k++){
     sk->idle_time[k] = INIT_IDLE_TIME;
+    sk->idle_count[k] = 0;
     sk->ifc_addr[k] = NULL;
   }
 
@@ -1347,8 +1414,6 @@ close_clictcp(clictcp_sock* csk){
   int i;
   int tries = 0;
   if (csk->status != CLOSED){
-    // TODO  if we want to close and open each path independantly, we may want to change this.
-
     do{
       for (i =0; i<csk->substreams; i++){
         if(send_flag(csk, i, FIN) == -1){
