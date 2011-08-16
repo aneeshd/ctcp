@@ -18,7 +18,7 @@ typedef enum {SYN_SENT=0, SYN_ACK_RECV, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 
 //---------------- DEFAULT CONNECTION PARAMETERS ------------------//
 #define BUFFSIZE  3000
-#define PORT "88"
+#define PORT "9999"
 #define HOST "127.0.0.1"
 #define FILE_NAME "Honda"
 
@@ -93,14 +93,14 @@ int  marshallAck(Ack_Pckt msg, char* buf);
 
 int  readLease(char *leasefile, dhcp_lease *leases);
 int  add_routing_tables(char *lease_file);
-void remove_routing_tables(int substreams);
+void remove_routing_tables(char *lease_file);
 void make_new_table(dhcp_lease* lease, int table_number, int mark_number);
 void delete_table(int table_number, int mark_number);
 
 void *handle_connection(void* arg);
 clictcp_sock* create_clictcp_sock(void);
 
-int  poll_flag(clictcp_sock *csk, flag_t flag);
+int  poll_flag(clictcp_sock *csk, flag_t flag, int timeout);
 int  send_flag(clictcp_sock *csk, int path_id, flag_t flag);
 
 void close_clictcp(clictcp_sock* csk);

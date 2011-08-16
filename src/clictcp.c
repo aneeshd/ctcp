@@ -76,6 +76,7 @@ ctrlc(clictcp_sock *csk){
 
 
 
+
 int
 main(int argc, char** argv){
     char *file_name = FILE_NAME;
@@ -265,6 +266,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
     //printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
     // ------------  Send a SYN packet for any new connection ----------------
+    int path_ix;
     rv = 0;
     do{
       for (k = 0; k < csk->substreams; k++){
@@ -276,17 +278,19 @@ connect_ctcp(char *host, char *port, char *lease_file){
         }
       }
       rv++;
-    }while((k=poll_flag(csk, SYN_ACK)) == -1 && rv < POLL_MAX_TRIES);
+    }while( (path_ix = poll_flag(csk, SYN_ACK, (2<<(rv-1))*POLL_ACK_TO)) == -1 && rv < POLL_MAX_TRIES );
+    // poll backing off the timeout value (above) by rv*POLL_ACK_TO
+    
 
     if(rv >= POLL_MAX_TRIES){
       printf("Did not receive SYN ACK\n");
       return NULL;
     }else{
       printf("Received SYN ACK after %d tries\n", rv);
-      csk->pathstate[k] = SYN_ACK_RECV;
-      csk->lastrcvt[k] = getTime();
-      if(send_flag(csk, k, NORMAL) == 0){
-        csk->pathstate[k] = ESTABLISHED;
+      csk->pathstate[path_ix] = SYN_ACK_RECV;
+      csk->lastrcvt[path_ix] = getTime();
+      if(send_flag(csk, path_ix, NORMAL) == 0){
+        csk->pathstate[path_ix] = ESTABLISHED;
         printf("Sent ACK for the SYN ACK\n");
       }
     }
@@ -1053,11 +1057,21 @@ add_routing_tables(char *lease_file){
 }
 
 void 
-remove_routing_tables(int substreams){
-  int k;
-  for(k =0; k < substreams; k++){
-      delete_table(k+1, k+1);      // Flush the routing tables and iptables
-    }
+remove_routing_tables(char *lease_file){
+
+  if (lease_file == NULL){
+    return;   // Do nothing
+  }
+
+  int k, substreams;
+  dhcp_lease leases[MAX_SUBSTREAMS];
+
+  substreams = readLease(lease_file, leases);
+
+  for (k=0; k < substreams; k++){
+    delete_table(k+1, k+1);      // Flush the routing tables and iptables
+  }
+
   return;
 }
 
@@ -1236,25 +1250,12 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
 
   int size = marshallAck(*msg, buff);
 
-  /*  do{
-    socklen_t srvlen = sizeof(csk->srv_addr);
-    if((numbytes = sendto(csk->sockfd[path_id], buff, size, 0, &(csk->srv_addr), srvlen)) == -1){
-      perror("send_flag error: sendto");
-      free(msg);
-      free(buff);
-      return -1;
-    }
-  } while(errno == ENOBUFS); // use the while to increment enobufs if the condition is met
-
-  */
-
   if (send_over(csk, path_id, buff, size) == -1){
     perror("send_flag error: sendto");
     free(msg);
     free(buff);
     return -1;
   }
-
   
   printf("Sent flag *** %d ***\n", flag);
 
@@ -1266,7 +1267,7 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
 
 
 int 
-poll_flag(clictcp_sock *csk, flag_t flag){
+poll_flag(clictcp_sock *csk, flag_t flag, int timeout){
   char *buff = malloc(BUFFSIZE);
   Data_Pckt *msg = malloc(sizeof(Data_Pckt));
   int k, ready, numbytes;
@@ -1281,7 +1282,7 @@ poll_flag(clictcp_sock *csk, flag_t flag){
   }
 
   // value -1 blocks until something is ready to read
-  ready = poll(read_set, csk->substreams, POLL_ACK_TO);
+  ready = poll(read_set, csk->substreams, timeout);
 
   if(ready == -1){
     perror("poll");
@@ -1357,7 +1358,8 @@ close_clictcp(clictcp_sock* csk){
         }
       }
       tries++;      
-    } while((i=poll_flag(csk, FIN_ACK))== -1 && tries < POLL_MAX_TRIES );
+    } while(poll_flag(csk, FIN_ACK, POLL_ACK_TO*(2<<(tries-1)))== -1 && tries < POLL_MAX_TRIES );
+    // doing multiplicative backoff for poll_flag -- may need to do this in wireless
 
     if(tries >= POLL_MAX_TRIES){
       printf("Did not receive FIN ACK... Closing anyway\n");
@@ -1461,6 +1463,5 @@ send_over(clictcp_sock* csk, int substream, const void* buf, size_t buf_len){
 
   return 0;
 }
-
 
 
