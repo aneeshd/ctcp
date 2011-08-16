@@ -390,8 +390,8 @@ void
             printf("received FIN packet\n");
             csk->pathstate[curr_substream] = FIN_RECV;            
             for(i=0; i<csk->substreams; i++){
-              send_flag(csk, curr_substream, FIN_ACK);
-              csk->pathstate[curr_substream] = FIN_ACK_SENT;
+              send_flag(csk, i, FIN_ACK);
+              csk->pathstate[i] = FIN_ACK_SENT;
             }
             break;
 
@@ -416,10 +416,13 @@ void
           case FIN_ACK_ACK:
             //csk->status = CLOSED;
             if(csk->pathstate[curr_substream] == FIN_ACK_SENT){
+              printf("received FIN_ACK_ACK packet\n");
               for(i=0; i<csk->substreams; i++){
                 csk->pathstate[i] = CLOSING;
-                remove_substream(csk, i);                
+                //remove_substream(csk, i);                
               }
+              csk->status = CLOSED;
+              fifo_release(&(csk->usr_cache));      
             }else{
               printf("State %d: received FIN_ACK_ACK\n", csk->pathstate[curr_substream]);
             }
