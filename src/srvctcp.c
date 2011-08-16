@@ -25,84 +25,83 @@ ctrlc(srvctcp_sock* sk){
   return;
 }
 
-
 /*
 int
 main (int argc, char** argv){
 
-    char *file_name = "Honda";
-    FILE *snd_file; // The file to be sent
-    char *version = "$version 0.0$";
-    char *configfile = "config/vegas";
-    char *port = "88";  // This is the port that the server is listening to
-    int i, c;
+  char *file_name = "Honda";
+  FILE *snd_file; // The file to be sent
+  char *version = "$version 0.0$";
+  char *configfile = "config/vegas";
+  char *port = "88";  // This is the port that the server is listening to
+  int i, c;
 
-    srandom(getpid());
+  srandom(getpid());
 
-    while((c = getopt(argc,argv, "c:p:l:")) != -1)
+  while((c = getopt(argc,argv, "c:p:l:")) != -1)
     {
-        switch (c)
+      switch (c)
         {
         case 'c':
-            configfile = optarg;
-            break;
+          configfile = optarg;
+          break;
         case 'p':
-            port       = optarg;
-            break;
-            //case 'l':
-            //log_name   = optarg;
-            //break;
+          port       = optarg;
+          break;
+          //case 'l':
+          //log_name   = optarg;
+          //break;
         }
     }
 
-    printf("sending %s\n", file_name);
-    if ((snd_file = fopen(file_name, "rb"))== NULL){
-      perror("Error while trying to create/open a file");
-      return 1;
-    }
+  printf("sending %s\n", file_name);
+  if ((snd_file = fopen(file_name, "rb"))== NULL){
+    perror("Error while trying to create/open a file");
+    return 1;
+  }
 
-    ////////// open ctcp server //////////////
+  ////////// open ctcp server //////////////
 
-     srvctcp_sock* sk = open_srvctcp(port);
+  srvctcp_sock* sk = open_srvctcp(port);
 
-     if (sk == NULL){
-       printf("Could not create CTCP socket\n");
-       return 1;
-     } 
+  if (sk == NULL){
+    printf("Could not create CTCP socket\n");
+    return 1;
+  } 
 
-     // Wait for the SYN packet to come
-     if (listen_srvctcp(sk) == -1){
-       printf("Could not establish the connection \n");
-       return 1;
-     }
+  // Wait for the SYN packet to come
+  if (listen_srvctcp(sk) == -1){
+    printf("Could not establish the connection \n");
+    return 1;
+  }
 
-     // read from the file and send over ctcp socket
+  // read from the file and send over ctcp socket
 
-     size_t buf_size = 2000000;
-     size_t f_bytes_read, bytes_sent;
-     char *file_buff = malloc(buf_size*sizeof(char));
-     size_t total_bytes_sent =0;
-     size_t total_bytes_read = 0;
+  size_t buf_size = 2000000;
+  size_t f_bytes_read, bytes_sent;
+  char *file_buff = malloc(buf_size*sizeof(char));
+  size_t total_bytes_sent =0;
+  size_t total_bytes_read = 0;
        
-     while(!feof(snd_file)){
-       f_bytes_read = fread(file_buff, 1, buf_size, snd_file);
-       total_bytes_read += f_bytes_read;
-       //printf("%d bytes read from the file \n", total_bytes_read);
+  while(!feof(snd_file)){
+    f_bytes_read = fread(file_buff, 1, buf_size, snd_file);
+    total_bytes_read += f_bytes_read;
+    //printf("%d bytes read from the file \n", total_bytes_read);
          
-       bytes_sent = 0;
-       while(bytes_sent < f_bytes_read){
-         bytes_sent += send_ctcp(sk, file_buff + bytes_sent, f_bytes_read - bytes_sent);
-       }
-       total_bytes_sent += bytes_sent;
-     }
+    bytes_sent = 0;
+    while(bytes_sent < f_bytes_read){
+      bytes_sent += send_ctcp(sk, file_buff + bytes_sent, f_bytes_read - bytes_sent);
+    }
+    total_bytes_sent += bytes_sent;
+  }
        
-     printf("Total bytes sent %d\n", total_bytes_sent);
+  printf("Total bytes sent %d\n", total_bytes_sent);
      
-     close_srvctcp(sk);
+  close_srvctcp(sk);
 
-     fclose(snd_file);
+  fclose(snd_file);
 
-     return 0;
+  return 0;
 }
 */
 
@@ -411,8 +410,7 @@ void
             printf("Established path %d\n", path_index);
             sk->active_paths[path_index]->pathstate = ESTABLISHED;
             send_segs(sk, path_index);
-          }else{
-            
+          }else{            
             // If we get here, the path is established and we just received an ACK        
             sk->ipkts++;
             sk->active_paths[path_index]->last_ack_time = rcvt;
@@ -429,30 +427,51 @@ void
             printf("State %d: Received SYN\n", sk->active_paths[path_index]->pathstate);
           }
         }else if (ack->flag == FIN) {        
-          // TODO should we be setting CLOSED/NON when we get FIN_ACK_ACK
+
           if (sk->active_paths[path_index]->pathstate != ESTABLISHED &&
               sk->active_paths[path_index]->pathstate != SYN_ACK_SENT){
             printf("State %d: Received FIN\n", sk->active_paths[path_index]->pathstate);
           }else{
-            sk->status = CLOSED;
-            sk->error = NONE;
             printf("Sending FIN_ACK path %d\n", path_index);
-            // at this moment, setting FIN status on paths not very meaningful, since we set sk-<status = CLOSED.
             sk->active_paths[path_index]->pathstate = FIN_RECV;
-            if(send_flag(sk, path_index, FIN_ACK)==0){
-              sk->active_paths[path_index]->pathstate = FIN_ACK_SENT;
+            // TODO for now, when we receive FIN, we send FIN_ACK through all interfaces
+            // May want to change this if we want to add/remove paths independently
+            for(i= 0; i<sk->num_active; i++){
+              send_flag(sk, i, FIN_ACK);
+              sk->active_paths[i]->pathstate = FIN_ACK_SENT;
             }
           }
+        }else if(ack->flag == FIN_ACK){
+          if( sk->active_paths[path_index]->pathstate != FIN_SENT){ 
+            // discard inappropriate FIN_ACK_ACK
+            printf("State %d: Recevied FIN_ACK\n", sk->active_paths[path_index]->pathstate);
+          }else {
+            printf("Recv FIN_ACK path %d\n", path_index);
+            sk->active_paths[path_index]->pathstate = FIN_ACK_RECV;
+            // TODO for now, when we receive FIN, we send FIN_ACK through all interfaces
+            // May want to change this if we want to add/remove paths independently
+            for(i= 0; i<sk->num_active; i++){
+              send_flag(sk, i, FIN_ACK_ACK);
+              sk->active_paths[i]->pathstate = CLOSING;
+              // removePath(sk,i);
+            }
+            sk->status = CLOSED;
+            sk->error = NONE;
+          }          
         }else if (ack->flag == FIN_ACK_ACK){
           if( sk->active_paths[path_index]->pathstate != FIN_ACK_SENT){ 
             // discard inappropriate FIN_ACK_ACK
             printf("State %d: Recevied FIN_ACK_ACK\n", sk->active_paths[path_index]->pathstate);
           }else {
             printf("Recv FIN_ACK_ACK. Closing %d\n", path_index);
+            // TODO for now, when we receive FIN, we send FIN_ACK through all interfaces
+            // May want to change this if we want to add/remove paths independently
+            for(i=0; i<sk->num_active; i++){
+              sk->active_paths[i]->pathstate = CLOSING;
+              //removePath(sk, i);
+            }
             sk->status = CLOSED;
             sk->error = NONE;
-            sk->active_paths[path_index]->pathstate = CLOSING;
-            removePath(sk, path_index);
           }
         }
       }
@@ -474,34 +493,36 @@ void
             if(sk->active_paths[path_index]->pathstate == ESTABLISHED){
               printf("Sending data\n");
               send_segs(sk, path_index);
-	    }else if(sk->active_paths[path_index]->pathstate == SYN_RECV || 
-		     sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
-	    printf("Sending SYN_ACK\n");
-            send_flag(sk, path_index, SYN_ACK);
-	    }else if(sk->active_paths[path_index]->pathstate == FIN_SENT){
-	      printf("Sending FIN\n");
-	      send_flag(sk, path_index, FIN);
-	    }else if(sk->active_paths[path_index]->pathstate == FIN_ACK_RECV){
-	    printf("Sending FIN_ACK_ACK\n");
-            send_flag(sk, path_index, FIN_ACK_ACK);
-	    }else if(sk->active_paths[path_index]->pathstate == FIN_RECV ||
-		     sk->active_paths[path_index]->pathstate == FIN_ACK_SENT){
-	      printf("Sending FIN_ACK\n");
-	      send_flag(sk, path_index, FIN_ACK);
-	    }else{
-	      // Should be in CLOSING state. Just continuing to close. 
-	      printf("Still closing\n");
-	    }
-	  }else{
-	    // Path is dead and is being removed
-	    removePath(sk, path_index);
-	    path_index--;
-	  }
-	}
+            }else if(sk->active_paths[path_index]->pathstate == SYN_RECV || 
+                     sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
+              printf("Sending SYN_ACK\n");
+              send_flag(sk, path_index, SYN_ACK);
+            }else if(sk->active_paths[path_index]->pathstate == FIN_SENT){
+              printf("Sending FIN\n");
+              send_flag(sk, path_index, FIN);
+            }else if(sk->active_paths[path_index]->pathstate == FIN_ACK_RECV){
+              printf("Sending FIN_ACK_ACK\n");
+              send_flag(sk, path_index, FIN_ACK_ACK);
+            }else if(sk->active_paths[path_index]->pathstate == FIN_RECV ||
+                     sk->active_paths[path_index]->pathstate == FIN_ACK_SENT){
+              printf("Sending FIN_ACK\n");
+              send_flag(sk, path_index, FIN_ACK);
+            }else{
+              // Should be in CLOSING state. Ignore packets and continue closing.
+              printf("Still closing\n");
+            }
+          }else{
+            // Path is dead and is being removed
+            removePath(sk, path_index);
+            path_index--;
+          }
+        }
       }
     }
     
     if(sk->num_active==0){
+      sk->status = CLOSED;
+      sk->error = NONE;
       free(ack);
       free(buff);
       // no path alive, terminate
@@ -526,7 +547,7 @@ void
 
 /*
   closes srvctcp_sock
- */
+*/
 void
 close_srvctcp(srvctcp_sock* sk){
   int r, tries, success;
@@ -557,10 +578,9 @@ close_srvctcp(srvctcp_sock* sk){
     printf("Sending the FIN packet\n");
 
     do{
-
+      // Send FIN through all interfaces
       for(i=0; i<sk->num_active; i++){
         send_flag(sk, i, FIN);                 
-        printf("sending FIN packet to each path\n");
         sk->active_paths[i]->pathstate = FIN_SENT;
       }
       
@@ -569,43 +589,36 @@ close_srvctcp(srvctcp_sock* sk){
         if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto;
       }
       
-      printf("timedread\n");
       // Send FIN to the client, and wait for FIN_ACK
       r = timedread(sk->sockfd, rto_max);
-
       if (r > 0){  /* ready */
         // The recvfrom should be done to a separate buffer (not buff)
         if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
           perror("Error in receveing ACKs\n");
-          sk->status = CLOSED;
+          //sk->status = CLOSED;
           sk->error = CLOSE_ERR;
         }else{
           unmarshallAck(ack, buff);
           
-          printf("got flag %d\n", ack->flag);
           if (ack->flag == FIN_ACK){
-            printf("got FINACK\n");
-            //sk->active_paths[i]->pathstate = FIN_ACK_RECV;
-            sk->status = CLOSED;
-            sk->error = NONE;
-            success = 1;
-
-            /*
-            printf("sending FIN_ACK_ACK\n");       
-            if (send_flag(sk, i, FIN_ACK_ACK)==0){
-              sk->active_paths[i]->pathstate = CLOSING;
+            printf("got FIN_ACK. sending FIN_ACK_ACK\n");                   
+            for(i=0; i<sk->num_active; i++){
+              sk->active_paths[i]->pathstate = FIN_ACK_RECV;      
+              if (send_flag(sk, i, FIN_ACK_ACK)==0){
+                sk->active_paths[i]->pathstate = CLOSING;
+              }
             }
-            */
+            sk->error = NONE;       
+            success = 1;
+            
           }else{
-            sk->status = CLOSED;
+            printf("got Non-FIN_ACK\n");
             sk->error = CLOSE_ERR;
           }
         }
-        printf("at the end of while loop\n");
       }else { /* r <=0 */
         //err_sys(sk, "close");
         printf("r<=0 in close_srvctcp\n");
-        sk->status = CLOSED;
         sk->error = CLOSE_ERR;
       }
 
@@ -613,6 +626,7 @@ close_srvctcp(srvctcp_sock* sk){
 
     }while(tries < CONTROL_MAX_RETRIES && !success);
 
+    sk->status = CLOSED;
   }
    
   // For now, just send FIN_ACK_ACK only if successfully received FIN_ACK
@@ -648,7 +662,7 @@ removePath(srvctcp_sock* sk, int dead_index){
     sk->active_paths[i] = sk->active_paths[i+1];
   }
   sk->num_active--;
-  sk->active_paths[sk->num_active-1] = NULL;
+  sk->active_paths[sk->num_active] = NULL;
 }
 
 
@@ -656,11 +670,11 @@ removePath(srvctcp_sock* sk, int dead_index){
 /*
   Returns FALSE if the path is dead
   Returns TRUE if the path is still potentially alive
- */
+*/
 int 
 timeout(srvctcp_sock* sk, int pin){
   Substream_Path *subpath = sk->active_paths[pin];
-        /* see if a packet has timedout */
+  /* see if a packet has timedout */
   if (subpath->idle > sk->maxidle) {
     /* give up */
     printf("*** idle abort *** on path \n");
@@ -707,7 +721,7 @@ timeout(srvctcp_sock* sk, int pin){
 
 /*
   sends control message with the flag
- */
+*/
 int 
 send_flag(srvctcp_sock* sk, int path_id, flag_t flag ){
   char *buff = malloc(BUFFSIZE);
@@ -874,7 +888,7 @@ send_segs(srvctcp_sock* sk, int pin){
     CurrWin = dof_needed;
     win = win - CurrWin;
 
-      //printf("Currenet Block %d win %d  dof_needed %d dof_req_latest %d CurrOnFly[%d] %d mean Onfly %f t0 %f\n", blockno, win, dof_needed, dof_request_tmp, pin, CurrOnFly[pin], mean_OnFly, t0);  
+    //printf("Currenet Block %d win %d  dof_needed %d dof_req_latest %d CurrOnFly[%d] %d mean Onfly %f t0 %f\n", blockno, win, dof_needed, dof_request_tmp, pin, CurrOnFly[pin], mean_OnFly, t0);  
 
     // Check whether we have enough coded packets for current block
     if (sk->dof_remain[blockno%NUM_BLOCKS] < dof_needed){
@@ -899,9 +913,9 @@ send_segs(srvctcp_sock* sk, int pin){
       CurrWin--;
       sk->dof_remain[blockno%NUM_BLOCKS]--;   // Update the internal dof counter
       subpath->packets_sent[blockno%NUM_BLOCKS]++;
-   }
+    }
 
-  blockno++;
+    blockno++;
 
   } //////////////////////// END CHECKING BLOCKS ////////////////////
 }
@@ -1028,7 +1042,7 @@ endSession(srvctcp_sock* sk){
 /*
   Returns 1 if subpath sp ready to send more
   Returns 0 if subpath sp is not ready to send (bad ack or done)
- */
+*/
 int
 handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
   Substream_Path *subpath = sk->active_paths[pin];
@@ -1112,12 +1126,12 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     /* bad ack */
     if (sk->debug > 4) fprintf(stderr,
 
-                           "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d cli.port %d\n\n",
-                           sk->curr_block,
-                           ackno,
-                           subpath->snd_nxt,
-                           subpath->snd_una,
-                           ((struct sockaddr_in*)&subpath->cli_addr)->sin_port);
+                               "Bad ack: curr block %d badack no %d snd_nxt %d snd_una %d cli.port %d\n\n",
+                               sk->curr_block,
+                               ackno,
+                               subpath->snd_nxt,
+                               subpath->snd_una,
+                               ((struct sockaddr_in*)&subpath->cli_addr)->sin_port);
 
     sk->badacks++;
     if(subpath->snd_una < ackno) subpath->snd_una = ackno;
@@ -1142,8 +1156,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     if (ackno <= subpath->snd_una){
       //late ack
       if (sk->debug > 6) fprintf(stderr,
-                             "Late ack path %d: curr block %d ack-blockno %d badack no %d snd_nxt %d snd_una %d\n",
-                             pin, sk->curr_block, ack->blockno, ackno, subpath->snd_nxt, subpath->snd_una);
+                                 "Late ack path %d: curr block %d ack-blockno %d badack no %d snd_nxt %d snd_una %d\n",
+                                 pin, sk->curr_block, ack->blockno, ackno, subpath->snd_nxt, subpath->snd_una);
     } else {
       sk->goodacks++;
       int losses = ackno - (subpath->snd_una +1);
@@ -1167,13 +1181,13 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // Updated the requested dofs for the current block
     // The MIN is to avoid outdated infromation by out of order ACKs or ACKs on different paths
 
-	if (ack->blockno == sk->curr_block){
-    pthread_rwlock_rdlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock) );
-    sk->dof_req_latest = MIN(sk->dof_req_latest,  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec);
-    pthread_rwlock_unlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock) );
+    if (ack->blockno == sk->curr_block){
+      pthread_rwlock_rdlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock) );
+      sk->dof_req_latest = MIN(sk->dof_req_latest,  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec);
+      pthread_rwlock_unlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock) );
     
-	}
-  advance_cwnd(sk, pin);
+    }
+    advance_cwnd(sk, pin);
 
     return 0;
   } // end else goodack
@@ -1202,7 +1216,7 @@ err_sys(srvctcp_sock* sk, char* s){
 }
 
 void
-  readConfig(char* configfile, srvctcp_sock* sk){
+readConfig(char* configfile, srvctcp_sock* sk){
   // Initialize the default values of config variables
 
   sk->rcvrwin    = 20;          /* rcvr window in mss-segments */
@@ -1210,7 +1224,7 @@ void
   sk->multiplier = 0.85;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
   sk->initsegs   = 8;          /* slowstart initial */
   sk->ssincr     = 1;           /* slow start increment */
-  sk->maxidle    = 10;          /* max idle before abort */
+  sk->maxidle    = 5;          /* max idle before abort */
   sk->valpha     = 0.05;        /* vegas parameter */
   sk->vbeta      = 0.2;         /* vegas parameter */
   sk->debug      = 5           ;/* Debug level */
@@ -1310,10 +1324,10 @@ coding_job(void *a){
   // Check if the blockno is already done
  
   if( blockno < sk->curr_block ){
-      if (sk->debug > 5){
-        printf("Coding job request for old block - curr_block %d blockno %d dof_request %d \n\n", sk->curr_block,  blockno, dof_request);
-      }
-      return NULL;
+    if (sk->debug > 5){
+      printf("Coding job request for old block - curr_block %d blockno %d dof_request %d \n\n", sk->curr_block,  blockno, dof_request);
+    }
+    return NULL;
   }
   
 
@@ -1338,9 +1352,9 @@ coding_job(void *a){
     coding_wnd = 1;
   
     /*
-    if (dof_request < block_len){
+      if (dof_request < block_len){
       printf("Error: the initially requested dofs are less than the block length - blockno %d dof_request %d block_len %d\n\n\n\n\n",  blockno, dof_request, block_len);
-    }
+}
     */
 
     // Generate random combination by picking rows based on order
@@ -1751,10 +1765,10 @@ create_srvctcp_sock(void){
   //----------------- configurable variables -----------------//
   sk->rcvrwin    = 20;          /* rcvr window in mss-segments */
   sk->increment  = 1;           /* cc increment */
-  sk->multiplier = 0.5;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
+  sk->multiplier = 0.85;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
   sk->initsegs   = 2;          /* slowstart initial */
   sk->ssincr     = 1;           /* slow start increment */
-  sk->maxidle    = 10;          /* max idle before abort */
+  sk->maxidle    = 5;          /* max idle before abort */
   sk->valpha     = 0.05;        /* vegas parameter */
   sk->vbeta      = 0.2;         /* vegas parameter */
   sk->debug      = 6;           /* Debug level */

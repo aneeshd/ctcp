@@ -18,7 +18,7 @@ typedef enum {SYN_SENT=0, SYN_ACK_RECV, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 
 //---------------- DEFAULT CONNECTION PARAMETERS ------------------//
 #define BUFFSIZE  3000
-#define PORT "9999"
+#define PORT "88"
 #define HOST "127.0.0.1"
 #define FILE_NAME "Honda"
 
@@ -28,6 +28,7 @@ typedef enum {SYN_SENT=0, SYN_ACK_RECV, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 
 #define POLL_ACK_TO 200   // in milliseconds
 #define POLL_MAX_TRIES 10
+#define IDLE_MAX_COUNT 7
 #define TIMEOUT 5000
 #define POLL_TO_FLG -7
 
@@ -47,6 +48,7 @@ typedef struct{
   clipath_t pathstate[MAX_SUBSTREAMS];
   double lastrcvt[MAX_SUBSTREAMS];
   double idle_time[MAX_SUBSTREAMS];
+  int idle_count[MAX_SUBSTREAMS];
 
   fifo_t usr_cache;
 
@@ -99,10 +101,10 @@ void delete_table(int table_number, int mark_number);
 
 void *handle_connection(void* arg);
 clictcp_sock* create_clictcp_sock(void);
+void remove_substream(clictcp_sock* csk, int pin);
 
 int  poll_flag(clictcp_sock *csk, flag_t flag, int timeout);
 int  send_flag(clictcp_sock *csk, int path_id, flag_t flag);
-void close_clictcp(clictcp_sock* csk);
 
 void close_clictcp(clictcp_sock* csk);
 clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file);
