@@ -117,7 +117,7 @@ main(int argc, char** argv){
 
     if (csk == NULL){
       printf("Could not create CTCP socket\n");
-      remove_routing_tables(num_tables);
+      remove_routing_tables(lease_file);
       return 1;
     } else{
       
@@ -156,7 +156,7 @@ main(int argc, char** argv){
 
     }
 
-    remove_routing_tables(num_tables);
+    remove_routing_tables(lease_file);
     return 0;
 }
 
