@@ -408,7 +408,7 @@ void
             printf("State %d: Received NORMAL\n", sk->active_paths[path_index]->pathstate);
           }else if( sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
             // path is now established, and we send data packets
-	    printf("Established path %d\n", path_index);
+            printf("Established path %d\n", path_index);
             sk->active_paths[path_index]->pathstate = ESTABLISHED;
             send_segs(sk, path_index);
           }else{
@@ -423,7 +423,7 @@ void
           }
         }else if (ack->flag == SYN){
           if (sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
-	    printf("Sending SYN_ACK path %d\n", path_index);
+            printf("Sending SYN_ACK path %d\n", path_index);
             send_flag(sk, path_index, SYN_ACK);
           }else{
             printf("State %d: Received SYN\n", sk->active_paths[path_index]->pathstate);
@@ -434,21 +434,21 @@ void
               sk->active_paths[path_index]->pathstate != SYN_ACK_SENT){
             printf("State %d: Received FIN\n", sk->active_paths[path_index]->pathstate);
           }else{
-	    sk->status = CLOSED;
-	    sk->error = NONE;
-	    printf("Sending FIN_ACK path %d\n", path_index);
-	    // at this moment, setting FIN status on paths not very meaningful, since we set sk-<status = CLOSED.
-	    sk->active_paths[path_index]->pathstate = FIN_RECV;
-	    if(send_flag(sk, path_index, FIN_ACK)==0){
-	      sk->active_paths[path_index]->pathstate = FIN_ACK_SENT;
-	    }
-	  }
+            sk->status = CLOSED;
+            sk->error = NONE;
+            printf("Sending FIN_ACK path %d\n", path_index);
+            // at this moment, setting FIN status on paths not very meaningful, since we set sk-<status = CLOSED.
+            sk->active_paths[path_index]->pathstate = FIN_RECV;
+            if(send_flag(sk, path_index, FIN_ACK)==0){
+              sk->active_paths[path_index]->pathstate = FIN_ACK_SENT;
+            }
+          }
         }else if (ack->flag == FIN_ACK_ACK){
           if( sk->active_paths[path_index]->pathstate != FIN_ACK_SENT){ 
             // discard inappropriate FIN_ACK_ACK
             printf("State %d: Recevied FIN_ACK_ACK\n", sk->active_paths[path_index]->pathstate);
           }else {
-	    printf("Recv FIN_ACK_ACK. Closing %d\n", path_index);
+            printf("Recv FIN_ACK_ACK. Closing %d\n", path_index);
             sk->status = CLOSED;
             sk->error = NONE;
             sk->active_paths[path_index]->pathstate = CLOSING;
@@ -466,14 +466,14 @@ void
       
       // Check all the other paths, and see if any of them timed-out.
       for (i = 0; i < sk->num_active; i++){
-	path_index = (path_index+i)%(sk->num_active);
-	if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto + RTO_BIAS){
-	  if (timeout(sk, path_index)==TRUE){
-	    printf("Timeout %d:", path_index);
-	    // Path timed out, but still alive
-	    if(sk->active_paths[path_index]->pathstate == ESTABLISHED){
-	      printf("Sending data\n");
-	      send_segs(sk, path_index);
+        path_index = (path_index+i)%(sk->num_active);
+        if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto + RTO_BIAS){
+          if (timeout(sk, path_index)==TRUE){
+            printf("Timeout %d:", path_index);
+            // Path timed out, but still alive
+            if(sk->active_paths[path_index]->pathstate == ESTABLISHED){
+              printf("Sending data\n");
+              send_segs(sk, path_index);
 	    }else if(sk->active_paths[path_index]->pathstate == SYN_RECV || 
 		     sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
 	    printf("Sending SYN_ACK\n");

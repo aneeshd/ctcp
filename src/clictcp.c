@@ -266,6 +266,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
     //printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
     // ------------  Send a SYN packet for any new connection ----------------
+    int path_ix;
     rv = 0;
     do{
       for (k = 0; k < csk->substreams; k++){
@@ -277,18 +278,19 @@ connect_ctcp(char *host, char *port, char *lease_file){
         }
       }
       rv++;
-    }while(poll_flag(csk, SYN_ACK, (2<<(rv-1))*POLL_ACK_TO) == -1 && rv < POLL_MAX_TRIES );
+    }while( (path_ix = poll_flag(csk, SYN_ACK, (2<<(rv-1))*POLL_ACK_TO)) == -1 && rv < POLL_MAX_TRIES );
     // poll backing off the timeout value (above) by rv*POLL_ACK_TO
     
+
     if(rv >= POLL_MAX_TRIES){
       printf("Did not receive SYN ACK\n");
       return NULL;
     }else{
       printf("Received SYN ACK after %d tries\n", rv);
-      csk->pathstate[k] = SYN_ACK_RECV;
-      csk->lastrcvt[k] = getTime();
-      if(send_flag(csk, k, NORMAL) == 0){
-        csk->pathstate[k] = ESTABLISHED;
+      csk->pathstate[path_ix] = SYN_ACK_RECV;
+      csk->lastrcvt[path_ix] = getTime();
+      if(send_flag(csk, path_ix, NORMAL) == 0){
+        csk->pathstate[path_ix] = ESTABLISHED;
         printf("Sent ACK for the SYN ACK\n");
       }
     }
