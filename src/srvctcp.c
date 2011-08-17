@@ -417,7 +417,6 @@ void
             sk->ipkts++;
             
             if(handle_ack(sk, ack, path_index) == 0){
-	      //              send_segs(sk, path_index);
 	      for (i =0; i < sk->num_active; i++){
 		send_segs(sk, i);
 	      }
@@ -492,6 +491,7 @@ void
       path_index = (path_index+i)%(sk->num_active);
       if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto + RTO_BIAS){
 	if (timeout(sk, path_index)==TRUE){
+
 	  printf("Timeout %d:", path_index);
 	  // Path timed out, but still alive
 	  if(sk->active_paths[path_index]->pathstate == ESTABLISHED){
@@ -519,6 +519,7 @@ void
 	  // Path is dead and is being removed
 	  removePath(sk, path_index);
 	  path_index--;
+
 	}
       }
     }
@@ -570,7 +571,7 @@ close_srvctcp(srvctcp_sock* sk){
     while (i <= sk->maxblockno){
       //  printf("Waiting on block %d to get free\n", i);
       pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
-      if (sk->dof_req_latest != 0){
+      if (sk->dof_req_latest != 0 && i >= sk->curr_block){
 	pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
       }
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
@@ -664,7 +665,7 @@ void
 removePath(srvctcp_sock* sk, int dead_index){
   free(sk->active_paths[dead_index]);
   int i;
-  for(i = dead_index; i < sk->num_active; i++){
+  for(i = dead_index; i < sk->num_active-1; i++){
     sk->active_paths[i] = sk->active_paths[i+1];
   }
   sk->num_active--;
@@ -681,11 +682,17 @@ int
 timeout(srvctcp_sock* sk, int pin){
   Substream_Path *subpath = sk->active_paths[pin];
   /* see if a packet has timedout */
+
   if (subpath->idle > sk->maxidle) {
     /* give up */
     printf("*** idle abort *** on path \n");
     // removing the path from connections
     return FALSE;
+  }
+
+  if (subpath->snd_nxt == subpath->snd_una){
+    // Nothing is ont the fly , we expect no ACKS so don't timeout
+    return TRUE;
   }
 
   if (sk->debug > 1){
@@ -1113,8 +1120,6 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     
     for (j = 0; j < sk->num_active; j++){
       sk->active_paths[j]->packets_sent[sk->curr_block%NUM_BLOCKS] = 0;
-      sk->active_paths[j]->OnFly[sk->curr_block%NUM_BLOCKS] = 0;
-      sk->active_paths[j]->tx_time[sk->curr_block%NUM_BLOCKS] = 0;
     }
 
     sk->dof_remain[sk->curr_block%NUM_BLOCKS] = 0;
@@ -1135,10 +1140,6 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     pthread_mutex_unlock(&(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_mutex));
 
      
-    for (j =0; j < sk->num_active; j++){
-      sk->active_paths[j]->packets_sent[(sk->curr_block-1)%NUM_BLOCKS]=0;
-    }
-
     if (sk->debug > 5 && sk->curr_block%1==0){
       printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms \n",
              sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000);
@@ -1247,7 +1248,7 @@ readConfig(char* configfile, srvctcp_sock* sk){
   sk->multiplier = 0.85;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
   sk->initsegs   = 8;          /* slowstart initial */
   sk->ssincr     = 1;           /* slow start increment */
-  sk->maxidle    = 5;          /* max idle before abort */
+  sk->maxidle    = 10;          /* max idle before abort */
   sk->valpha     = 0.05;        /* vegas parameter */
   sk->vbeta      = 0.2;         /* vegas parameter */
   sk->debug      = 5           ;/* Debug level */
@@ -1789,9 +1790,9 @@ create_srvctcp_sock(void){
   sk->rcvrwin    = 20;          /* rcvr window in mss-segments */
   sk->increment  = 1;           /* cc increment */
   sk->multiplier = 0.85;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
-  sk->initsegs   = 2;          /* slowstart initial */
+  sk->initsegs   = 8;          /* slowstart initial */
   sk->ssincr     = 1;           /* slow start increment */
-  sk->maxidle    = 5;          /* max idle before abort */
+  sk->maxidle    = 10;          /* max idle before abort */
   sk->valpha     = 0.05;        /* vegas parameter */
   sk->vbeta      = 0.2;         /* vegas parameter */
   sk->debug      = 6;           /* Debug level */
