@@ -336,13 +336,13 @@ void
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
 
   while(sk->status == ACTIVE){
-    double rto_max = 0;
+    double rto_min = 1000;
     for (i=0; i < sk->num_active; i++){
-      if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto;
+      if (sk->active_paths[i]->rto < rto_min) rto_min = sk->active_paths[i]->rto;
     }
 
     idle_timer = getTime();
-    r = timedread(sk->sockfd, rto_max + RTO_BIAS);
+    r = timedread(sk->sockfd, rto_min + RTO_BIAS);
     rcvt = getTime();
     sk->idle_total += getTime() - idle_timer;
 
@@ -417,7 +417,10 @@ void
             sk->ipkts++;
             
             if(handle_ack(sk, ack, path_index) == 0){
-              send_segs(sk, path_index);
+	      //              send_segs(sk, path_index);
+	      for (i =0; i < sk->num_active; i++){
+		send_segs(sk, i);
+	      }
             }            
           }
         }else if (ack->flag == SYN){
@@ -567,7 +570,9 @@ close_srvctcp(srvctcp_sock* sk){
     while (i <= sk->maxblockno){
       //  printf("Waiting on block %d to get free\n", i);
       pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
-      pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
+      if (sk->dof_req_latest != 0){
+	pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
+      }
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
       i++;
     }
@@ -808,10 +813,10 @@ send_segs(srvctcp_sock* sk, int pin){
   for (j = 0; j < sk->num_active; j++){
     CurrOnFly[j] = 0;
     for(k = sk->active_paths[j]->snd_una; k < sk->active_paths[j]->snd_nxt; k++){
-      CurrOnFly[j] += (sk->active_paths[j]->OnFly[k%MAX_CWND] == sk->curr_block) & (sk->active_paths[j]->tx_time[k%MAX_CWND] >= current_time - (1.5*sk->active_paths[j]->srtt + RTO_BIAS));
+      CurrOnFly[j] += (sk->active_paths[j]->OnFly[k%MAX_CWND] == sk->curr_block) & (sk->active_paths[j]->tx_time[k%MAX_CWND] >= current_time);
     }
 
-    d[j] = sk->active_paths[j]->srtt/2.0;
+    d[j] = sk->active_paths[j]->srtt;
   }
 
   //////////////////////////  START CHECKING EACH BLOCK   //////////////////////////
@@ -834,6 +839,11 @@ send_segs(srvctcp_sock* sk, int pin){
     }
 
 
+    if (dof_request_tmp <= 0){
+      printf("ERROR: dof_request_tmp = %d \t curr_block %d dof_req_latest %d blockno %d\n\n\n", dof_request_tmp, sk->curr_block, sk->dof_req_latest, blockno);
+    }
+
+
     mean_rate = 0;
     mean_latency = 0;
     mean_OnFly = 0;
@@ -843,12 +853,12 @@ send_segs(srvctcp_sock* sk, int pin){
       // Compensate for server's over estimation of the loss rate caused by lost acks
       p = sk->active_paths[j]->slr/(2.0 - sk->active_paths[j]->slr);
 
-      delay_diff_tmp = subpath->srtt/2.0 - d[j];
+      delay_diff_tmp = subpath->srtt - d[j];
       if ((delay_diff_tmp > 0) && (d[j] > 0)){
 	//        mean_rate    += (1-p)*sk->active_paths[j]->snd_cwnd/(2*d[j]);
 	//        mean_latency += (1-p)*sk->active_paths[j]->snd_cwnd/(2.0);
-        mean_rate    += (1-p)*CurrOnFly[j]/(2*d[j]);
-        mean_latency += (1-p)*CurrOnFly[j]/(2.0);
+        mean_rate    += (1-p)*(sk->active_paths[j]->snd_nxt - sk->active_paths[j]->snd_una)/(d[j]);
+        mean_latency += (1-p)*(sk->active_paths[j]->snd_nxt - sk->active_paths[j]->snd_una);
       }
       mean_OnFly += (1-p)*(CurrOnFly[j]);
     }
@@ -857,7 +867,7 @@ send_segs(srvctcp_sock* sk, int pin){
 
     // The total number of dofs the we think we should be sending (for the current block) from now on
     dof_needed = 0;
-    while ( (dof_needed < win) &&  ( (dof_needed)*(1-p) + (mean_rate*subpath->srtt/2.0 - mean_latency + mean_OnFly)  < dof_request_tmp) ) {
+    while ( (dof_needed < win) &&  ( (dof_needed)*(1-p) + (mean_rate*subpath->srtt - mean_latency + mean_OnFly)  < dof_request_tmp) ) {
       dof_needed++;
     }
 
@@ -866,22 +876,27 @@ send_segs(srvctcp_sock* sk, int pin){
       if (mean_rate > 0){
         t0 = (dof_request_tmp - mean_OnFly + mean_latency)/(mean_rate);
         
-        if (t0 > subpath->srtt/2.0){
+        if (t0 > subpath->srtt){
           printf("current path delay %f  t0 %f \n", subpath->srtt/2.0, t0);
         }
         
       }
 
       for (j = 0; j < sk->num_active; j++){
-        if (d[j] < subpath->srtt/2.0){
+        if (d[j] < subpath->srtt){
           d[j] = t0;
         }
       }
 
+      if (sk->num_active == 1){
+	printf("Now %f \t blockno %d mean OnFly %f dof_request tmp %d win %d CurrOnFly[0] %d srtt[0] %f \n", 
+	       1000*(getTime()-sk->start_time), blockno, mean_OnFly, dof_request_tmp, win, 
+	       CurrOnFly[0], sk->active_paths[0]->srtt*1000);
+      }
 
       if (sk->debug > 5 && sk->num_active == 2){
-        printf("path_id %d blockno %d mean OnFly %f dof_request tmp %d win %d CurrOnFly[0] %d CurrOnFly[1] %d srtt[0] %f srtt[1] %f\n", 
-               pin, blockno, mean_OnFly, dof_request_tmp, win, 
+        printf("Now %f \t path_id %d blockno %d \t mean OnFly %f \t dof_request tmp %d \t win %d \t CurrOnFly[0] %d CurrOnFly[1] %d srtt[0] %f srtt[1] %f\n", 
+               1000*(getTime()-sk->start_time), pin, blockno, mean_OnFly, dof_request_tmp, win, 
                CurrOnFly[0], CurrOnFly[1], sk->active_paths[0]->srtt*1000, sk->active_paths[1]->srtt*1000);
       }
 
@@ -994,7 +1009,7 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
 
   // Update the packets on the fly
   subpath->OnFly[subpath->snd_nxt%MAX_CWND] = blockno;
-  subpath->tx_time[subpath->snd_nxt%MAX_CWND] = msg->tstamp;
+  subpath->tx_time[subpath->snd_nxt%MAX_CWND] = msg->tstamp + 1.5*subpath->srtt + RTO_BIAS;
   //printf("Freeing the message - blockno %d snd_nxt[path_id] %d ....", blockno, snd_nxt[path_id]);
   sk->opkts++;
   free(msg->packet_coeff);
@@ -1111,6 +1126,10 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
     sk->dof_req_latest =  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec;     // reset the dof counter for the current block
 
+    if (sk->dof_req_latest <= 0){
+      printf("ERROR: dof_req_latest %d curr_block %d curr block len %d ack-blockno %d ack-dof_rec %d\n\n", sk->dof_req_latest, sk->curr_block,  sk->blocks[sk->curr_block%NUM_BLOCKS].len, ack->blockno, ack->dof_rec);
+    }
+
     pthread_rwlock_unlock(&(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_rwlock));
     pthread_cond_signal( &(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_free_condv));
     pthread_mutex_unlock(&(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_mutex));
@@ -1120,7 +1139,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
       sk->active_paths[j]->packets_sent[(sk->curr_block-1)%NUM_BLOCKS]=0;
     }
 
-    if (sk->debug > 5 && sk->curr_block%10==0){
+    if (sk->debug > 5 && sk->curr_block%1==0){
       printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms \n",
              sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000);
     }
