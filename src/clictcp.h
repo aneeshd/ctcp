@@ -24,7 +24,7 @@ typedef enum {SYN_SENT=0, SYN_ACK_RECV, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 
 #define NUM_BLOCKS 4
 #define MAX_SUBSTREAMS 5
-#define INIT_IDLE_TIME 0.5
+#define INIT_IDLE_TIME 0.5 // in seconds
 
 #define POLL_ACK_TO 200   // in milliseconds
 #define POLL_MAX_TRIES 10

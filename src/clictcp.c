@@ -352,8 +352,13 @@ void
 
     idle_timer = getTime();
 
+    double mintime = 5; // 5 seconds at least
+    for (k=0; k< csk->substreams; k++){
+      if (mintime > csk->idle_time[k]) mintime = csk->idle_time[k];
+    }
+   
     // value -1 blocks until something is ready to read
-    ready = poll(read_set, csk->substreams, -1);
+    ready = poll(read_set, csk->substreams, (int)1000*mintime);
 
     if(ready == -1){
       perror("poll");
@@ -398,7 +403,8 @@ void
           case FIN_ACK:
             // We should never really be here, since this should happen in close_clictcp
             // unless we want to close and open individual paths independently later
-            if(csk->pathstate[curr_substream] == FIN_SENT){
+            if(csk->pathstate[curr_substream] == FIN_SENT ||
+               csk->pathstate[curr_substream] == FIN_ACK_RECV){
               printf("received FIN_ACK packet\n");
               csk->pathstate[curr_substream] = FIN_ACK_RECV;
               for(i = 0; i<csk->substreams; i++){
@@ -429,7 +435,8 @@ void
             break;
           
           case SYN_ACK:
-            if(csk->pathstate[curr_substream] == SYN_SENT){
+            if(csk->pathstate[curr_substream] == SYN_SENT ||
+               csk->pathstate[curr_substream] == SYN_ACK_RECV){
               csk->pathstate[curr_substream] = SYN_ACK_RECV;
               send_flag(csk, curr_substream, NORMAL);
             }else{
