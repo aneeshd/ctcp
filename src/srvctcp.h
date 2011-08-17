@@ -20,7 +20,7 @@ typedef enum {SYN_RECV=0, SYN_ACK_SENT, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 #define MIN_DOF_REQUEST 0
 #define SLR_LONG_INIT 0.05
 #define RTO_BIAS 0.010      // (seconds) Bias the time-out timer
-#define INIT_RTO 1
+#define INIT_RTO 0.5
 #define INIT_CODING_WND 5
 #define CONTROL_MAX_RETRIES 10
 

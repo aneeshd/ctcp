@@ -76,6 +76,7 @@ ctrlc(clictcp_sock *csk){
 
 
 
+
 /*
 int
 main(int argc, char** argv){
@@ -337,7 +338,9 @@ void
 
   // READING FROM MULTIPLE SOCKET
   // TODO need to update pollfd with removePath... for now, just keep it as it is.
-  struct pollfd read_set[csk->substreams];
+
+  struct pollfd read_set[MAX_SUBSTREAMS];
+
   for(k=0; k < csk->substreams; k++){
     read_set[k].fd = csk->sockfd[k];
     read_set[k].events = POLLIN;
@@ -352,8 +355,13 @@ void
 
     idle_timer = getTime();
 
+    double mintime = 5; // 5 seconds at least
+    for (k=0; k< csk->substreams; k++){
+      if (mintime > csk->idle_time[k]) mintime = csk->idle_time[k];
+    }
+   
     // value -1 blocks until something is ready to read
-    ready = poll(read_set, csk->substreams, -1);
+    ready = poll(read_set, csk->substreams, (int)1000*mintime);
 
     if(ready == -1){
       perror("poll");
@@ -398,7 +406,10 @@ void
           case FIN_ACK:
             // We should never really be here, since this should happen in close_clictcp
             // unless we want to close and open individual paths independently later
-            if(csk->pathstate[curr_substream] == FIN_SENT){
+
+            if(csk->pathstate[curr_substream] == FIN_SENT ||
+               csk->pathstate[curr_substream] == FIN_ACK_RECV){
+
               printf("received FIN_ACK packet\n");
               csk->pathstate[curr_substream] = FIN_ACK_RECV;
               for(i = 0; i<csk->substreams; i++){
@@ -429,7 +440,12 @@ void
             break;
           
           case SYN_ACK:
-            if(csk->pathstate[curr_substream] == SYN_SENT){
+            if(csk->pathstate[curr_substream] == SYN_SENT ||
+               csk->pathstate[curr_substream] == SYN_ACK_RECV ||
+               csk->pathstate[curr_substream] == ESTABLISHED){
+              if(csk->pathstate[curr_substream] == ESTABLISHED){
+                printf("ESTABLISHED but SYN_ACK\n");
+              }
               csk->pathstate[curr_substream] = SYN_ACK_RECV;
               send_flag(csk, curr_substream, NORMAL);
             }else{
@@ -487,8 +503,17 @@ void
         }else if(csk->pathstate[k] == FIN_ACK_RECV){
           send_flag(csk, k, FIN_ACK_ACK);
           csk->pathstate[k] = CLOSING;
+
+          // update read_set when removing a substream
+          for(i=k; i < csk->substreams-1; i++){
+            read_set[i].fd = read_set[i+1].fd;
+            read_set[i].events = POLLIN;
+          }
+          read_set[csk->substreams-1].fd = 0;
+
           remove_substream(csk, k);
           k--;
+
         }// otherwise, CLOSING
         csk->idle_time[k] = 2*csk->idle_time[k];
         csk->idle_count[k]++;
@@ -503,6 +528,14 @@ void
             // Tried enough, should close now
             printf("\nTried enough on path %d.\n", k);
             csk->pathstate[k] = CLOSING;
+
+            // update read_set when removing a substream
+            for(i=k; i < csk->substreams-1; i++){
+              read_set[i].fd = read_set[i+1].fd;
+              read_set[i].events = POLLIN;
+            }
+            read_set[csk->substreams-1].fd = 0;
+
             remove_substream(csk, k);
           }
         }
@@ -680,11 +713,15 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     Ack_Pckt* ack = ackPacket(msg->seqno+1, csk->curr_block,
                               csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
 
-    while(ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len){
+    while( (ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len) && (ack->blockno < csk->curr_block + NUM_BLOCKS)  ){
         // The current block is decodable, so need to request for the next block
         // XXX make sure that NUM_BLOCKS is not 1, or this will break
         ack->blockno++;
         ack->dof_rec = csk->blocks[(ack->blockno)%NUM_BLOCKS].dofs;
+    }
+
+    if (ack->blockno >= csk->curr_block + NUM_BLOCKS){
+      ack->dof_rec = 0;
     }
 
     ack->tstamp = msg->tstamp;
@@ -1329,9 +1366,9 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
   
   printf("Sent flag *** %d ***\n", flag);
 
-  //free(msg->payload);
   free(msg);
   free(buff);
+  printf("send flag free memory - path_ix %d\n", path_id);
   return 0;
 }
 
