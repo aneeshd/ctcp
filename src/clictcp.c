@@ -680,7 +680,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     Ack_Pckt* ack = ackPacket(msg->seqno+1, csk->curr_block,
                               csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
 
-    while(ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len){
+    while( (ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len) && (ack->blockno < csk->curr_block + NUM_BLOCKS)  ){
         // The current block is decodable, so need to request for the next block
         // XXX make sure that NUM_BLOCKS is not 1, or this will break
         ack->blockno++;
@@ -1329,9 +1329,9 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
   
   printf("Sent flag *** %d ***\n", flag);
 
-  //free(msg->payload);
   free(msg);
   free(buff);
+  printf("send flag free memory - path_ix %d\n", path_id);
   return 0;
 }
 
