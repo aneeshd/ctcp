@@ -337,7 +337,7 @@ void
 
   // READING FROM MULTIPLE SOCKET
   // TODO need to update pollfd with removePath... for now, just keep it as it is.
-  struct pollfd read_set[csk->substreams];
+  struct pollfd read_set[MAX_SUBSTREAMS];
   for(k=0; k < csk->substreams; k++){
     read_set[k].fd = csk->sockfd[k];
     read_set[k].events = POLLIN;
@@ -436,7 +436,11 @@ void
           
           case SYN_ACK:
             if(csk->pathstate[curr_substream] == SYN_SENT ||
-               csk->pathstate[curr_substream] == SYN_ACK_RECV){
+               csk->pathstate[curr_substream] == SYN_ACK_RECV ||
+               csk->pathstate[curr_substream] == ESTABLISHED){
+              if(csk->pathstate[curr_substream] == ESTABLISHED){
+                printf("ESTABLISHED but SYN_ACK\n");
+              }
               csk->pathstate[curr_substream] = SYN_ACK_RECV;
               send_flag(csk, curr_substream, NORMAL);
             }else{
@@ -494,8 +498,17 @@ void
         }else if(csk->pathstate[k] == FIN_ACK_RECV){
           send_flag(csk, k, FIN_ACK_ACK);
           csk->pathstate[k] = CLOSING;
+
+          // update read_set when removing a substream
+          for(i=k; i < csk->substreams-1; i++){
+            read_set[i].fd = read_set[i+1].fd;
+            read_set[i].events = POLLIN;
+          }
+          read_set[csk->substreams-1].fd = 0;
+
           remove_substream(csk, k);
           k--;
+
         }// otherwise, CLOSING
         csk->idle_time[k] = 2*csk->idle_time[k];
         csk->idle_count[k]++;
@@ -510,6 +523,14 @@ void
             // Tried enough, should close now
             printf("\nTried enough on path %d.\n", k);
             csk->pathstate[k] = CLOSING;
+
+            // update read_set when removing a substream
+            for(i=k; i < csk->substreams-1; i++){
+              read_set[i].fd = read_set[i+1].fd;
+              read_set[i].events = POLLIN;
+            }
+            read_set[csk->substreams-1].fd = 0;
+
             remove_substream(csk, k);
           }
         }

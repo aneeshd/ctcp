@@ -399,7 +399,7 @@ void
       }else{
         // Packet from known path
         
-	sk->active_paths[path_index]->last_ack_time = rcvt;
+        sk->active_paths[path_index]->last_ack_time = rcvt;
 
         if (ack->flag == NORMAL) {
           
@@ -417,9 +417,9 @@ void
             sk->ipkts++;
             
             if(handle_ack(sk, ack, path_index) == 0){
-	      for (i =0; i < sk->num_active; i++){
-		send_segs(sk, i);
-	      }
+              for (i =0; i < sk->num_active; i++){
+                send_segs(sk, i);
+              }
             }            
           }
         }else if (ack->flag == SYN){
@@ -493,6 +493,7 @@ void
 	if (timeout(sk, path_index)==TRUE){
 
 	  printf("Timeout %d:", path_index);
+
 	  // Path timed out, but still alive
 	  if(sk->active_paths[path_index]->pathstate == ESTABLISHED){
 	    printf("Sending data\n");
@@ -1792,7 +1793,8 @@ create_srvctcp_sock(void){
   sk->multiplier = 0.85;         /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
   sk->initsegs   = 8;          /* slowstart initial */
   sk->ssincr     = 1;           /* slow start increment */
-  sk->maxidle    = 10;          /* max idle before abort */
+  sk->maxidle    = 10;       /* max idle before abort */
+
   sk->valpha     = 0.05;        /* vegas parameter */
   sk->vbeta      = 0.2;         /* vegas parameter */
   sk->debug      = 6;           /* Debug level */
