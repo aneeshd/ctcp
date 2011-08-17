@@ -687,6 +687,10 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
         ack->dof_rec = csk->blocks[(ack->blockno)%NUM_BLOCKS].dofs;
     }
 
+    if (ack->blockno >= csk->curr_block + NUM_BLOCKS){
+      ack->dof_rec = 0;
+    }
+
     ack->tstamp = msg->tstamp;
 
     // Marshall the ack into buff
