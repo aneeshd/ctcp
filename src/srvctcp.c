@@ -399,6 +399,8 @@ void
       }else{
         // Packet from known path
         
+	sk->active_paths[path_index]->last_ack_time = rcvt;
+
         if (ack->flag == NORMAL) {
           
           if( sk->active_paths[path_index]->pathstate != SYN_ACK_SENT && 
@@ -413,7 +415,6 @@ void
           }else{            
             // If we get here, the path is established and we just received an ACK        
             sk->ipkts++;
-            sk->active_paths[path_index]->last_ack_time = rcvt;
             
             if(handle_ack(sk, ack, path_index) == 0){
               send_segs(sk, path_index);
@@ -479,46 +480,46 @@ void
       printf("Timedread error: returned -1\n");
     }else{
       printf("Timedread expired: returned 0\n");
-    
+    }
 
-      // Done with processing the received packet. 
+    // Done with processing the received packet. 
       
-      // Check all the other paths, and see if any of them timed-out.
-      for (i = 0; i < sk->num_active; i++){
-        path_index = (path_index+i)%(sk->num_active);
-        if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto + RTO_BIAS){
-          if (timeout(sk, path_index)==TRUE){
-            printf("Timeout %d:", path_index);
-            // Path timed out, but still alive
-            if(sk->active_paths[path_index]->pathstate == ESTABLISHED){
-              printf("Sending data\n");
-              send_segs(sk, path_index);
-            }else if(sk->active_paths[path_index]->pathstate == SYN_RECV || 
-                     sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
-              printf("Sending SYN_ACK\n");
-              send_flag(sk, path_index, SYN_ACK);
-            }else if(sk->active_paths[path_index]->pathstate == FIN_SENT){
-              printf("Sending FIN\n");
-              send_flag(sk, path_index, FIN);
-            }else if(sk->active_paths[path_index]->pathstate == FIN_ACK_RECV){
-              printf("Sending FIN_ACK_ACK\n");
-              send_flag(sk, path_index, FIN_ACK_ACK);
-            }else if(sk->active_paths[path_index]->pathstate == FIN_RECV ||
-                     sk->active_paths[path_index]->pathstate == FIN_ACK_SENT){
-              printf("Sending FIN_ACK\n");
-              send_flag(sk, path_index, FIN_ACK);
-            }else{
-              // Should be in CLOSING state. Ignore packets and continue closing.
-              printf("Still closing\n");
-            }
-          }else{
-            // Path is dead and is being removed
-            removePath(sk, path_index);
-            path_index--;
-          }
-        }
+    // Check all the other paths, and see if any of them timed-out.
+    for (i = 0; i < sk->num_active; i++){
+      path_index = (path_index+i)%(sk->num_active);
+      if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto + RTO_BIAS){
+	if (timeout(sk, path_index)==TRUE){
+	  printf("Timeout %d:", path_index);
+	  // Path timed out, but still alive
+	  if(sk->active_paths[path_index]->pathstate == ESTABLISHED){
+	    printf("Sending data\n");
+	    send_segs(sk, path_index);
+	  }else if(sk->active_paths[path_index]->pathstate == SYN_RECV || 
+		   sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
+	    printf("Sending SYN_ACK\n");
+	    send_flag(sk, path_index, SYN_ACK);
+	  }else if(sk->active_paths[path_index]->pathstate == FIN_SENT){
+	    printf("Sending FIN\n");
+	    send_flag(sk, path_index, FIN);
+	  }else if(sk->active_paths[path_index]->pathstate == FIN_ACK_RECV){
+	    printf("Sending FIN_ACK_ACK\n");
+	    send_flag(sk, path_index, FIN_ACK_ACK);
+	  }else if(sk->active_paths[path_index]->pathstate == FIN_RECV ||
+		   sk->active_paths[path_index]->pathstate == FIN_ACK_SENT){
+	    printf("Sending FIN_ACK\n");
+	    send_flag(sk, path_index, FIN_ACK);
+	  }else{
+	    // Should be in CLOSING state. Ignore packets and continue closing.
+	    printf("Still closing\n");
+	  }
+	}else{
+	  // Path is dead and is being removed
+	  removePath(sk, path_index);
+	  path_index--;
+	}
       }
     }
+    
     
     if(sk->num_active==0){
       sk->status = CLOSED;
@@ -684,7 +685,7 @@ timeout(srvctcp_sock* sk, int pin){
 
   if (sk->debug > 1){
     fprintf(stderr,
-            "timerxmit %6.2f \t on %s:%d \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d  \n",
+            "timerxmit %6.2f \t on %s:%d \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d srtt %f \n",
             getTime()-sk->start_time,
             inet_ntoa(((struct sockaddr_in*) &subpath->cli_addr)->sin_addr),
             ((struct sockaddr_in*) &subpath->cli_addr)->sin_port,
@@ -692,7 +693,8 @@ timeout(srvctcp_sock* sk, int pin){
             sk->blocks[sk->curr_block%NUM_BLOCKS].len,
             subpath->snd_una,
             subpath->snd_nxt,
-            (int)subpath->snd_cwnd);
+            (int)subpath->snd_cwnd,
+	    subpath->srtt);
   }
 
   // THIS IS A GLOBAL COUNTER FOR STATISTICS ONLY.
@@ -843,8 +845,10 @@ send_segs(srvctcp_sock* sk, int pin){
 
       delay_diff_tmp = subpath->srtt/2.0 - d[j];
       if ((delay_diff_tmp > 0) && (d[j] > 0)){
-        mean_rate    += (1-p)*sk->active_paths[j]->snd_cwnd/(2*d[j]);
-        mean_latency += (1-p)*sk->active_paths[j]->snd_cwnd/(2.0);
+	//        mean_rate    += (1-p)*sk->active_paths[j]->snd_cwnd/(2*d[j]);
+	//        mean_latency += (1-p)*sk->active_paths[j]->snd_cwnd/(2.0);
+        mean_rate    += (1-p)*CurrOnFly[j]/(2*d[j]);
+        mean_latency += (1-p)*CurrOnFly[j]/(2.0);
       }
       mean_OnFly += (1-p)*(CurrOnFly[j]);
     }
@@ -875,7 +879,7 @@ send_segs(srvctcp_sock* sk, int pin){
       }
 
 
-      if (sk->debug > 6 && sk->num_active == 2){
+      if (sk->debug > 5 && sk->num_active == 2){
         printf("path_id %d blockno %d mean OnFly %f dof_request tmp %d win %d CurrOnFly[0] %d CurrOnFly[1] %d srtt[0] %f srtt[1] %f\n", 
                pin, blockno, mean_OnFly, dof_request_tmp, win, 
                CurrOnFly[0], CurrOnFly[1], sk->active_paths[0]->srtt*1000, sk->active_paths[1]->srtt*1000);
