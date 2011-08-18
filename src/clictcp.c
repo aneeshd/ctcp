@@ -350,24 +350,26 @@ void
   double idle_timer;
   int curr_substream=0;
   int ready, i;
+  int tries;
 
   do{
 
     idle_timer = getTime();
 
+    /*
     double mintime = 5; // 5 seconds at least
     for (k=0; k< csk->substreams; k++){
       if (mintime > csk->idle_time[k]) mintime = csk->idle_time[k];
-    }
-   
+    }   
+    */
     // value -1 blocks until something is ready to read
-    ready = poll(read_set, csk->substreams, (int)1000*mintime);
+    ready = poll(read_set, csk->substreams, -1);
 
     if(ready == -1){
       perror("poll");
     }else if (ready == 0){
       printf("Timeout occurred during poll! Should not happen with -1\n");
-      ready = POLL_TO_FLG;
+      //ready = POLL_TO_FLG;
     }else{
       srvlen = sizeof(csk->srv_addr); // TODO: this is not necessary -> remove
 
@@ -396,11 +398,27 @@ void
 
           case FIN:
             printf("received FIN packet\n");
-            csk->pathstate[curr_substream] = FIN_RECV;            
-            for(i=0; i<csk->substreams; i++){
-              send_flag(csk, i, FIN_ACK);
-              csk->pathstate[i] = FIN_ACK_SENT;
+            csk->pathstate[curr_substream] = FIN_RECV;
+            tries = 0;
+            do{
+              for(i=0; i<csk->substreams; i++){
+                send_flag(csk, i, FIN_ACK);
+                csk->pathstate[i] = FIN_ACK_SENT;
+              }
+              tries++;
+            }while (poll_flag(csk, FIN_ACK_ACK, POLL_ACK_TO*(2<<(tries-1)))== -1 && tries < POLL_MAX_TRIES);
+
+            if(tries >= POLL_MAX_TRIES){
+              printf("Did not receive FIN_ACK_ACK... Closing anyway\n");
+            }else{
+              printf("Received FIN_ACK_ACK after %d tries\n", tries);
+              for(i=0; i<csk->substreams; i++){
+                csk->pathstate[i] = CLOSING;
+                //remove_substream(csk, i);                
+              }
             }
+            csk->status = CLOSED;
+            fifo_release(&(csk->usr_cache));            
             break;
 
           case FIN_ACK:
@@ -424,6 +442,7 @@ void
             }
             break;
 
+            /*
           case FIN_ACK_ACK:
             //csk->status = CLOSED;
             if(csk->pathstate[curr_substream] == FIN_ACK_SENT){
@@ -433,19 +452,22 @@ void
                 //remove_substream(csk, i);                
               }
               csk->status = CLOSED;
-              fifo_release(&(csk->usr_cache));      
+              
             }else{
               printf("State %d: received FIN_ACK_ACK\n", csk->pathstate[curr_substream]);
             }
             break;
+            */
           
           case SYN_ACK:
             if(csk->pathstate[curr_substream] == SYN_SENT ||
                csk->pathstate[curr_substream] == SYN_ACK_RECV ||
                csk->pathstate[curr_substream] == ESTABLISHED){
+              /*
               if(csk->pathstate[curr_substream] == ESTABLISHED){
                 printf("ESTABLISHED but SYN_ACK\n");
-              }
+                }
+              */
               csk->pathstate[curr_substream] = SYN_ACK_RECV;
               send_flag(csk, curr_substream, NORMAL);
             }else{
@@ -491,6 +513,7 @@ void
       if(getTime() - csk->lastrcvt[k] > csk->idle_time[k]){     
         if(csk->pathstate[k] == ESTABLISHED){
           continue;
+          // TODO perhaps we should send a duplicate ACK here.. just in case all the ACKs were lost
         }else if(csk->pathstate[k] == SYN_SENT){
           send_flag(csk, k, SYN);
         }else if(csk->pathstate[k] == SYN_ACK_RECV){
@@ -713,7 +736,8 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     Ack_Pckt* ack = ackPacket(msg->seqno+1, csk->curr_block,
                               csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
 
-    while( (ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len) && (ack->blockno < csk->curr_block + NUM_BLOCKS)  ){
+    while( (ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len) && 
+           (ack->blockno < csk->curr_block + NUM_BLOCKS)  ){
         // The current block is decodable, so need to request for the next block
         // XXX make sure that NUM_BLOCKS is not 1, or this will break
         ack->blockno++;
@@ -1453,6 +1477,7 @@ close_clictcp(clictcp_sock* csk){
 
   int i;
   int tries = 0;
+  int index;
   if (csk->status != CLOSED){
     do{
       for (i =0; i<csk->substreams; i++){
@@ -1463,7 +1488,7 @@ close_clictcp(clictcp_sock* csk){
         }
       }
       tries++;      
-    } while(poll_flag(csk, FIN_ACK, POLL_ACK_TO*(2<<(tries-1)))== -1 && tries < POLL_MAX_TRIES );
+    } while((index = poll_flag(csk, FIN_ACK, POLL_ACK_TO*(2<<(tries-1))))== -1 && tries < POLL_MAX_TRIES );
     // doing multiplicative backoff for poll_flag -- may need to do this in wireless
 
     if(tries >= POLL_MAX_TRIES){
@@ -1471,9 +1496,11 @@ close_clictcp(clictcp_sock* csk){
       csk->error = CLOSE_ERR;
     }else{
       printf("Received FIN ACK after %d tries\n", tries);
-      csk->pathstate[i] = FIN_ACK_RECV;
-      if (send_flag(csk, i, FIN_ACK_ACK)==0){
-        csk->pathstate[i] = CLOSING;
+      csk->pathstate[index] = FIN_ACK_RECV;
+      for(i = 0; i<csk->substreams; i++){
+        if (send_flag(csk, i, FIN_ACK_ACK)==0){
+          csk->pathstate[i] = CLOSING;
+        }
       }
     }
     csk->status = CLOSED;
