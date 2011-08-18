@@ -355,8 +355,8 @@ void
     double mintime = 5; // 5 seconds at least
     for (k=0; k< csk->substreams; k++){
       if (mintime > csk->idle_time[k]) mintime = csk->idle_time[k];
-    }
-   
+    }   
+    
     // value -1 blocks until something is ready to read
     ready = poll(read_set, csk->substreams, (int)1000*mintime);
 
@@ -485,7 +485,8 @@ void
     for(k = 0; k<csk->substreams; k++){
       if(getTime() - csk->lastrcvt[k] > csk->idle_time[k]){     
         if(csk->pathstate[k] == ESTABLISHED){
-          continue;
+          //continue;
+          // TODO perhaps we should send a duplicate ACK here.. just in case all the ACKs were lost
         }else if(csk->pathstate[k] == SYN_SENT){
           send_flag(csk, k, SYN);
         }else if(csk->pathstate[k] == SYN_ACK_RECV){
@@ -708,7 +709,8 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     Ack_Pckt* ack = ackPacket(msg->seqno+1, csk->curr_block,
                               csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
 
-    while( (ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len) && (ack->blockno < csk->curr_block + NUM_BLOCKS)  ){
+    while( (ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len) && 
+           (ack->blockno < csk->curr_block + NUM_BLOCKS)  ){
         // The current block is decodable, so need to request for the next block
         // XXX make sure that NUM_BLOCKS is not 1, or this will break
         ack->blockno++;
