@@ -691,11 +691,6 @@ timeout(srvctcp_sock* sk, int pin){
     return FALSE;
   }
 
-  if (subpath->snd_nxt == subpath->snd_una){
-    // Nothing is ont the fly , we expect no ACKS so don't timeout
-    return TRUE;
-  }
-
   if (sk->debug > 1){
     fprintf(stderr,
             "timerxmit %6.2f \t on %s:%d \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d srtt %f \n",
@@ -718,15 +713,19 @@ timeout(srvctcp_sock* sk, int pin){
   //slr_long[path_id] = SLR_LONG_INIT;
   subpath->rto = 2*subpath->rto; // Exponential back-off
 
-  subpath->snd_ssthresh = subpath->snd_cwnd*sk->multiplier; /* shrink */
+  if (subpath->snd_nxt != subpath->snd_una){
+    // Nothing is on the fly , we expect no ACKS so don't timeout
 
-  if (subpath->snd_ssthresh < sk->initsegs) {
-    subpath->snd_ssthresh = sk->initsegs;
+    subpath->snd_ssthresh = subpath->snd_cwnd*sk->multiplier; /* shrink */
+    
+    if (subpath->snd_ssthresh < sk->initsegs) {
+      subpath->snd_ssthresh = sk->initsegs;
+    }
+    subpath->slow_start = 1;
+    subpath->snd_cwnd = sk->initsegs;  /* drop window */
+    subpath->snd_una = subpath->snd_nxt;
+    
   }
-  subpath->slow_start = 1;
-  subpath->snd_cwnd = sk->initsegs;  /* drop window */
-  subpath->snd_una = subpath->snd_nxt;
-
   return TRUE;
   // Update the path_id so that we timeout based on another path, and try every path in a round
   // Avoids getting stuck if the current path dies and packets/acks on other paths are lost
