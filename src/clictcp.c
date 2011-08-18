@@ -376,6 +376,19 @@ void
           if((numbytes = recvfrom(csk->sockfd[curr_substream], buff, MSS, 0,
                                   &(csk->srv_addr), &srvlen)) == -1){
             err_sys("recvfrom",csk);
+
+            // removing path if it returns -1 on recvfrom (doesn't exist anymore)
+            csk->pathstate[curr_substream] = CLOSING;
+            // update read_set when removing a substream
+            for(i=curr_substream; i < csk->substreams-1; i++){
+              read_set[i].fd = read_set[i+1].fd;
+              read_set[i].events = POLLIN;
+            }
+            read_set[csk->substreams-1].fd = 0;
+
+            remove_substream(csk, curr_substream);
+            curr_substream--;
+            
           }
           if(numbytes <= 0) break;
           
@@ -1426,6 +1439,18 @@ poll_flag(clictcp_sock *csk, flag_t flag, int timeout){
         if((numbytes = recvfrom(csk->sockfd[curr_substream], buff, MSS, 0,
                                 &(csk->srv_addr), &srvlen)) == -1){
           err_sys("recvfrom",csk);
+
+          // removing path if it returns -1 on recvfrom (doesn't exist anymore)
+          csk->pathstate[curr_substream] = CLOSING;
+          // update read_set when removing a substream
+          for(k=curr_substream; k < csk->substreams-1; k++){
+            read_set[k].fd = read_set[k+1].fd;
+            read_set[k].events = POLLIN;
+          }
+          read_set[csk->substreams-1].fd = 0;
+          
+          remove_substream(csk, curr_substream);
+          curr_substream--;
         }
         if(numbytes <= 0) {
           free(msg->packet_coeff);
