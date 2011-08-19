@@ -473,7 +473,7 @@ int handle_traffic(int ctcp_port)
     */
     if( (pfd[0].revents & POLLHUP) || (pfd[1].revents & POLLHUP) ) {
 	    res = ERR_NONE;
-	    break;
+      break;
     }
 
     
@@ -490,7 +490,8 @@ int handle_traffic(int ctcp_port)
                && errno==EINTR );
         if( res<0 ) {
           res = ERR_SKFATAL;
-          break;
+          free(buf);
+          return res;
         }
         bptr += res;
       }else {  //if received TCP packets from target, forward to proxy_local over CTCP
@@ -498,7 +499,8 @@ int handle_traffic(int ctcp_port)
           res = send_ctcp(ctcp_sk, buf + bptr, btop - bptr);
           if(res < 0) {
             res = ERR_SKFATAL;
-            break;
+            free(buf);
+            return res;
           }
           bptr += res;
         }
@@ -510,12 +512,14 @@ int handle_traffic(int ctcp_port)
 	    bown = (pfd[0].revents & POLLIN)==0; 
 	    while( (res=read(pfd[bown].fd,buf,buf_size))<0 && errno==EINTR );
 	    if( res<0 ) {
-        res = ERR_SKFATAL;
-        break;
+        res = ERR_SKFATAL;  
+        free(buf);
+        return res;
 	    }
 	    if( !res ) {
         res = ERR_NONE;
-        break;
+        free(buf);
+        return res;
 	    }
 	    btop = res;
     }
