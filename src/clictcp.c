@@ -420,6 +420,8 @@ void
               }
               tries++;
             }while (poll_flag(csk, FIN_ACK_ACK, POLL_ACK_TO*(2<<(tries-1)))== -1 && tries < POLL_MAX_TRIES);
+            // TODO maybe we should not send FIN_ACK when we receive something other than FIN_ACK and not timing out
+            
 
             if(tries >= POLL_MAX_TRIES){
               printf("Did not receive FIN_ACK_ACK... Closing anyway\n");

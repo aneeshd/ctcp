@@ -335,7 +335,7 @@ void
 
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
 
-  while(sk->status == ACTIVE){
+  while(sk->status != CLOSED){
     double rto_min = 1000;
     for (i=0; i < sk->num_active; i++){
       if (sk->active_paths[i]->rto < rto_min) rto_min = sk->active_paths[i]->rto;
@@ -443,6 +443,7 @@ void
               send_flag(sk, i, FIN_ACK);
               sk->active_paths[i]->pathstate = FIN_ACK_SENT;
             }
+            sk->status = SK_CLOSING;
           }
         }else if(ack->flag == FIN_ACK){
           if( sk->active_paths[path_index]->pathstate != FIN_SENT){ 
@@ -475,6 +476,9 @@ void
             }
             sk->status = CLOSED;
             sk->error = NONE;
+            
+            // TODO free all the blocks up to maxblockno
+            pthread_cond_signal( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv));
           }
         }
       }
@@ -533,6 +537,7 @@ void
       free(buff);
       // no path alive, terminate
       // endSession(sk);
+      ctrlc(sk);
       return NULL;
     }
   }  /* while more pkts */
@@ -569,11 +574,11 @@ close_srvctcp(srvctcp_sock* sk){
 
   int i = sk->curr_block;
   if( sk->dof_req_latest != 0){
-    while (i <= sk->maxblockno){
+    while (i <= sk->maxblockno && sk->status == ACTIVE){
       //  printf("Waiting on block %d to get free\n", i);
       pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
       if (sk->dof_req_latest != 0 && i >= sk->curr_block){
-	pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
+        pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
       }
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
       i++;
@@ -582,7 +587,7 @@ close_srvctcp(srvctcp_sock* sk){
   }
 
   // Send FIN or FIN_ACK
-  if(sk->status != CLOSED){
+  if(sk->status == ACTIVE){
     printf("Sending the FIN packet\n");
 
     do{
