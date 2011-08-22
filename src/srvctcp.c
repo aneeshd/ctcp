@@ -238,11 +238,6 @@ listen_srvctcp(srvctcp_sock* sk){
 size_t
 send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
-  if(sk->status != ACTIVE){
-    sk->error = CLIHUP;
-    return -1;
-  }
-
   /*
     printf("Calling send ctcp curr block %d maxblockno %d maxblockno.len %d\n", 
     sk->curr_block, sk->maxblockno,  sk->blocks[sk->maxblockno%NUM_BLOCKS].len);
@@ -257,6 +252,12 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 
   int i = sk->maxblockno;
   while (bytes_left > 0){
+
+    if (sk->status != ACTIVE){
+      sk->error = CLIHUP;
+      return -1;      
+    }
+
     pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));    
 
     while(i < sk->maxblockno){
