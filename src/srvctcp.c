@@ -445,6 +445,9 @@ void
               sk->active_paths[i]->pathstate = FIN_ACK_SENT;
             }
             sk->status = SK_CLOSING;
+
+            // TODO free all the blocks up to maxblockno
+            pthread_cond_signal( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv));
           }
         }else if(ack->flag == FIN_ACK){
           if( sk->active_paths[path_index]->pathstate != FIN_SENT){ 
@@ -478,8 +481,6 @@ void
             sk->status = CLOSED;
             sk->error = NONE;
             
-            // TODO free all the blocks up to maxblockno
-            pthread_cond_signal( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv));
           }
         }
       }
