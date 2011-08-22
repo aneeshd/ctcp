@@ -13,7 +13,7 @@ typedef int bool;
 typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK, FIN_ACK_ACK} flag_t;
 
 //---------------- CTCP parameters ------------------//
-#define MSS 1450 // XXX: make sure that this is fine...
+#define MSS 1450
 #define UDP_HEADER_SIZE 0 // We have to take into account the UDP header 
 
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
@@ -61,7 +61,7 @@ typedef struct{
 
 // -------------- MultiThreading related variables ------------//
 
-typedef struct{ // TODO: this datastructure can store the dof's and other state related to the blocks
+typedef struct{ 
   pthread_mutex_t block_mutex;
   pthread_rwlock_t block_rwlock;
   pthread_cond_t  block_free_condv;

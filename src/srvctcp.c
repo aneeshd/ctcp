@@ -596,7 +596,6 @@ close_srvctcp(srvctcp_sock* sk){
     for (i=0; i < sk->num_active; i++){
       if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto/2;
     }
-      
 
     do{
       // Send FIN through all interfaces
@@ -606,7 +605,6 @@ close_srvctcp(srvctcp_sock* sk){
       }
       
       rto_max = 2*rto_max;
-
       // Send FIN to the client, and wait for FIN_ACK
       r = timedread(sk->sockfd, rto_max);
       if (r > 0){  /* ready */
