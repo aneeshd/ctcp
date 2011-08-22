@@ -190,7 +190,6 @@ connect_ctcp(char *host, char *port, char *lease_file){
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return NULL;
     }
-    // TODO need to loop through to find interfaces number of connections
 
     for(result = servinfo; result != NULL; result = result->ai_next) {
       
@@ -301,8 +300,6 @@ connect_ctcp(char *host, char *port, char *lease_file){
     // Let another thread do the job and return the socket
 
     rv = pthread_create( &(csk->daemon_thread), NULL, handle_connection, (void *) csk);
-
-    // TODO TODO We need to have a close function to join the threads and gracefully close the connection
     return csk;
 }
 
@@ -338,7 +335,6 @@ void
   char *buff = malloc(BUFFSIZE);
 
   // READING FROM MULTIPLE SOCKET
-  // TODO need to update pollfd with removePath... for now, just keep it as it is.
   struct pollfd read_set[MAX_SUBSTREAMS];
   for(k=0; k < csk->substreams; k++){
     read_set[k].fd = csk->sockfd[k];
@@ -370,7 +366,7 @@ void
       printf("Timeout occurred during poll! Should not happen with -1\n");
       //ready = POLL_TO_FLG;
     }else{
-      srvlen = sizeof(csk->srv_addr); // TODO: this is not necessary -> remove
+      srvlen = sizeof(csk->srv_addr); 
 
       do{
         if(read_set[curr_substream].revents & POLLIN){
@@ -424,9 +420,7 @@ void
               }
 
               poll_rv = poll_flag(csk, FIN_ACK_ACK, POLL_ACK_TO*(2<<(tries-1)));
-            }while ( poll_rv < 0  && tries < POLL_MAX_TRIES);
-            // TODO maybe we should not send FIN_ACK when we receive something other than FIN_ACK and not timing out
-            
+            }while ( poll_rv < 0  && tries < POLL_MAX_TRIES);          
 
             if(tries >= POLL_MAX_TRIES){
               printf("Did not receive FIN_ACK_ACK... Closing anyway\n");
@@ -531,7 +525,6 @@ void
       if(getTime() - csk->lastrcvt[k] > csk->idle_time[k]){     
         if(csk->pathstate[k] == ESTABLISHED){
           continue;
-          // TODO perhaps we should send a duplicate ACK here.. just in case all the ACKs were lost
         }else if(csk->pathstate[k] == SYN_SENT){
           send_flag(csk, k, SYN);
         }else if(csk->pathstate[k] == SYN_ACK_RECV){
@@ -714,7 +707,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
                 printf("\n");
               }
 
-              msg->packet_coeff[0] = 0; // TODO; check again
+              msg->packet_coeff[0] = 0; // TODO check again
               // Subtract row with index start with the row at hand (coffecients)
               for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
                 msg->packet_coeff[i] ^= FFmult(csk->blocks[blockno%NUM_BLOCKS].rows[start][i], pivot);
@@ -894,8 +887,6 @@ partial_write(clictcp_sock* csk){
   return;
 }
 
-
-// TODO: TEST!
 void
 normalize(uint8_t* coefficients, char*  payload, uint8_t size){
   if (coefficients[0] != 1){

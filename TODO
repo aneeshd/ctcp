@@ -1,34 +1,25 @@
 ////////////////////////
-//// July 8th, 2011 ////
+//// Aug 22 2011 ////
 ////////////////////////
 
-
-Day to Day bugs/fixes:
+Day to Day tasks:
+* Go through all TODOs
+* Check for memory leaks
+* Test multiple-interface
+* Collect throughput/statistics (CPU usage, loading time, etc)
+* Path/session status update for proxy (debugging purposes)
 * Fix the "invalid argument" issue of the select call - Happens when a connection dies - ICMP reject
-* Fix grapher for multiple paths
-* Fix block selection policy so that each path can move forward by more than one block
-* Test with more than two flows
 
 New Big Features:
 * Multiple sources
-  - Automatic discovery of interfaces' Ip address
-  - Find out gateway information programmatically maybe using DHCP?
+  - Automatic discovery of interfaces' IP address
+  - Find out gateway information programmatically maybe using DHCP
   - Automatic path establishment and clean up - both on server and client
-
 * Test Vertical Hand-off -- should work given the above 
 * Experiment with vectorized SSE instruction for FFmult [try this - long discussion]
-* Handshake
-
-* Test VLC
 
 API/Porting:
-* Try to port to Mac/Windows - Ubuntu wireless driver is crap
-
-Grapher:
-* Fix grapher's bw computations
-* Add things to the grapher:
-  - DOFs sent per block
-  - When a block got decoded
+* Try to port to Mac/Windows
 
 Documentation:
 * Fix README
@@ -36,7 +27,3 @@ Documentation:
 * Fix usage function in clictcp
 
 Misc:
-
-
-
-
