@@ -9,7 +9,7 @@
 // ------------ Connection parameters ---------------//
 #define BUFFSIZE    3000
 #define MAX_CONNECT 5
-typedef enum {ACTIVE=0, CLOSED} status_t;
+typedef enum {ACTIVE=0, CLOSED, SK_CLOSING} status_t;
 typedef enum {NONE=0, CLOSE_ERR, CLIHUP} ctcp_err_t;
 typedef enum {SYN_RECV=0, SYN_ACK_SENT, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN_RECV, FIN_ACK_SENT, CLOSING} srvpath_t;
 
