@@ -592,6 +592,12 @@ close_srvctcp(srvctcp_sock* sk){
   if(sk->status == ACTIVE){
     printf("Sending the FIN packet\n");
 
+    double rto_max = 0;
+    for (i=0; i < sk->num_active; i++){
+      if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto/2;
+    }
+      
+
     do{
       // Send FIN through all interfaces
       for(i=0; i<sk->num_active; i++){
@@ -599,11 +605,8 @@ close_srvctcp(srvctcp_sock* sk){
         sk->active_paths[i]->pathstate = FIN_SENT;
       }
       
-      double rto_max = 0;
-      for (i=0; i < sk->num_active; i++){
-        if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto;
-      }
-      
+      rto_max = 2*rto_max;
+
       // Send FIN to the client, and wait for FIN_ACK
       r = timedread(sk->sockfd, rto_max);
       if (r > 0){  /* ready */

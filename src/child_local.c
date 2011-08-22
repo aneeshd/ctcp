@@ -24,6 +24,8 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -138,7 +140,26 @@ int handle_con()
   sprintf(buf,"TCP Connection closed (%s)",sz_error[res]);
   logstr(buf,&ad_client);
 
-  pthread_join(clictcp_thread, NULL);
+
+  struct timespec ts;
+  int s;
+
+  if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+    printf("Could not get time\n");
+    pthread_join(clictcp_thread, NULL);
+  } else{
+
+    ts.tv_sec += 5;
+    
+    s = pthread_timedjoin_np(clictcp_thread, NULL, &ts);
+    if (s != 0) {
+      // kill the thread
+      pthread_kill(clictcp_thread, SIGKILL);
+      printf("Killed the clictcp_thread the hard way!\n");
+    }
+  }
+
+
   close_clictcp(csk);  
   fprintf(stdout, "CTCP socket (port %s) successfully closed\n\n", ctcp_port);
 
