@@ -265,19 +265,21 @@ connect_ctcp(char *host, char *port, char *lease_file){
     //printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
     // ------------  Send a SYN packet for any new connection ----------------
-    int path_ix;
+    int path_ix = -1;
     rv = 0;
     do{
-      for (k = 0; k < csk->substreams; k++){
-        if(send_flag(csk, k, SYN) == -1){
-          printf("Could not send SYN packet \n");
-        }else{
-          csk->pathstate[k] = SYN_SENT;
-          csk->lastrcvt[k] = getTime();
+      if (path_ix == -1){
+        for (k = 0; k < csk->substreams; k++){
+          if(send_flag(csk, k, SYN) == -1){
+            printf("Could not send SYN packet \n");
+          }else{
+            csk->pathstate[k] = SYN_SENT;
+            csk->lastrcvt[k] = getTime();
+          }
         }
+        rv++;
       }
-      rv++;
-    }while( (path_ix = poll_flag(csk, SYN_ACK, (2<<(rv-1))*POLL_ACK_TO)) == -1 && rv < POLL_MAX_TRIES );
+    }while( (path_ix = poll_flag(csk, SYN_ACK, (2<<(rv-1))*POLL_ACK_TO)) < 0 && rv < POLL_MAX_TRIES );
     // poll backing off the timeout value (above) by rv*POLL_ACK_TO
     
 
@@ -347,7 +349,7 @@ void
   double idle_timer;
   int curr_substream=0;
   int ready, i;
-  int tries;
+  int poll_rv, tries;
 
   do{
 
@@ -410,13 +412,19 @@ void
             printf("received FIN packet\n");
             csk->pathstate[curr_substream] = FIN_RECV;
             tries = 0;
+            poll_rv = -1;
+
             do{
-              for(i=0; i<csk->substreams; i++){
-                send_flag(csk, i, FIN_ACK);
-                csk->pathstate[i] = FIN_ACK_SENT;
+              if (poll_rv == -1){
+                for(i=0; i<csk->substreams; i++){
+                  send_flag(csk, i, FIN_ACK);
+                  csk->pathstate[i] = FIN_ACK_SENT;
+                }
+                tries++;
               }
-              tries++;
-            }while (poll_flag(csk, FIN_ACK_ACK, POLL_ACK_TO*(2<<(tries-1)))== -1 && tries < POLL_MAX_TRIES);
+
+              poll_rv = poll_flag(csk, FIN_ACK_ACK, POLL_ACK_TO*(2<<(tries-1)));
+            }while ( poll_rv < 0  && tries < POLL_MAX_TRIES);
             // TODO maybe we should not send FIN_ACK when we receive something other than FIN_ACK and not timing out
             
 
@@ -1476,7 +1484,7 @@ poll_flag(clictcp_sock *csk, flag_t flag, int timeout){
           free(msg->payload);
           free(msg);
           free(buff);
-          return -1;
+          return -2;
         }
       }
 
@@ -1499,18 +1507,22 @@ close_clictcp(clictcp_sock* csk){
 
   int i;
   int tries = 0;
-  int index;
+  int index = -1;
   if (csk->status != CLOSED){
     do{
-      for (i =0; i<csk->substreams; i++){
-        if(send_flag(csk, i, FIN) == -1){
-          printf("Could not send the FIN packet\n");
-        }else{
-          csk->pathstate[i] = FIN_SENT;
+      if (index == -1){
+        for (i =0; i<csk->substreams; i++){
+          if(send_flag(csk, i, FIN) == -1){
+            printf("Could not send the FIN packet\n");
+          }else{
+            csk->pathstate[i] = FIN_SENT;
+          }
         }
+        tries++;      
       }
-      tries++;      
-    } while((index = poll_flag(csk, FIN_ACK, POLL_ACK_TO*(2<<(tries-1))))== -1 && tries < POLL_MAX_TRIES );
+
+      index = poll_flag(csk, FIN_ACK, POLL_ACK_TO*(2<<(tries-1)));
+    } while( index < 0 && tries < POLL_MAX_TRIES );
     // doing multiplicative backoff for poll_flag -- may need to do this in wireless
 
     if(tries >= POLL_MAX_TRIES){
