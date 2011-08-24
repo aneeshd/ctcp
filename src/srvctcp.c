@@ -2,6 +2,8 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/file.h>
+#include <fcntl.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
@@ -150,6 +152,8 @@ open_srvctcp(char *port){
 
   freeaddrinfo(result);
 
+  open_status_log(sk, port);
+
   int sndbuf     = MSS*MAX_CWND;/* UDP send buff, bigger than mss */
   int rcvbuf     = MSS*MAX_CWND;/* UDP recv buff for ACKs*/
 
@@ -203,7 +207,8 @@ listen_srvctcp(srvctcp_sock* sk){
     init_stream(sk, stream);
     stream->cli_addr = cli_addr;
     stream->pathstate = SYN_RECV;
-    
+    log_srv_status(sk);
+
     sk->active_paths[0] = stream;
     sk->num_active++;
 
@@ -211,6 +216,7 @@ listen_srvctcp(srvctcp_sock* sk){
     if(send_flag(sk, 0, SYN_ACK)== 0){
       printf("Send SYN_ACK\n");
       stream->pathstate = SYN_ACK_SENT;
+      log_srv_status(sk);
     }
 
     free(buff);
@@ -380,10 +386,12 @@ void
             init_stream(sk, sk->active_paths[sk->num_active]);
             sk->active_paths[sk->num_active]->cli_addr = cli_addr;
             sk->active_paths[sk->num_active]->pathstate = SYN_RECV;
+            log_srv_status(sk);
             sk->active_paths[sk->num_active]->last_ack_time = getTime();
 
             if(send_flag(sk, sk->num_active, SYN_ACK)==0){
               sk->active_paths[sk->num_active]->pathstate = SYN_ACK_SENT;
+              log_srv_status(sk);
             }
             
             sk->num_active++;
@@ -412,6 +420,7 @@ void
             // path is now established, and we send data packets
             printf("Established path %d\n", path_index);
             sk->active_paths[path_index]->pathstate = ESTABLISHED;
+            log_srv_status(sk);
             send_segs(sk, path_index);
           }else{            
             // If we get here, the path is established and we just received an ACK        
@@ -438,13 +447,16 @@ void
           }else{
             printf("Sending FIN_ACK path %d\n", path_index);
             sk->active_paths[path_index]->pathstate = FIN_RECV;
+            log_srv_status(sk);
             // TODO for now, when we receive FIN, we send FIN_ACK through all interfaces
             // May want to change this if we want to add/remove paths independently
             for(i= 0; i<sk->num_active; i++){
               send_flag(sk, i, FIN_ACK);
               sk->active_paths[i]->pathstate = FIN_ACK_SENT;
+              log_srv_status(sk);
             }
             sk->status = SK_CLOSING;
+            log_srv_status(sk);
 
             // TODO free all the blocks up to maxblockno
             pthread_cond_signal( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv));
@@ -456,15 +468,18 @@ void
           }else {
             printf("Recv FIN_ACK path %d\n", path_index);
             sk->active_paths[path_index]->pathstate = FIN_ACK_RECV;
+            log_srv_status(sk);
             // TODO for now, when we receive FIN, we send FIN_ACK through all interfaces
             // May want to change this if we want to add/remove paths independently
             for(i= 0; i<sk->num_active; i++){
               send_flag(sk, i, FIN_ACK_ACK);
               sk->active_paths[i]->pathstate = CLOSING;
+              log_srv_status(sk);
               // removePath(sk,i);
             }
             sk->status = CLOSED;
             sk->error = NONE;
+            log_srv_status(sk);
           }          
         }else if (ack->flag == FIN_ACK_ACK){
           if( sk->active_paths[path_index]->pathstate != FIN_ACK_SENT){ 
@@ -476,10 +491,12 @@ void
             // May want to change this if we want to add/remove paths independently
             for(i=0; i<sk->num_active; i++){
               sk->active_paths[i]->pathstate = CLOSING;
+              log_srv_status(sk);
               //removePath(sk, i);
             }
             sk->status = CLOSED;
             sk->error = NONE;
+            log_srv_status(sk);
             
           }
         }
@@ -537,6 +554,7 @@ void
     if(sk->num_active==0){
       sk->status = CLOSED;
       sk->error = NONE;
+      log_srv_status(sk);
       free(ack);
       free(buff);
       // no path alive, terminate
@@ -605,6 +623,7 @@ close_srvctcp(srvctcp_sock* sk){
         send_flag(sk, i, FIN);                 
         sk->active_paths[i]->pathstate = FIN_SENT;
       }
+      log_srv_status(sk);
       
       rto_max = 2*rto_max;
       // Send FIN to the client, and wait for FIN_ACK
@@ -622,8 +641,10 @@ close_srvctcp(srvctcp_sock* sk){
             printf("got FIN_ACK. sending FIN_ACK_ACK\n");                   
             for(i=0; i<sk->num_active; i++){
               sk->active_paths[i]->pathstate = FIN_ACK_RECV;      
+              log_srv_status(sk);
               if (send_flag(sk, i, FIN_ACK_ACK)==0){
                 sk->active_paths[i]->pathstate = CLOSING;
+                log_srv_status(sk);
               }
             }
             sk->error = NONE;       
@@ -645,6 +666,7 @@ close_srvctcp(srvctcp_sock* sk){
     }while(tries < CONTROL_MAX_RETRIES && !success);
 
     sk->status = CLOSED;
+    log_srv_status(sk);
   }
    
   // For now, just send FIN_ACK_ACK only if successfully received FIN_ACK
@@ -1868,4 +1890,109 @@ init_stream(srvctcp_sock* sk, Substream_Path *subpath){
   //subpath->cli_addr   = NULL;
 }
 
+
+void
+open_status_log(srvctcp_sock* sk, char* port){
+
+  if(!mkdir("logs/pids", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+    perror("An error occurred while making the logs directory");
+  }
+
+  char buff[128];
+  sprintf(buff,"logs/pids/%u",getpid());
+
+  sk->status_log_fd = open(buff, O_RDWR | O_CREAT | O_TRUNC);
+
+  if (sk->status_log_fd == -1){
+    perror("Could not open status file");
+    return;
+  }
+
+  
+  if (flock(sk->status_log_fd, LOCK_EX) == -1){
+    perror("Could not acquire the lock for status file");
+    return;
+  }
+  
+
+  //FILE *f_stream fdopen(csk->status_log_fd);
+ 
+  int len;
+
+  len = sprintf(buff, "\nport: %s\t", port);
+  write(sk->status_log_fd, buff, len);
+
+  len = sprintf(buff, "pid: %u\t", getpid());
+  write(sk->status_log_fd, buff, len);
+
+  if (flock(sk->status_log_fd, LOCK_UN) == -1){
+    perror("Could not unlock the status file");
+    return;
+  }
+
+  return;
+}
+
+
+void
+log_srv_status(srvctcp_sock* sk){
+
+  
+  if (flock(sk->status_log_fd, LOCK_EX | LOCK_NB) == -1){
+    perror("Could not acquire the lock for status file");
+    return;
+    } 
+
+  char buff[256];
+  int len;
+  char sk_status_msg[3][16] = {
+    "ACTIVE ",
+    "CLOSED ",
+    "CLOSING"
+  };
+
+  char path_status_msg[8][16] = {
+    "SYN_RECV    ",
+    "SYN_ACK_SENT",
+    "ESTABLISHED ",
+    "FIN_SENT    ", 
+    "FIN_ACK_RECV", 
+    "FIN_RECV    ", 
+    "FIN_ACK_SENT", 
+    "CLOSING     "
+  } ;
+
+
+  if(lseek(sk->status_log_fd, 0, SEEK_SET) == -1){
+    perror("Could not seek");
+  }
+
+  char tmp;
+  int count = 0;
+  do{
+    if (read(sk->status_log_fd, &tmp, 1) == -1){
+      perror("file read");
+    }
+    count += (tmp == '\t');
+  }while(count < 2);
+
+  // We have reached the beginning of the new line
+
+  len = sprintf(buff, "srv_status: %s\t", sk_status_msg[sk->status]);
+  write(sk->status_log_fd, buff, len);
+
+  int i;
+  for (i = 0; i < sk->num_active; i++){
+    len = sprintf(buff, "Path %d (%s): %s\t", i, inet_ntoa( ((struct sockaddr_in*)&(sk->active_paths[i]->cli_addr))->sin_addr), path_status_msg[sk->active_paths[i]->pathstate] );
+    write(sk->status_log_fd, buff, len);
+  }
+
+  if (flock(sk->status_log_fd, LOCK_UN) == -1){
+    perror("Could not unlock the status file");
+  }
+  
+
+  return;
+
+}
 

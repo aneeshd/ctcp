@@ -102,6 +102,7 @@ typedef struct{
 
   status_t status;
   ctcp_err_t error;
+  int status_log_fd;
 
   FILE *db;     /* debug trace file */
 
@@ -147,6 +148,12 @@ int listen_srvctcp(srvctcp_sock* sk);
 void close_srvctcp(srvctcp_sock* sk);
 size_t send_ctcp(srvctcp_sock* sk, const void *usr_buf, size_t usr_buf_len);
 void *server_worker(void *arg);
+
+
+void open_status_log(srvctcp_sock* sk, char* port);
+void  log_srv_status(srvctcp_sock* sk);
+
+
 
 #endif // ATOUCLI_H_
 
