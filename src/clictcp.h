@@ -56,6 +56,7 @@ typedef struct{
   
   status_t status;
   ctcp_err_t error;
+  int status_log_fd;
   
   //---------------- STATISTICS & ACCOUTING ------------------//
   uint32_t pkts;
@@ -78,6 +79,8 @@ typedef struct{
  */
 void ctrlc(clictcp_sock *csk);
 void err_sys(char *s, clictcp_sock *csk);
+void open_status_log(clictcp_sock* csk, char* port);
+void log_cli_status(clictcp_sock* csk);
 
 void bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int substream);
 

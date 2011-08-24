@@ -1,6 +1,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/stat.h>
+#include <sys/file.h>
+#include <fcntl.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
@@ -211,6 +214,9 @@ connect_ctcp(char *host, char *port, char *lease_file){
 
     csk->srv_addr = *(result->ai_addr);
 
+    //printf("*** port: %d *** \n",  ((struct sockaddr_in*)&(csk->srv_addr))->sin_port);
+    //printf("*** addr: %s *** \n",  inet_ntoa( ((struct sockaddr_in*)&(csk->srv_addr))->sin_addr));
+
     // If we got here, it means that we couldn't initialize the socket.
     if(result  == NULL){
       perror("Failed to create socket");
@@ -253,6 +259,9 @@ connect_ctcp(char *host, char *port, char *lease_file){
 
     //--------------DONE Binding-----------------------------------------
     
+    open_status_log(csk, port);
+
+
     //signal(SIGINT, (__sighandler_t) ctrlc);
 
     if (!rcvspace) rcvspace = MSS*MAX_CWND;
@@ -275,6 +284,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
           }else{
             csk->pathstate[k] = SYN_SENT;
             csk->lastrcvt[k] = getTime();
+            log_cli_status(csk);
           }
         }
         rv++;
@@ -289,9 +299,11 @@ connect_ctcp(char *host, char *port, char *lease_file){
     }else{
       printf("Received SYN ACK after %d tries\n", rv);
       csk->pathstate[path_ix] = SYN_ACK_RECV;
+      log_cli_status(csk);
       csk->lastrcvt[path_ix] = getTime();
       if(send_flag(csk, path_ix, NORMAL) == 0){
         csk->pathstate[path_ix] = ESTABLISHED;
+        log_cli_status(csk);
         printf("Sent ACK for the SYN ACK\n");
       }
     }
@@ -323,6 +335,7 @@ read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
     res = -1;
   }
 
+  log_cli_status(csk);
   return res;
 }
 
@@ -363,7 +376,7 @@ void
     ready = poll(read_set, csk->substreams, -1);
 
     if(ready == -1){
-      perror("poll");
+      perror("=== poll===");
     }else if (ready == 0){
       printf("Timeout occurred during poll! Should not happen with -1\n");
       //ready = POLL_TO_FLG;
@@ -379,6 +392,7 @@ void
 
             // removing path if it returns -1 on recvfrom (doesn't exist anymore)
             csk->pathstate[curr_substream] = CLOSING;
+            log_cli_status(csk);
             // update read_set when removing a substream
             for(i=curr_substream; i < csk->substreams-1; i++){
               read_set[i].fd = read_set[i+1].fd;
@@ -389,6 +403,7 @@ void
             remove_substream(csk, curr_substream);
             curr_substream--;
             
+            log_cli_status(csk);
           }
           if(numbytes <= 0) break;
           
@@ -398,8 +413,7 @@ void
 
           csk->idle_total += csk->lastrcvt[curr_substream] - idle_timer;
           csk->pkts++;
-          csk->end_time = csk->lastrcvt[curr_substream];  /* last read */
-          if (csk->start_time == 0) csk->start_time = csk->end_time;  /* first pkt time */
+          if (csk->start_time == 0) csk->start_time =  csk->lastrcvt[curr_substream];   /* first pkt time */
 
           // Unmarshall the packet
           bool match = unmarshallData(msg, buff, csk);
@@ -409,6 +423,7 @@ void
           case FIN:
             printf("received FIN packet\n");
             csk->pathstate[curr_substream] = FIN_RECV;
+            log_cli_status(csk);
             tries = 0;
             poll_rv = -1;
 
@@ -417,6 +432,7 @@ void
                 for(i=0; i<csk->substreams; i++){
                   send_flag(csk, i, FIN_ACK);
                   csk->pathstate[i] = FIN_ACK_SENT;
+                  log_cli_status(csk);
                 }
                 tries++;
               }
@@ -430,10 +446,12 @@ void
               printf("Received FIN_ACK_ACK after %d tries\n", tries);
               for(i=0; i<csk->substreams; i++){
                 csk->pathstate[i] = CLOSING;
+                log_cli_status(csk);
                 //remove_substream(csk, i);                
               }
             }
             csk->status = CLOSED;
+            log_cli_status(csk);
             fifo_release(&(csk->usr_cache));            
             break;
 
@@ -446,12 +464,15 @@ void
 
               printf("received FIN_ACK packet\n");
               csk->pathstate[curr_substream] = FIN_ACK_RECV;
+              log_cli_status(csk);
               for(i = 0; i<csk->substreams; i++){
                 send_flag(csk, i, FIN_ACK_ACK);
                 csk->pathstate[i] = CLOSING;
+                log_cli_status(csk);
                 //remove_substream(csk, i);
               }
               csk->status = CLOSED;
+              log_cli_status(csk);
               fifo_release(&(csk->usr_cache));      
             }else{
               printf("State %d: received FIN_ACK\n", csk->pathstate[curr_substream]);
@@ -485,6 +506,7 @@ void
                 }
               */
               csk->pathstate[curr_substream] = SYN_ACK_RECV;
+              log_cli_status(csk);
               send_flag(csk, curr_substream, NORMAL);
             }else{
               printf("State %d: Received SYN_ACK\n", csk->pathstate[curr_substream]);
@@ -510,6 +532,7 @@ void
             }else if(csk->pathstate[curr_substream] == SYN_ACK_RECV ||
                      csk->pathstate[curr_substream] == SYN_SENT){
               csk->pathstate[curr_substream] = ESTABLISHED;
+              log_cli_status(csk);
               bldack(csk, msg, match, curr_substream);            
             }else{
               printf("State %d: Received a data packet\n", csk->pathstate[curr_substream]);
@@ -541,6 +564,7 @@ void
         }else if(csk->pathstate[k] == FIN_ACK_RECV){
           send_flag(csk, k, FIN_ACK_ACK);
           csk->pathstate[k] = CLOSING;
+          log_cli_status(csk);
 
           // update read_set when removing a substream
           for(i=k; i < csk->substreams-1; i++){
@@ -562,10 +586,12 @@ void
              csk->pathstate[k] == ESTABLISHED){
             send_flag(csk, k, FIN);
             csk->pathstate[k] = FIN_SENT;
+            log_cli_status(csk);
           }else{
             // Tried enough, should close now
             printf("\nTried enough on path %d.\n", k);
             csk->pathstate[k] = CLOSING;
+            log_cli_status(csk);
 
             // update read_set when removing a substream
             for(i=k; i < csk->substreams-1; i++){
@@ -582,6 +608,7 @@ void
     
     if(csk->substreams == 0){
       csk->status = CLOSED;
+      log_cli_status(csk);
       fifo_release(&(csk->usr_cache));      
     }
 
@@ -631,6 +658,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
   uint32_t blockno = msg->blockno;    //The block number of incoming packet
   uint8_t start;
 
+  csk->end_time = getTime();  /* last read */
 
   if (msg->seqno > csk->last_seqno+1){
     //printf("Loss report blockno %d Number of losses %d\n", msg->blockno, msg->seqno - last_seqno - 1);
@@ -1358,6 +1386,7 @@ create_clictcp_sock(void){
     sk->idle_time[k] = INIT_IDLE_TIME;
     sk->idle_count[k] = 0;
     sk->ifc_addr[k] = NULL;
+    sk->sockfd[k] = 0;
   }
 
   fifo_init(&(sk->usr_cache), NUM_BLOCKS*BLOCK_SIZE*PAYLOAD_SIZE);
@@ -1447,6 +1476,7 @@ poll_flag(clictcp_sock *csk, flag_t flag, int timeout){
 
           // removing path if it returns -1 on recvfrom (doesn't exist anymore)
           csk->pathstate[curr_substream] = CLOSING;
+          log_cli_status(csk);
           // update read_set when removing a substream
           for(k=curr_substream; k < csk->substreams-1; k++){
             read_set[k].fd = read_set[k+1].fd;
@@ -1511,6 +1541,7 @@ close_clictcp(clictcp_sock* csk){
             printf("Could not send the FIN packet\n");
           }else{
             csk->pathstate[i] = FIN_SENT;
+            log_cli_status(csk);
           }
         }
         tries++;      
@@ -1526,20 +1557,44 @@ close_clictcp(clictcp_sock* csk){
     }else{
       printf("Received FIN ACK after %d tries\n", tries);
       csk->pathstate[index] = FIN_ACK_RECV;
+      log_cli_status(csk);
       for(i = 0; i<csk->substreams; i++){
         if (send_flag(csk, i, FIN_ACK_ACK)==0){
           csk->pathstate[i] = CLOSING;
+          log_cli_status(csk);
         }
       }
     }
     csk->status = CLOSED;
+    log_cli_status(csk);
   }
 
+ 
   pthread_join(csk->daemon_thread, NULL);
   // TODO free the last remaining blocks
-  // TODO close UDP sockets
 
+  // close UDP sockets
   int k;
+  for(k =0; k < MAX_SUBSTREAMS; k++){
+    if (csk->sockfd[k] != 0){
+      close(csk->sockfd[k]);
+    }
+  }
+
+  
+  log_cli_status(csk);
+  if (close(csk->status_log_fd) == -1){
+    perror("Could not close the status file");
+  }
+
+  // remove the status file
+  char file_name[32];
+  sprintf(file_name,"logs/pids/%u",getpid());
+
+  if (remove(file_name) == -1){
+    perror("Could not remove the status file");
+  }
+
   for(k =0; k < MAX_SUBSTREAMS; k++){
     if (csk->ifc_addr[k] != NULL){
       free(csk->ifc_addr[k]);
@@ -1625,4 +1680,106 @@ send_over(clictcp_sock* csk, int substream, const void* buf, size_t buf_len){
   return 0;
 }
 
+void
+open_status_log(clictcp_sock* csk, char* port){
 
+  if(!mkdir("logs/pids", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+    perror("An error occurred while making the logs directory");
+  }
+
+  char buff[128];
+  sprintf(buff,"logs/pids/%u",getpid());
+
+  csk->status_log_fd = open(buff, O_RDWR | O_CREAT | O_TRUNC);
+
+  if (csk->status_log_fd == -1){
+    perror("Could not open status file");
+    return;
+  }
+
+  
+  if (flock(csk->status_log_fd, LOCK_EX) == -1){
+    perror("Could not acquire the lock for status file");
+    return;
+  }
+  
+
+  //FILE *f_stream fdopen(csk->status_log_fd);
+ 
+  int len;
+
+  len = sprintf(buff, "\nport: %s\t", port);
+  write(csk->status_log_fd, buff, len);
+
+  len = sprintf(buff, "pid: %u\t", getpid());
+  write(csk->status_log_fd, buff, len);
+
+  if (flock(csk->status_log_fd, LOCK_UN) == -1){
+    perror("Could not unlock the status file");
+    return;
+  }
+
+  return;
+}
+
+
+void
+log_cli_status(clictcp_sock* csk){
+
+  
+  if (flock(csk->status_log_fd, LOCK_EX | LOCK_NB) == -1){
+    perror("Could not acquire the lock for status file");
+    return;
+    } 
+
+  char buff[256];
+  int len;
+  char sk_status_msg[2][16] = {
+    "ACTIVE",
+    "CLOSED"
+  };
+
+  char path_status_msg[8][16] = {
+    "SYN_SENT    ",
+    "SYN_ACK_RECV",
+    "ESTABLISHED ",
+    "FIN_SENT    ", 
+    "FIN_ACK_RECV", 
+    "FIN_RECV    ", 
+    "FIN_ACK_SENT", 
+    "CLOSING     "
+  } ;
+
+
+  if(lseek(csk->status_log_fd, 0, SEEK_SET) == -1){
+    perror("Could not seek");
+  }
+
+  char tmp;
+  int count = 0;
+  do{
+    if (read(csk->status_log_fd, &tmp, 1) == -1){
+      perror("file read");
+    }
+    count += (tmp == '\t');
+  }while(count < 2);
+
+  // We have reached the beginning of the new line
+
+  len = sprintf(buff, "cli_status: %s\tThru %3.2f Mbps   \t", sk_status_msg[csk->status],  8.e-6*PAYLOAD_SIZE*(csk->acks)/(csk->end_time - csk->start_time + 0.1));
+  write(csk->status_log_fd, buff, len);
+
+  int i;
+  for (i = 0; i < csk->substreams; i++){
+    len = sprintf(buff, "Path %d (%s): %s\t", i, inet_ntoa( ((struct sockaddr_in*)(csk->ifc_addr[i]))->sin_addr), path_status_msg[csk->pathstate[i]] );
+    write(csk->status_log_fd, buff, len);
+  }
+
+  if (flock(csk->status_log_fd, LOCK_UN) == -1){
+    perror("Could not unlock the status file");
+  }
+  
+
+  return;
+
+}

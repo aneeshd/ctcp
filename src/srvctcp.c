@@ -197,7 +197,7 @@ listen_srvctcp(srvctcp_sock* sk){
            inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
            ((struct sockaddr_in*)&cli_addr)->sin_port);
 
-    if (sk->debug > 3) openLog(sk, log_name);
+    if (sk->debug > 7) openLog(sk, log_name);
 
     Substream_Path *stream = malloc(sizeof(Substream_Path));
     init_stream(sk, stream);
@@ -523,6 +523,8 @@ void
             printf("Still closing\n");
                 }
         }else{
+          // set the path status to CLOSED and write in the file
+
           // Path is dead and is being removed
           removePath(sk, path_index);
           path_index--;
@@ -903,13 +905,13 @@ send_segs(srvctcp_sock* sk, int pin){
         }
       }
 
-      if (sk->num_active == 1){
-	printf("Now %f \t blockno %d mean OnFly %f dof_request tmp %d win %d CurrOnFly[0] %d srtt[0] %f \n", 
-	       1000*(getTime()-sk->start_time), blockno, mean_OnFly, dof_request_tmp, win, 
-	       CurrOnFly[0], sk->active_paths[0]->srtt*1000);
+      if (sk->debug > 6 && sk->num_active == 1){
+        printf("Now %f \t blockno %d mean OnFly %f dof_request tmp %d win %d CurrOnFly[0] %d srtt[0] %f \n", 
+               1000*(getTime()-sk->start_time), blockno, mean_OnFly, dof_request_tmp, win, 
+               CurrOnFly[0], sk->active_paths[0]->srtt*1000);
       }
 
-      if (sk->debug > 5 && sk->num_active == 2){
+      if (sk->debug > 6 && sk->num_active == 2){
         printf("Now %f \t path_id %d blockno %d \t mean OnFly %f \t dof_request tmp %d \t win %d \t CurrOnFly[0] %d CurrOnFly[1] %d srtt[0] %f srtt[1] %f\n", 
                1000*(getTime()-sk->start_time), pin, blockno, mean_OnFly, dof_request_tmp, win, 
                CurrOnFly[0], CurrOnFly[1], sk->active_paths[0]->srtt*1000, sk->active_paths[1]->srtt*1000);
