@@ -201,7 +201,7 @@ listen_srvctcp(srvctcp_sock* sk){
            inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
            ((struct sockaddr_in*)&cli_addr)->sin_port);
 
-    if (sk->debug > 7) openLog(sk, log_name);
+    if (sk->debug > 6) openLog(sk, log_name);
 
     Substream_Path *stream = malloc(sizeof(Substream_Path));
     init_stream(sk, stream);
@@ -681,6 +681,17 @@ close_srvctcp(srvctcp_sock* sk){
   thrpool_kill( &(sk->workers));
   pthread_join(sk->daemon_thread, NULL);
 
+  if (close(sk->status_log_fd) == -1){
+    perror("Could not close the status file");
+  }
+
+  char file_name[32];
+  sprintf(file_name, "logs/pids/%u", getpid());
+
+  if (remove(file_name) == -1){
+    perror("Could not remove the status file");
+  }
+
   free(sk);
   free(buff);
   free(ack);
@@ -1004,12 +1015,12 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
   msg->seqno = subpath->snd_nxt;
   msg->tstamp = getTime();
 
-  fprintf(sk->db,"%f %d xmt%d\n",
-          getTime()-sk->start_time,
-          blockno-sk->curr_block,
-          pin);
-
   if (sk->debug > 6){
+    fprintf(sk->db,"%f %d xmt%d\n",
+	    getTime()-sk->start_time,
+	    blockno-sk->curr_block,
+	    pin);
+
     printf("Sending... on blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d   port %d \n",
            blockno,
            sk->blocks[sk->curr_block%NUM_BLOCKS].len,
@@ -1127,7 +1138,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // max_delta: only for statistics
     if (subpath->vdelta > subpath->max_delta) subpath->max_delta = subpath->vdelta;  /* vegas delta */
   }
-  if (sk->debug > 3) {
+  if (sk->debug > 6) {
     fprintf(sk->db,"%f %d %f  %d %d ack%d\n",
             subpath->last_ack_time, // - sk->start_time,
             ackno,
@@ -1172,7 +1183,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     pthread_mutex_unlock(&(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_mutex));
 
      
-    if (sk->debug > 5 && sk->curr_block%1==0){
+    if (sk->debug > 3 && sk->curr_block%10==0){
       printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms \n",
              sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000);
     }
@@ -1196,16 +1207,18 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // Late or Good acks count towards goodput
 
 
-    fprintf(sk->db,"%f %d %f %d %f %f %f %f %f xmt\n",
-            getTime()-sk->start_time,
-            ack->blockno,
-            subpath->snd_cwnd,
-            subpath->snd_ssthresh,
-            subpath->slr,
-            subpath->slr_long,
-            subpath->srtt,
-            subpath->rto,
-            rtt);
+    if (sk->debug > 6){
+      fprintf(sk->db,"%f %d %f %d %f %f %f %f %f xmt\n",
+	      getTime()-sk->start_time,
+	      ack->blockno,
+	      subpath->snd_cwnd,
+	      subpath->snd_ssthresh,
+	      subpath->slr,
+	      subpath->slr_long,
+	      subpath->srtt,
+	      subpath->rto,
+	      rtt);
+    }
 
     subpath->idle = 0; // Late or good acks should stop the "idle" count for max-idle abort.
 
@@ -1283,7 +1296,7 @@ readConfig(char* configfile, srvctcp_sock* sk){
   sk->maxidle    = 5;          /* max idle before abort */
   sk->valpha     = 0.05;        /* vegas parameter */
   sk->vbeta      = 0.2;         /* vegas parameter */
-  sk->debug      = 5           ;/* Debug level */
+  sk->debug      = 3           ;/* Debug level */
 
   /* read config if there, keyword value */
   FILE *fp;
@@ -1829,7 +1842,7 @@ create_srvctcp_sock(void){
 
   sk->valpha     = 0.05;        /* vegas parameter */
   sk->vbeta      = 0.2;         /* vegas parameter */
-  sk->debug      = 6;           /* Debug level */
+  sk->debug      = 3;           /* Debug level */
 
   //------------------Statistics----------------------------------//
   sk->timeouts   = 0;
