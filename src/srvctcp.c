@@ -576,139 +576,142 @@ void
 */
 void
 close_srvctcp(srvctcp_sock* sk){
-  int r, tries, success;
+  int i, r, tries, success;
   char *buff = malloc(BUFFSIZE);
   struct sockaddr cli_addr;
   socklen_t clilen = sizeof(cli_addr);
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
   // Check whether send_segs have finished
 
-  // counters for FIN_RETX
-  tries = 0;
-  success = 0;
-  srvpath_t path_state;
+  if (sk->num_active > 0){
 
-  int i = sk->curr_block;
-  if( sk->dof_req_latest != 0){
-    while (i <= sk->maxblockno && sk->status == ACTIVE){
-      //  printf("Waiting on block %d to get free\n", i);
-      pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
-      if (sk->dof_req_latest != 0 && i >= sk->curr_block){
-        pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
+    // counters for FIN_RETX
+    tries = 0;
+    success = 0;
+
+    i = sk->curr_block;
+    if( sk->dof_req_latest != 0){
+      while (i <= sk->maxblockno && sk->status == ACTIVE){
+        //  printf("Waiting on block %d to get free\n", i);
+        pthread_mutex_lock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+        if (sk->dof_req_latest != 0 && i >= sk->curr_block){
+          pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->blocks[i%NUM_BLOCKS].block_mutex));
+        }
+        pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+        i++;
       }
-      pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
-      i++;
-    }
-    // Now all blocks are freed, and we have received all the acks
-  }
-
-
-  printf("RETURNED FROM WAITING ON BLOCKS currBlock %d, maxblock %d pid %u\n", sk->curr_block, sk->maxblockno, getpid());  
-  sk->status = CLOSED;
-  log_srv_status(sk);
-  //Signal the worker thread to exit
-
-  printf("SIGNALING SEND SEGS ..... %u\n", getpid());  
-  pthread_cond_signal(&(sk->blocks[(sk->maxblockno)%NUM_BLOCKS].block_ready_condv));
-
-  printf("WAITING ON DAEMON THREAD ..... %u\n", getpid());  
-  pthread_join(sk->daemon_thread, NULL);
-
-  printf("DAEMON THREAD RETURNED ..... %u\n", getpid());  
-
-  // Send FIN or FIN_ACK
-  if(sk->active_paths[0]->pathstate != CLOSING){
-    // printf("Sending the FIN packet\n");
-
-    double rto_max = 0;
-    for (i=0; i < sk->num_active; i++){
-      if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto;
+      // Now all blocks are freed, and we have received all the acks
     }
 
-    do{
-      // Send FIN through all interfaces
-      for(i=0; i<sk->num_active; i++){
-	printf("SENDING FIN %u\n", getpid());
-        send_flag(sk, i, FIN);                 
-        sk->active_paths[i]->pathstate = FIN_SENT;
+
+    printf("RETURNED FROM WAITING ON BLOCKS currBlock %d, maxblock %d pid %u\n", sk->curr_block, sk->maxblockno, getpid());  
+    sk->status = CLOSED;
+    log_srv_status(sk);
+    //Signal the worker thread to exit
+
+    printf("SIGNALING SEND SEGS ..... %u\n", getpid());  
+    pthread_cond_signal(&(sk->blocks[(sk->maxblockno)%NUM_BLOCKS].block_ready_condv));
+
+    printf("WAITING ON DAEMON THREAD ..... %u\n", getpid());  
+    pthread_join(sk->daemon_thread, NULL);
+
+    printf("DAEMON THREAD RETURNED ..... %u\n", getpid());  
+
+    // Send FIN or FIN_ACK
+    if(sk->active_paths[0]->pathstate != CLOSING){
+      // printf("Sending the FIN packet\n");
+
+      double rto_max = 0;
+      for (i=0; i < sk->num_active; i++){
+        if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto;
       }
-      log_srv_status(sk);
+
+      do{
+        // Send FIN through all interfaces
+        for(i=0; i<sk->num_active; i++){
+          printf("SENDING FIN %u\n", getpid());
+          send_flag(sk, i, FIN);                 
+          sk->active_paths[i]->pathstate = FIN_SENT;
+        }
+        log_srv_status(sk);
       
-      // Send FIN to the client, and wait for FIN_ACK
-      r = timedread(sk->sockfd, rto_max);
-      if (r > 0){  /* ready */
-        // The recvfrom should be done to a separate buffer (not buff)
-        if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
-          perror("Error in receveing ACKs\n");
-          //sk->status = CLOSED;
+        // Send FIN to the client, and wait for FIN_ACK
+        r = timedread(sk->sockfd, rto_max);
+        if (r > 0){  /* ready */
+          // The recvfrom should be done to a separate buffer (not buff)
+          if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
+            perror("Error in receveing ACKs\n");
+            //sk->status = CLOSED;
+            sk->error = CLOSE_ERR;
+            tries++;
+          }else{
+            unmarshallAck(ack, buff);
+          
+            if (ack->flag == FIN){
+
+              if ( sk->active_paths[0]->pathstate == FIN_SENT){
+
+                for(i=0; i<sk->num_active; i++){
+                  printf("SENDING FIN ACK %u\n", getpid());
+                  if (send_flag(sk, i, FIN_ACK)==0){
+                    sk->active_paths[i]->pathstate = FIN_ACK_SENT;
+                  }
+                  log_srv_status(sk);
+                }
+
+              }else if ( sk->active_paths[0]->pathstate == FIN_ACK_SENT){
+	      
+                success = 1;
+                for(i=0; i<sk->num_active; i++){
+                  sk->active_paths[i]->pathstate = CLOSING;
+                }	
+                log_srv_status(sk);
+	    
+              }
+
+              sk->error = NONE;       
+	    
+            }else if (ack->flag == FIN_ACK){
+
+              if ( sk->active_paths[0]->pathstate == FIN_SENT){
+                for(i=0; i<sk->num_active; i++){
+                  printf("SENDING FIN ACK %u\n", getpid());
+                  send_flag(sk, i, FIN_ACK);
+                }
+              }
+	    
+              success = 1;
+              for(i=0; i<sk->num_active; i++){
+                sk->active_paths[i]->pathstate = CLOSING;
+              }	
+              log_srv_status(sk);
+              sk->error = NONE;       
+
+            }else{
+              // printf("got Non-FIN_ACK\n");
+              sk->error = CLOSE_ERR;
+            }
+          }
+        }else { /* r <=0 */
+          //err_sys(sk, "close");
+          // printf("r<=0 in close_srvctcp\n");
           sk->error = CLOSE_ERR;
           tries++;
-        }else{
-          unmarshallAck(ack, buff);
-          
-          if (ack->flag == FIN){
-
-	    if ( sk->active_paths[0]->pathstate == FIN_SENT){
-
-	      for(i=0; i<sk->num_active; i++){
-		printf("SENDING FIN ACK %u\n", getpid());
-		if (send_flag(sk, i, FIN_ACK)==0){
-		  sk->active_paths[i]->pathstate = FIN_ACK_SENT;
-		}
-		log_srv_status(sk);
-	      }
-
-	    }else if ( sk->active_paths[0]->pathstate == FIN_ACK_SENT){
-	      
-	      success = 1;
-	      for(i=0; i<sk->num_active; i++){
-		sk->active_paths[i]->pathstate = CLOSING;
-	      }	
-	      log_srv_status(sk);
-	    
-	    }
-
-            sk->error = NONE;       
-	    
-	  }else if (ack->flag == FIN_ACK){
-
-	    if ( sk->active_paths[0]->pathstate == FIN_SENT){
-	      for(i=0; i<sk->num_active; i++){
-		printf("SENDING FIN ACK %u\n", getpid());
-		send_flag(sk, i, FIN_ACK);
-	      }
-	    }
-	    
-	    success = 1;
-	    for(i=0; i<sk->num_active; i++){
-	      sk->active_paths[i]->pathstate = CLOSING;
-	    }	
-	    log_srv_status(sk);
-            sk->error = NONE;       
-
-	  }else{
-	    // printf("got Non-FIN_ACK\n");
-            sk->error = CLOSE_ERR;
-          }
+          rto_max = 2*rto_max;
         }
-      }else { /* r <=0 */
-        //err_sys(sk, "close");
-        // printf("r<=0 in close_srvctcp\n");
-        sk->error = CLOSE_ERR;
-        tries++;
-        rto_max = 2*rto_max;
-      }
 
-    }while(tries < CONTROL_MAX_RETRIES && !success);
+      }while(tries < CONTROL_MAX_RETRIES && !success);
 
-    // For now, just send FIN_ACK_ACK only if successfully received FIN_ACK
-    /*
-    if(success){
-      printf("Successfully received FIN_ACK after %d tries\n", tries);
-    }else{
-      printf("Did not receive FIN_ACK after %d tries. Closing anyway\n", tries);
+      // For now, just send FIN_ACK_ACK only if successfully received FIN_ACK
+      /*
+        if(success){
+        printf("Successfully received FIN_ACK after %d tries\n", tries);
+        }else{
+        printf("Did not receive FIN_ACK after %d tries. Closing anyway\n", tries);
+        }
+      */
     }
-    */
+
   }
 
   if (close(sk->status_log_fd) == -1){

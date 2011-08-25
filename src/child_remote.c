@@ -90,6 +90,7 @@ int handle_con(int ctcp_port)
     writenb(sk_client,buf,4);
     sprintf(buf,"Connection closed (%s)",sz_error[res]);
     logstr(buf,&ad_client);
+    close_srvctcp(ctcp_sk);
     return res;
   }
     
@@ -101,9 +102,10 @@ int handle_con(int ctcp_port)
   memcpy(buf+4,ad_cl_local.sa_data+2,4);
   memcpy(buf+8,ad_cl_local.sa_data,2);
   res = writenb(sk_client,buf,10);
-  if( res != ERR_NONE )
+  if( res != ERR_NONE ){
+    close_srvctcp(ctcp_sk);
     return res;
-
+  }
   /*
   ** Negotiation was successful, cancel autodestruct
   */
@@ -120,6 +122,7 @@ int handle_con(int ctcp_port)
   if(listen_srvctcp(ctcp_sk)==-1){
     printf("Failed to listen..\n");
     res = ERR_SRVCTCP;
+    close_srvctcp(ctcp_sk);
     return res;
   }
 
