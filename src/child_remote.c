@@ -132,9 +132,9 @@ int handle_con(int ctcp_port)
   logstr(buf,&ad_client);
   
   close(sk_target);
-  printf("sk_target close...\n");
+  printf("CLOSING SRVCTCP... %u \n", getpid());
   close_srvctcp(ctcp_sk);
-  printf("ctcp_srv close...\n");
+  printf("DONE CLOSING %u\n", getpid());
   // CLOSE CTCP_SRV
   return ERR_NONE;
 }
