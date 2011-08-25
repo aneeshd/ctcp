@@ -358,7 +358,7 @@ void handle_sig( int sig )
 	break;
       case SIGALRM:
 	if( child ) {
-	    sprintf(s,"Connection closed (%s)",sz_error[ERR_NEGTIME]);
+	  sprintf(s,"Connection closed (%s) %u",sz_error[ERR_NEGTIME], getpid());
 	    logstr(s,&ad_client);
 	    exit(ERR_NEGTIME);
 	}

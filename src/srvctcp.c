@@ -199,6 +199,8 @@ listen_srvctcp(srvctcp_sock* sk){
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
   memset(buff,0,BUFFSIZE);        /* pretouch */
   
+  log_srv_status(sk);
+
   if((numbytes = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) == -1){
     perror("recvfrom: Failed to receive the request\n");
     return -1;
@@ -224,7 +226,7 @@ listen_srvctcp(srvctcp_sock* sk){
 
     // We could try to send SYN_ACK until successful with a while loop, but that would be blocking.
     if(send_flag(sk, 0, SYN_ACK)== 0){
-      printf("Send SYN_ACK\n");
+      printf("Send SYN_ACK %u\n", getpid());
       stream->pathstate = SYN_ACK_SENT;
       log_srv_status(sk);
     }
@@ -712,7 +714,11 @@ close_srvctcp(srvctcp_sock* sk){
       */
     }
 
+  } else if (sk->num_active == 0){
+    printf("CLOSING WITH ZERO PATHS %u\n", getpid());
   }
+
+
 
   if (close(sk->status_log_fd) == -1){
     perror("Could not close the status file");
@@ -1379,7 +1385,7 @@ void
 err_sys(srvctcp_sock* sk, char* s){
   perror(s);
   endSession(sk);
-  exit(1);
+  //  exit(1);
 }
 
 void

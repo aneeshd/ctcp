@@ -63,12 +63,12 @@ int handle_con(int ctcp_port)
   ctcp_sk = open_srvctcp(buf);
 
   if (ctcp_sk == NULL){
-    sprintf(buf,"Failed to create the CTCP socket\n");
+    sprintf(buf,"Failed to create the CTCP socket - port %d\n", ctcp_port);
     logstr(buf,NULL);
     res = ERR_SRVCTCP;
     return res;
   } else{
-    sprintf(buf,"Successfully created the CTCP socket\n");
+    sprintf(buf,"Successfully created the CTCP socket - port %d\n", ctcp_port);
     logstr(buf,NULL);
   }
 
