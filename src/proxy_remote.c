@@ -342,6 +342,8 @@ void handle_sig( int sig )
 {
     char s[256];
 
+    //    printf("====== SIGNAL %d RECEIVED bt %u =======\n", sig, getpid());
+
     switch( sig ) {
       case SIGTERM:
 	if( !child ) {

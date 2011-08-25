@@ -179,7 +179,7 @@ open_srvctcp(char *port){
   //printf("Trying to bind to address %s port %d\n", inet_ntoa(((struct sockaddr_in*) &(result->ai_addr))->sin_addr), ((struct sockaddr_in*)&(result->ai_addr))->sin_port);
 
   /*------------------------WAIT FOR SYN PACKETS TO COME--------------------------------------------------*/
-  printf("Listening for SYN on port %s\n", port);
+  //  printf("Listening for SYN on port %s\n", port);
   return sk;
 }
 
@@ -209,9 +209,11 @@ listen_srvctcp(srvctcp_sock* sk){
   unmarshallAck(ack, buff);
 
   if (ack->flag == SYN){
+    /*
     printf("Request for a new session: Client address %s Client port %d\n", 
            inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
            ((struct sockaddr_in*)&cli_addr)->sin_port);
+    */
 
     if (sk->debug > 6) openLog(sk, log_name);
 
@@ -226,7 +228,7 @@ listen_srvctcp(srvctcp_sock* sk){
 
     // We could try to send SYN_ACK until successful with a while loop, but that would be blocking.
     if(send_flag(sk, 0, SYN_ACK)== 0){
-      printf("Send SYN_ACK %u\n", getpid());
+      //      printf("Send SYN_ACK %u\n", getpid());
       stream->pathstate = SYN_ACK_SENT;
       log_srv_status(sk);
     }
@@ -453,62 +455,82 @@ void
           }
         }else if (ack->flag == FIN) {        
 
-          if (sk->active_paths[path_index]->pathstate != ESTABLISHED &&
-              sk->active_paths[path_index]->pathstate != SYN_ACK_SENT){
-            //printf("State %d: Received FIN\n", sk->active_paths[path_index]->pathstate);
-          }else{
+          if (sk->active_paths[path_index]->pathstate != CLOSING &&
+              sk->active_paths[path_index]->pathstate != FIN_ACK_RECV){
+
             // printf("Sending FIN_ACK path %d\n", path_index);
             sk->active_paths[path_index]->pathstate = FIN_RECV;
-            log_srv_status(sk);
-            // TODO for now, when we receive FIN, we send FIN_ACK through all interfaces
-            // May want to change this if we want to add/remove paths independently
-            for(i= 0; i<sk->num_active; i++){
-              send_flag(sk, i, FIN_ACK);
-              sk->active_paths[i]->pathstate = FIN_ACK_SENT;
-              log_srv_status(sk);
-            }
-            sk->status = SK_CLOSING;
+	    sk->status = SK_CLOSING;
             log_srv_status(sk);
 
-          }
-        }else if(ack->flag == FIN_ACK){
-          if( sk->active_paths[path_index]->pathstate == FIN_SENT){ 
-       
-	    sk->active_paths[path_index]->pathstate = FIN_ACK_RECV;
-            log_srv_status(sk);
-            // TODO for now, when we receive FIN, we send FIN_ACK through all interfaces
-            // May want to change this if we want to add/remove paths independently
-            for(i= 0; i<sk->num_active; i++){
-              send_flag(sk, i, FIN_ACK);
-              sk->active_paths[i]->pathstate = CLOSING;
-              log_srv_status(sk);
-              // removePath(sk,i);
-            }
+	    int fin_read_rv;
+	    int tries = 0;
+	    double rto_max = 0;
+	    for (i=0; i < sk->num_active; i++){
+	      if (sk->active_paths[i]->rto > rto_max) rto_max = sk->active_paths[i]->rto;
+	    }
+	    
 
-	    printf("SRVCTCP SHOULD CLOSE BY NOW %u\n", getpid());
+	    do{
+	      // TODO for now, when we receive FIN, we send FIN_ACK through all interfaces
+	      // May want to change this if we want to add/remove paths independently
+	      if (ack->flag == FIN){
+		for(i= 0; i<sk->num_active; i++){
+		  send_flag(sk, i, FIN_ACK);
+		  sk->active_paths[i]->pathstate = FIN_ACK_SENT;
+		  log_srv_status(sk);
+		}
+	      }
 
-            sk->status = CLOSED;
-            sk->error = NONE;
-            log_srv_status(sk);
-          } else  if( sk->active_paths[path_index]->pathstate == FIN_ACK_SENT){ 
-            for(i=0; i<sk->num_active; i++){
-              sk->active_paths[i]->pathstate = CLOSING;
-              log_srv_status(sk);
-              //removePath(sk, i);
-            }
+	      fin_read_rv = timedread(sk->sockfd, rto_max);
+	      if (fin_read_rv > 0){  /* ready */
+		// The recvfrom should be done to a separate buffer (not buff)
+		if ( (fin_read_rv = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, &cli_addr, &clilen)) <= 0){
+		  perror("Error in receveing ACKs\n");
+		  //sk->status = CLOSED;
+		  sk->error = CLOSE_ERR;
+		  tries++;
+		}else{
+		  unmarshallAck(ack, buff);
+		
+		  if (ack->flag == FIN_ACK){
 
-	    printf("SRVCTCP SHOULD CLOSE BY NOW %u\n", getpid());
+		    for(i= 0; i<sk->num_active; i++){
+		      sk->active_paths[i]->pathstate = CLOSING;
+		    }
+		    sk->status = CLOSED;
+		    log_srv_status(sk);
+		    sk->error = NONE;
+		  } else if (ack->flag == FIN){
+		    tries++;
+		  }
 
-            sk->status = CLOSED;
-            sk->error = NONE;
-            log_srv_status(sk);
-	  }
-            
-	}
-      }
+		} // end if recvfrom
+
+	      } else if (fin_read_rv == 0){
+		// time out on timedread
+		tries++;
+		rto_max = 2*rto_max;
+		sk->error = CLOSE_ERR;
+	      } else { // r < 0
+		perror("timedread");	      
+	      }
+
+	    }while( sk->status != CLOSED && tries < CONTROL_MAX_RETRIES);
+
+	    for(i= 0; i<sk->num_active; i++){
+	      sk->active_paths[i]->pathstate = CLOSING;
+	    }
+	    sk->status = CLOSED;
+	    log_srv_status(sk);
+	    //	    printf("SRVCTCP SHOULD CLOSE BY NOW %u\n", getpid());
+	  }  // end if not CLOSING & not FIN_ACK_RECV
+
+        }  // end of ack->flag cases
+      }  // end packet from known path
       
     }else if(r<0){
-      // printf("Timedread error: returned -1\n");
+      perror("timedread");
     }else{
       // printf("Timedread expired: returned 0\n");
     }
@@ -532,14 +554,6 @@ void
 		     sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
 	      // printf("Sending SYN_ACK\n");
 	      send_flag(sk, path_index, SYN_ACK);
-	    }else if(sk->active_paths[path_index]->pathstate == FIN_SENT){
-	      // printf("Sending FIN\n");
-	      send_flag(sk, path_index, FIN);
-	    }else if(sk->active_paths[path_index]->pathstate == FIN_ACK_RECV ||
-		     sk->active_paths[path_index]->pathstate == FIN_RECV ||
-		     sk->active_paths[path_index]->pathstate == FIN_ACK_SENT){
-	      // printf("Sending FIN_ACK\n");
-	      send_flag(sk, path_index, FIN_ACK);
 	    }else{
 	      // Should be in CLOSING state. Ignore packets and continue closing.
 	      // printf("Still closing\n");
@@ -606,18 +620,13 @@ close_srvctcp(srvctcp_sock* sk){
     }
 
 
-    printf("RETURNED FROM WAITING ON BLOCKS currBlock %d, maxblock %d pid %u\n", sk->curr_block, sk->maxblockno, getpid());  
+    //   printf("RETURNED FROM WAITING ON BLOCKS currBlock %d, maxblock %d pid %u\n", sk->curr_block, sk->maxblockno, getpid());  
     sk->status = CLOSED;
     log_srv_status(sk);
     //Signal the worker thread to exit
-
-    printf("SIGNALING SEND SEGS ..... %u\n", getpid());  
     pthread_cond_signal(&(sk->blocks[(sk->maxblockno)%NUM_BLOCKS].block_ready_condv));
-
-    printf("WAITING ON DAEMON THREAD ..... %u\n", getpid());  
     pthread_join(sk->daemon_thread, NULL);
 
-    printf("DAEMON THREAD RETURNED ..... %u\n", getpid());  
 
     // Send FIN or FIN_ACK
     if(sk->active_paths[0]->pathstate != CLOSING){
@@ -631,7 +640,7 @@ close_srvctcp(srvctcp_sock* sk){
       do{
         // Send FIN through all interfaces
         for(i=0; i<sk->num_active; i++){
-          printf("SENDING FIN %u\n", getpid());
+	  //          printf("SENDING FIN %u\n", getpid());
           send_flag(sk, i, FIN);                 
           sk->active_paths[i]->pathstate = FIN_SENT;
         }
@@ -654,7 +663,7 @@ close_srvctcp(srvctcp_sock* sk){
               if ( sk->active_paths[0]->pathstate == FIN_SENT){
 
                 for(i=0; i<sk->num_active; i++){
-                  printf("SENDING FIN ACK %u\n", getpid());
+		  //      printf("SENDING FIN ACK %u\n", getpid());
                   if (send_flag(sk, i, FIN_ACK)==0){
                     sk->active_paths[i]->pathstate = FIN_ACK_SENT;
                   }
@@ -677,7 +686,7 @@ close_srvctcp(srvctcp_sock* sk){
 
               if ( sk->active_paths[0]->pathstate == FIN_SENT){
                 for(i=0; i<sk->num_active; i++){
-                  printf("SENDING FIN ACK %u\n", getpid());
+		  //                  printf("SENDING FIN ACK %u\n", getpid());
                   send_flag(sk, i, FIN_ACK);
                 }
               }
@@ -742,7 +751,7 @@ close_srvctcp(srvctcp_sock* sk){
   free(buff);
   free(ack);
 
-  printf("Cleared the ctcp socket %u\n", getpid());
+  //  printf("Cleared the ctcp socket %u\n", getpid());
 
   return;
 }
@@ -1259,9 +1268,11 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
     //printf("waiting on block mutex to free block %d\n", sk->curr_block);
 
+
     pthread_mutex_lock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
     pthread_rwlock_wrlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
 
+    log_srv_status(sk);
 
     freeBlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS]));
     
@@ -2100,7 +2111,16 @@ log_srv_status(srvctcp_sock* sk){
 
   int i;
   for (i = 0; i < sk->num_active; i++){
-    len = sprintf(buff, "Path %d (%s): %s\t", i, inet_ntoa( ((struct sockaddr_in*)&(sk->active_paths[i]->cli_addr))->sin_addr), path_status_msg[sk->active_paths[i]->pathstate] );
+    if (  sk->active_paths[i]->slr*100 > 0.01){
+    len = sprintf(buff, "Path %d (%s): %s %2.2f\t", i, 
+		  inet_ntoa( ((struct sockaddr_in*)&(sk->active_paths[i]->cli_addr))->sin_addr), 
+		  path_status_msg[sk->active_paths[i]->pathstate], 
+		  sk->active_paths[i]->slr*100);
+    } else {
+    len = sprintf(buff, "Path %d (%s): %s --.--\t", i, 
+		  inet_ntoa( ((struct sockaddr_in*)&(sk->active_paths[i]->cli_addr))->sin_addr), 
+		  path_status_msg[sk->active_paths[i]->pathstate]);
+    }
     write(sk->status_log_fd, buff, len);
   }
 
