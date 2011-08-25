@@ -243,8 +243,8 @@ connect_ctcp(char *host, char *port, char *lease_file){
         }
 
         for(result_cli = cli_info; result_cli != NULL; result_cli = result_cli->ai_next) {
-          printf("IP address trying to bind to %s \n\n", 
-                 inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
+          
+          //          printf("IP address trying to bind to %s \n\n", inet_ntoa(((struct sockaddr_in*)result_cli->ai_addr)->sin_addr));
      
           setsockopt(csk->sockfd[k], IPPROTO_IP, IP_PKTINFO, (void *)&opt, sizeof(opt));
 
@@ -296,17 +296,17 @@ connect_ctcp(char *host, char *port, char *lease_file){
     
 
     if(rv >= POLL_MAX_TRIES){
-      printf("Did not receive SYN ACK\n");
+      //printf("Did not receive SYN ACK\n");
       return NULL;
     }else{
-      printf("Received SYN ACK after %d tries\n", rv);
+      //printf("Received SYN ACK after %d tries\n", rv);
       csk->pathstate[path_ix] = SYN_ACK_RECV;
       log_cli_status(csk);
       csk->lastrcvt[path_ix] = getTime();
       if(send_flag(csk, path_ix, NORMAL) == 0){
         csk->pathstate[path_ix] = ESTABLISHED;
         log_cli_status(csk);
-        printf("Sent ACK for the SYN ACK\n");
+        //printf("Sent ACK for the SYN ACK\n");
       }
     }
 
@@ -322,7 +322,7 @@ uint32_t
 read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
 
   if (csk->status != ACTIVE){
-    printf("read_ctcp: not active\n");
+    //printf("read_ctcp: not active\n");
     csk->error = SRVHUP;
     return -1;
   }
@@ -331,7 +331,7 @@ read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
   //printf("read_ctcp: pop %d bytes, csk->usr_cache size %d\n", res, csk->usr_cache.size);
 
   if (res == 0){
-    printf("read_ctcp: nothing to read\n");
+    // printf("read_ctcp: nothing to read\n");
     // fifo is released because the connection is somehow terminated
     csk->error = SRVHUP;
     res = -1;
@@ -342,7 +342,7 @@ read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count){
 }
 
 void SIGINT_handler(void){
-  printf("***GOT SIGINT***\n");
+  //printf("***GOT SIGINT***\n");
 }
 
 
@@ -395,12 +395,13 @@ void
     ready = ppoll(read_set, csk->substreams, NULL, &(sa.sa_mask));
 
     if(ready == -1){
-      perror("===== poll=====");
       if (errno == EINTR && csk->status == CLOSED){
         break;   // this should free and exit this thread
+      } else{
+        perror("poll");
       }
     }else if (ready == 0){
-      printf("Timeout occurred during poll! Should not happen with -1\n");
+      // printf("Timeout occurred during poll! Should not happen with -1\n");
       //ready = POLL_TO_FLG;
     }else{
       srvlen = sizeof(csk->srv_addr); 
@@ -443,7 +444,7 @@ void
           switch (msg->flag){
 
           case FIN:
-            printf("received FIN packet %u\n", getpid());
+            // printf("received FIN packet %u\n", getpid());
             csk->pathstate[curr_substream] = FIN_RECV;
             log_cli_status(csk);
             tries = 0;
@@ -464,9 +465,9 @@ void
             }while ( poll_rv < 0  && tries < POLL_MAX_TRIES);          
 
             if(tries >= POLL_MAX_TRIES){
-              printf("Did not receive FIN_ACK_ACK... Closing anyway\n");
+              //printf("Did not receive FIN_ACK_ACK... Closing anyway\n");
             }else{
-              printf("Received FIN_ACK_ACK after %d tries\n", tries);
+              //printf("Received FIN_ACK_ACK after %d tries\n", tries);
               for(i=0; i<csk->substreams; i++){
                 csk->pathstate[i] = CLOSING;
                 log_cli_status(csk);
@@ -486,7 +487,7 @@ void
             if(csk->pathstate[curr_substream] == FIN_SENT ||
                csk->pathstate[curr_substream] == FIN_ACK_RECV){
 
-              printf("received FIN_ACK packet\n");
+              //printf("received FIN_ACK packet\n");
               csk->pathstate[curr_substream] = FIN_ACK_RECV;
               log_cli_status(csk);
               for(i = 0; i<csk->substreams; i++){
@@ -499,7 +500,7 @@ void
               log_cli_status(csk);
               fifo_release(&(csk->usr_cache));      
             }else{
-              printf("State %d: received FIN_ACK\n", csk->pathstate[curr_substream]);
+              //printf("State %d: received FIN_ACK\n", csk->pathstate[curr_substream]);
             }
             break;
           
@@ -518,7 +519,7 @@ void
               }
 
             }else{
-              printf("State %d: Received SYN_ACK\n", csk->pathstate[curr_substream]);
+              //printf("State %d: Received SYN_ACK\n", csk->pathstate[curr_substream]);
             }
             break;
 
@@ -544,7 +545,7 @@ void
               log_cli_status(csk);
               bldack(csk, msg, match, curr_substream);            
             }else{
-              printf("State %d: Received a data packet\n", csk->pathstate[curr_substream]);
+              //printf("State %d: Received a data packet\n", csk->pathstate[curr_substream]);
             }
           }
            
@@ -590,7 +591,7 @@ void
           csk->idle_time[k] = 2*csk->idle_time[k];
           csk->idle_count[k]++;
           if (csk->idle_count[k] >= IDLE_MAX_COUNT){
-            printf("\nMAX IDLE on path %d\n", k);
+            //printf("\nMAX IDLE on path %d\n", k);
             if(csk->pathstate[k] == SYN_ACK_RECV ||
                csk->pathstate[k] == ESTABLISHED){
               send_flag(csk, k, FIN);         // TODO change it to FIN_PATH so the server doesn't close
@@ -598,7 +599,7 @@ void
               log_cli_status(csk);
             }else{
               // Tried enough, should close now
-              printf("\nTried enough on path %d.\n", k);
+              //printf("\nTried enough on path %d.\n", k);
               csk->pathstate[k] = CLOSING;
               log_cli_status(csk);
 
@@ -635,9 +636,9 @@ void
 void
 remove_substream(clictcp_sock* csk, int pin){
   if(csk->pathstate[pin] != CLOSING){
-    printf("Path %d is not in state CLOSING\n", pin);
+    printf("ERROR: Path %d is not in state CLOSING\n", pin);
   }else{
-    printf("removing path %d\n", pin);
+    //printf("removing path %d\n", pin);
     int i;
     for(i = pin; i<csk->substreams; i++){
       csk->ifc_addr[i] = csk->ifc_addr[i+1];
@@ -1203,24 +1204,24 @@ readLease(char *leasefile, dhcp_lease *leases){
     else if (strcmp(type,"lease")==0){
       substreams++;
       
-      printf("lease %d\n", substreams);
+      //printf("lease %d\n", substreams);
     }
     else if (strcmp(type,"fixed-address")==0){
       leases[substreams].address = strndup(val1, strlen(val1)-1);
-      printf("Address: %s\n", leases[substreams].address);
+      //printf("Address: %s\n", leases[substreams].address);
     }    
     else if (strcmp(type,"interface")==0){
       leases[substreams].interface = strndup(val1+sizeof(char), strlen(val1)-3); 
-      printf("Iface: %s\n", leases[substreams].interface);
+      //printf("Iface: %s\n", leases[substreams].interface);
     }    
     else if (strcmp(type,"option")==0){
       if (strcmp(val1,"subnet-mask")==0){
         leases[substreams].netmask = strndup(val2, strlen(val2)-1);
-        printf("Netmask: %s\n", leases[substreams].netmask);
+        //printf("Netmask: %s\n", leases[substreams].netmask);
       }    
       else if (strcmp(val1,"routers")==0){
         leases[substreams].gateway = strndup(val2, strlen(val2)-1);
-        printf("Gateway:%s\n\n", leases[substreams].gateway);
+        //printf("Gateway:%s\n\n", leases[substreams].gateway);
       }    
     }
     
@@ -1273,7 +1274,7 @@ remove_routing_tables(char *lease_file){
 void 
 make_new_table(dhcp_lease* lease, int table_number, int mark_number){
 
-  printf("/****** making table %d, mark %d *****/\n", table_number, mark_number);
+  printf("/****** making table %d, mark %d ****** Interface: %s  ******** IP address: %s *****/\n", table_number, mark_number, lease->interface, lease->address );
 
   // command to be used for system()
   char* command = malloc(150);
@@ -1451,7 +1452,7 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
     return -1;
   }
   
-  printf("Sent flag *** %d *** %u\n", flag, getpid());
+  //  printf("Sent flag *** %d *** %u\n", flag, getpid());
 
   free(msg);
   free(buff);
@@ -1482,7 +1483,7 @@ poll_flag(clictcp_sock *csk, flag_t* flag, int timeout){
     free(buff);
     return -1;
   }else if (ready == 0){
-    printf("Timeout occurred during poll!\n");
+    // printf("Timeout occurred during poll!\n");
     free(buff);
     return -1;
   }else{
@@ -1524,7 +1525,7 @@ poll_flag(clictcp_sock *csk, flag_t* flag, int timeout){
           free(buff);
           return curr_substream;
         }else{
-          printf("Expected flag ACK, received something else!\n");
+          // printf("Expected flag ACK, received something else!\n");
           *flag = msg->flag;
           free(msg->packet_coeff);
           free(msg->payload);
@@ -1538,7 +1539,7 @@ poll_flag(clictcp_sock *csk, flag_t* flag, int timeout){
     }  /* end while */
   }
   
-  printf("poll flag *** %d *** \n", *flag);
+  //  printf("poll flag *** %d *** \n", *flag);
   free(msg->packet_coeff);
   free(msg->payload);
   free(msg);
@@ -1566,7 +1567,7 @@ close_clictcp(clictcp_sock* csk){
     do{
       if (index == -1){
         for (i =0; i<csk->substreams; i++){
-          printf("SENDING FIN %u\n", getpid());
+          //printf("SENDING FIN %u\n", getpid());
           if(send_flag(csk, i, FIN) == -1){
             printf("Could not send the FIN packet\n");
           }else{
@@ -1578,7 +1579,7 @@ close_clictcp(clictcp_sock* csk){
       } else if (index == -2 && flag == FIN){
         
         for (i =0; i<csk->substreams; i++){
-          printf("SENDING FIN ACK  %u\n", getpid());
+          //printf("SENDING FIN ACK  %u\n", getpid());
           if(send_flag(csk, i, FIN_ACK) == -1){
             printf("Could not send the FIN packet\n");
           }else{
@@ -1594,14 +1595,14 @@ close_clictcp(clictcp_sock* csk){
     // doing multiplicative backoff for poll_flag -- may need to do this in wireless
 
     if(tries >= POLL_MAX_TRIES){
-      printf("Did not receive FIN ACK... Closing anyway\n");
+      // printf("Did not receive FIN ACK... Closing anyway\n");
       csk->error = CLOSE_ERR;
     }else if (csk->pathstate[index] != CLOSING){
-      printf("Received FIN ACK after %d tries\n", tries);
+      // printf("Received FIN ACK after %d tries\n", tries);
       csk->pathstate[index] = FIN_ACK_RECV;
       log_cli_status(csk);
       for(i = 0; i<csk->substreams; i++){
-        printf("SENDING FIN     ACK%u\n", getpid());
+        // printf("SENDING FIN     ACK%u\n", getpid());
         if (send_flag(csk, i, FIN_ACK)==0){
           csk->pathstate[i] = CLOSING;
           log_cli_status(csk);

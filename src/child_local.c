@@ -136,7 +136,7 @@ int handle_con()
   res = pthread_create( &clictcp_thread, NULL, handle_ctcp_traffic, NULL);
   res = handle_traffic();
     
-  printf("\n******* handle_traffic returned ******* %u\n", getpid());
+  //printf("\n******* handle_traffic returned ******* %u\n", getpid());
   sprintf(buf,"TCP Connection closed (%s)",sz_error[res]);
   logstr(buf,&ad_client);
 
@@ -162,7 +162,7 @@ int handle_con()
     }
   }
 
-  printf("CTCP socket (port %s) successfully closed - pid %u\n\n", ctcp_port, getpid());
+  //printf("CTCP socket (port %s) successfully closed - pid %u\n\n", ctcp_port, getpid());
 
 
   close(sk_target);
@@ -345,7 +345,7 @@ int connect_client()
     host_ip.s_addr = (unsigned long)pcon->proxy->ip;
 
     host_addr = inet_ntoa(host_ip);
-    printf("Sending CTCP request to %s port %s\n", host_addr, ctcp_port);
+    //    printf("Sending CTCP request to %s port %s\n", host_addr, ctcp_port);
 
     csk = connect_ctcp(host_addr, ctcp_port, lease_file);
 
@@ -353,7 +353,7 @@ int connect_client()
       printf("CTCP negotiation failed \n");
       return ERR_NEGFAIL;
     } else{
-      printf("confirmed CTCP connection on port %s\n", ctcp_port);
+      //      printf("confirmed CTCP connection on port %s\n", ctcp_port);
     }
 
     free(pcon->target_name);
@@ -529,7 +529,7 @@ int handle_traffic()
     */
     if( (pfd[0].revents & POLLHUP) || (pfd[1].revents & POLLHUP) ) {
 	    res = ERR_NONE;
-      fprintf(stdout, "handle_traffic: hung up\n");
+      //fprintf(stdout, "handle_traffic: hung up\n");
 	    break;
     }
 
@@ -613,7 +613,7 @@ void
     btop = read_ctcp(csk, buf, buf_size);  
     if (btop == -1){
       free(buf);
-      printf("Exiting handle ctcp traffic %u\n", getpid()); 
+      // printf("Exiting handle ctcp traffic %u\n", getpid()); 
       pthread_exit(NULL);
     }
 
