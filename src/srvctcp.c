@@ -642,7 +642,7 @@ close_srvctcp(srvctcp_sock* sk){
           perror("Error in receveing ACKs\n");
           //sk->status = CLOSED;
           sk->error = CLOSE_ERR;
-	  tries++;
+          tries++;
         }else{
           unmarshallAck(ack, buff);
           
@@ -695,8 +695,8 @@ close_srvctcp(srvctcp_sock* sk){
         //err_sys(sk, "close");
         // printf("r<=0 in close_srvctcp\n");
         sk->error = CLOSE_ERR;
-	rto_max = 2*rto_max;
-	tries++;
+        tries++;
+        rto_max = 2*rto_max;
       }
 
     }while(tries < CONTROL_MAX_RETRIES && !success);

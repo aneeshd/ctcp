@@ -77,6 +77,9 @@ typedef struct{
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
+
+void SIGINT_handler(void);
+
 void ctrlc(clictcp_sock *csk);
 void err_sys(char *s, clictcp_sock *csk);
 void open_status_log(clictcp_sock* csk, char* port);
@@ -106,7 +109,7 @@ void *handle_connection(void* arg);
 clictcp_sock* create_clictcp_sock(void);
 void remove_substream(clictcp_sock* csk, int pin);
 
-int  poll_flag(clictcp_sock *csk, flag_t flag, int timeout);
+int  poll_flag(clictcp_sock *csk, flag_t* flag, int timeout);
 int  send_flag(clictcp_sock *csk, int path_id, flag_t flag);
 
 void close_clictcp(clictcp_sock* csk);

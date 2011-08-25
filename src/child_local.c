@@ -136,7 +136,7 @@ int handle_con()
   res = pthread_create( &clictcp_thread, NULL, handle_ctcp_traffic, NULL);
   res = handle_traffic();
     
-  fprintf(stdout, "\n******* handle_traffic returned *******\n");
+  printf("\n******* handle_traffic returned ******* %u\n", getpid());
   sprintf(buf,"TCP Connection closed (%s)",sz_error[res]);
   logstr(buf,&ad_client);
 
@@ -149,19 +149,20 @@ int handle_con()
     pthread_join(clictcp_thread, NULL);
   } else{
 
-    ts.tv_sec += 5;
+    ts.tv_sec += 30;
     
     s = pthread_timedjoin_np(clictcp_thread, NULL, &ts);
+
+    close_clictcp(csk);  
+
     if (s != 0) {
       // kill the thread
-      pthread_kill(clictcp_thread, SIGKILL);
-      printf("Killed the clictcp_thread the hard way!\n");
+      //pthread_kill(clictcp_thread, SIGKILL);
+      //printf("Killed the clictcp_thread the hard way!\n");
     }
   }
 
-
-  close_clictcp(csk);  
-  fprintf(stdout, "CTCP socket (port %s) successfully closed\n\n", ctcp_port);
+  printf("CTCP socket (port %s) successfully closed - pid %u\n\n", ctcp_port, getpid());
 
 
   close(sk_target);
@@ -612,6 +613,7 @@ void
     btop = read_ctcp(csk, buf, buf_size);  
     if (btop == -1){
       free(buf);
+      printf("Exiting handle ctcp traffic %u\n", getpid()); 
       pthread_exit(NULL);
     }
 
