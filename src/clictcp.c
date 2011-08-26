@@ -1774,7 +1774,7 @@ log_cli_status(clictcp_sock* csk){
   if (flock(csk->status_log_fd, LOCK_EX | LOCK_NB) == -1){
     perror("Could not acquire the lock for status file");
     return;
-    } 
+  } 
 
   char buff[256];
   int len;
@@ -1800,11 +1800,21 @@ log_cli_status(clictcp_sock* csk){
   }
 
   char tmp;
+  int read_rv;
   int count = 0;
   do{
-    if (read(csk->status_log_fd, &tmp, 1) == -1){
+
+    read_rv = read(csk->status_log_fd, &tmp, 1);
+    if (read_rv == -1){
       perror("file read");
+    } else if (read_rv == 0){
+      // We have reached the end of the file without success
+      if (flock(csk->status_log_fd, LOCK_UN) == -1){
+        perror("Could not unlock the status file");
+      }
+      return;
     }
+
     count += (tmp == '\t');
   }while(count < 2);
 
