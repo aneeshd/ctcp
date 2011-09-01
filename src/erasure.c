@@ -109,7 +109,7 @@ static void create_controls( void )
     /* Note that the page_size value only makes a difference for
      * scrollbar widgets, and the highest value you'll get is actually
      * (upper - page_size). */
-    adj = gtk_adjustment_new (0.0, 0.0, 21.0, 0.1, 1.0, 1.0);
+    adj = gtk_adjustment_new (0.0, 0.0, 16.0, 0.1, 1.0, 1.0);
 
     box3 = gtk_vbox_new (FALSE, 10);
     gtk_box_pack_start (GTK_BOX (box1), box3, TRUE, TRUE, 0);
