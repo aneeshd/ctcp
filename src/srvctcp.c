@@ -1298,7 +1298,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     pthread_mutex_unlock(&(sk->blocks[(sk->curr_block-1)%NUM_BLOCKS].block_mutex));
 
      
-    if (sk->debug > 3 && sk->curr_block%10==0){
+    if (sk->debug > 2 && sk->curr_block%1==0){
       printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms \n",
              sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000);
     }
@@ -1485,9 +1485,9 @@ advance_cwnd(srvctcp_sock* sk, int pin){
     subpath->snd_cwnd += incr/subpath->snd_cwnd; /* ca */
     subpath->slow_start = 0;
   }
-  if (subpath->slr > subpath->slr_long + subpath->slr_longstd){
-    subpath->snd_cwnd -= subpath->slr/2;
-  }
+	/*  if (subpath->slr > subpath->slr_long + subpath->slr_longstd){
+	    subpath->snd_cwnd -= subpath->slr/2;
+	  } */
   if (subpath->snd_cwnd < sk->initsegs) subpath->snd_cwnd = sk->initsegs;
   if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
   return;
