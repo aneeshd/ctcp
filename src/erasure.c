@@ -72,6 +72,7 @@ static void reset_loss_rate( GtkWidget *widget, gpointer data){
     system(command);
     indicator_set = 0;
     previous_loss_rate = 0;
+    gtk_adjustment_set_value(adj, 0.0);
   }
   
   sprintf(command, "Current loss rate: %2.1f %%", previous_loss_rate);
