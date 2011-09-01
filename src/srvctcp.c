@@ -229,6 +229,7 @@ listen_srvctcp(srvctcp_sock* sk){
     // We could try to send SYN_ACK until successful with a while loop, but that would be blocking.
     if(send_flag(sk, 0, SYN_ACK)== 0){
       //      printf("Send SYN_ACK %u\n", getpid());
+      sk->active_paths[0]->tx_time[0] = getTime();  // save the tx time to estimate rtt later
       stream->pathstate = SYN_ACK_SENT;
       log_srv_status(sk);
     }
@@ -403,10 +404,12 @@ void
             log_srv_status(sk);
             sk->active_paths[sk->num_active]->last_ack_time = getTime();
 
-            if(send_flag(sk, sk->num_active, SYN_ACK)==0){
-              sk->active_paths[sk->num_active]->pathstate = SYN_ACK_SENT;
-              log_srv_status(sk);
-            }
+            send_flag(sk, sk->num_active, SYN_ACK);
+            sk->active_paths[sk->num_active]->tx_time[0] = getTime();  // save the tx time to estimate rtt later
+
+            sk->active_paths[sk->num_active]->pathstate = SYN_ACK_SENT;
+            log_srv_status(sk);
+            
             
             sk->num_active++;
 
@@ -433,6 +436,11 @@ void
           }else if( sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
             // path is now established, and we send data packets
             // printf("Established path %d\n", path_index);
+
+            // Initialize srtt based on the first round 
+            sk->active_paths[path_index]->srtt = getTime() - sk->active_paths[path_index]->tx_time[0];
+            sk->active_paths[path_index]->tx_time[0] = 0;
+
             sk->active_paths[path_index]->pathstate = ESTABLISHED;
             log_srv_status(sk);
             send_segs(sk, path_index);
@@ -450,6 +458,7 @@ void
           if (sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
             // printf("Sending SYN_ACK path %d\n", path_index);
             send_flag(sk, path_index, SYN_ACK);
+            sk->active_paths[path_index]->tx_time[0] = getTime();  // save the tx time to estimate rtt later
           }else{
             //printf("State %d: Received SYN\n", sk->active_paths[path_index]->pathstate);
           }
@@ -554,6 +563,7 @@ void
 		     sk->active_paths[path_index]->pathstate == SYN_ACK_SENT){
 	      // printf("Sending SYN_ACK\n");
 	      send_flag(sk, path_index, SYN_ACK);
+        sk->active_paths[path_index]->tx_time[0] = getTime();  // save the tx time to estimate rtt later
 	    }else{
 	      // Should be in CLOSING state. Ignore packets and continue closing.
 	      // printf("Still closing\n");
