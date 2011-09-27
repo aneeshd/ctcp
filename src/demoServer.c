@@ -14,10 +14,11 @@
 #include <errno.h>
 #include <time.h>
 
-#include <readline/readline.h>
 
 #define PORT "8888"
-#define BUFSIZE 500
+#define BUFSIZE 1400
+
+
 
 char*
 get_ip_str(const struct sockaddr *sa, char *s, size_t maxlen)
@@ -84,8 +85,8 @@ main (int argc, char** argv){
     }
 
     if (result == NULL) { // If we are here, we failed to initialize the socket
-        perror("atousrv: failed to initialize socket");
-        return 2;
+      perror("atousrv: failed to initialize socket");
+      return 2;
     }
 
     freeaddrinfo(servinfo);
@@ -93,40 +94,104 @@ main (int argc, char** argv){
 
     printf("***Demo Server Ready***\nWaiting for requests...\n");
 
-    while(1)
-    {
-        if((numbytes = recvfrom(sockfd, buff, BUFSIZE, 0,
-                                &cliAddr, &cliAddrLen)) == -1)
-        {
-            perror("DemoServer: recvfrom failed\n");
-        }
+    while (1) {
 
-        char* tmp = malloc(numbytes);
+      while(1)    {
 
-        snprintf(tmp, numbytes+1, "%s", buff);
+	// First call is blocking
+	if((numbytes = recvfrom(sockfd, buff, BUFSIZE, 0,
+				&cliAddr, &cliAddrLen)) == -1)
+	  {
+	    perror("DemoServer: recvfrom failed\n");
+	  }
 
-        printf("Got %s from %s\n", tmp,
-               get_ip_str(&cliAddr, ip, INET6_ADDRSTRLEN));
+	char* tmp = malloc(numbytes);
 
-        printf("Echoing...\n");
+	snprintf(tmp, numbytes+1, "%s", buff);
 
-        int len = strlen(tmp) + 7;
-        char* echoString = malloc(len);
+	printf("Got \t %s \t from %s port %d\n", tmp,
+	       get_ip_str(&cliAddr, ip, INET6_ADDRSTRLEN), ((struct sockaddr_in*)&cliAddr)->sin_port  );
 
-        snprintf(echoString, len, "Echo: %s", tmp);
+	printf("Echoing...");
 
-//        snprintf(echoString, len, "Echo: %s from %s", buff, get_ip_str(&cliAddr, ip, INET6_ADDRSTRLEN));
-//        printf("The echoString is %s\n", echoString);
+	int len = strlen(tmp) + 7;
+	char* echoString = malloc(len);
 
-        if((numbytes = sendto(sockfd, echoString, len, 0,
-                              &cliAddr, cliAddrLen)) == -1)
-        {
-            perror("DemoServer: sento failed\n");
-        }
+	snprintf(echoString, len, "Echo: %s", tmp);
 
-        printf("Echo sent\n");
-        //free(echoString);
-        //free(tmp);
+	//        snprintf(echoString, len, "Echo: %s from %s", buff, get_ip_str(&cliAddr, ip, INET6_ADDRSTRLEN));
+	//        printf("The echoString is %s\n", echoString);
+
+	if((numbytes = sendto(sockfd, buff, BUFSIZE, 0,
+			      &cliAddr, cliAddrLen)) == -1)
+	  {
+	    perror("DemoServer: sento failed\n");
+	  }
+
+	printf("Echo sent\n");
+	//free(echoString);
+	//free(tmp);
+
+	struct timeval tv;
+	fd_set rset;
+	tv.tv_sec = 2;
+	tv.tv_usec = 0;
+	FD_ZERO(&rset);
+	FD_SET(sockfd, &rset);
+	if ( select(sockfd+1,&rset,NULL,NULL, &tv) == 0){
+	  // timeout
+	  break; 
+	}
+
+      }
+
+      printf("Done with the echo part.\n");
+
+      struct timespec t_sleep;
+      int flush_tries = 1000;
+      int i;
+      for (i = 0; i < flush_tries; i++){
+
+	//	printf("Sending %d \t", i);
+
+	if((numbytes = sendto(sockfd, buff, BUFSIZE, 0,
+			      &cliAddr, cliAddrLen)) == -1)
+	  {
+	    perror("DemoServer: sento failed\n");
+	  }
+
+	t_sleep.tv_sec = 0;
+	t_sleep.tv_nsec = 1000000;
+	nanosleep(&t_sleep, NULL);
+
+      } // end for loop
+
+
+
+
+
+
+      printf("Done with the flush part.\n");
+      sleep(3);
+
+      flush_tries = 300;
+      for (i = 0; i < flush_tries; i++){
+
+	//	printf("Sending %d \t", i);
+
+	if((numbytes = sendto(sockfd, buff, BUFSIZE, 0,
+			      &cliAddr, cliAddrLen)) == -1)
+	  {
+	    perror("DemoServer: sento failed\n");
+	  }
+
+	t_sleep.tv_sec = 0;
+	t_sleep.tv_nsec = 30000000;
+	nanosleep(&t_sleep, NULL);
+
+      } // end for loop
+
+      printf("Done with the slow part.\n");
     }
 
     return 0;

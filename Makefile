@@ -136,7 +136,7 @@ $(BINDIR)/libUtil.a: $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BIND
 demoServer: $(BINDIR)/demoServer.o .buildmode Makefile
 	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CC) -o $@ $< $(LDFLAGS) -lreadline
+	$(CC) -o $@ $< $(LDFLAGS) 
 
 demoClient: $(BINDIR)/demoClient.o .buildmode Makefile
 	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
