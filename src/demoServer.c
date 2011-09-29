@@ -15,7 +15,9 @@
 #include <time.h>
 
 
-#define PORT "8888"
+#define PORT0 "8887"
+#define PORT1 "8888"
+#define PORT2 "8889"
 #define BUFSIZE 1400
 
 
@@ -48,63 +50,77 @@ main (int argc, char** argv){
     struct addrinfo *result; //This is where the info about the server is stored
     struct sockaddr cliAddr;
     socklen_t cliAddrLen = sizeof cliAddr;
-    int       sockfd;
+    int       sockfd[3];
     int       rv;
     char      ip[INET6_ADDRSTRLEN] = {0};
     char      buff[BUFSIZE];
     int       numbytes;
+    char* port[3];
+    port[0] = PORT0;
+    port[1] = PORT1;
+    port[2] = PORT2;
 
     printf("Starting Demo Server\n");
 
-    // Setup the hints struct
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family   = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags    = AI_PASSIVE;
+    int k;
+    for (k = 0; k < 3; k++){
 
-    // Get the server's info
-    if((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0){
+      // Setup the hints struct
+      memset(&hints, 0, sizeof hints);
+      hints.ai_family   = AF_UNSPEC;
+      hints.ai_socktype = SOCK_DGRAM;
+      hints.ai_flags    = AI_PASSIVE;
+
+      // Get the server's info
+      if((rv = getaddrinfo(NULL, port[k], &hints, &servinfo)) != 0){
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
-    }
+      }
 
-    // Loop through all the results and connect to the first possible
-    for(result = servinfo; result != NULL; result = result->ai_next) {
-        if((sockfd = socket(result->ai_family,
+      // Loop through all the results and connect to the first possible
+      for(result = servinfo; result != NULL; result = result->ai_next) {
+        if((sockfd[k] = socket(result->ai_family,
                             result->ai_socktype,
                             result->ai_protocol)) == -1){
-            perror("demoServer: error during socket initialization");
-            continue;
+	  perror("demoServer: error during socket initialization");
+	  continue;
         }
-        if (bind(sockfd, result->ai_addr, result->ai_addrlen) == -1) {
-            close(sockfd);
-            perror("demoServer: can't bind local address");
-            continue;
+        if (bind(sockfd[k], result->ai_addr, result->ai_addrlen) == -1) {
+	  close(sockfd[k]);
+	  perror("demoServer: can't bind local address");
+	  continue;
         }
         break;
-    }
+      }
 
-    if (result == NULL) { // If we are here, we failed to initialize the socket
-      perror("atousrv: failed to initialize socket");
-      return 2;
-    }
+      if (result == NULL) { // If we are here, we failed to initialize the socket
+	perror("atousrv: failed to initialize socket");
+	return 2;
+      }
 
-    freeaddrinfo(servinfo);
+      freeaddrinfo(servinfo);
+
+    }
 
 
     printf("***Demo Server Ready***\nWaiting for requests...\n");
 
-    while (1) {
+    pid_t pid;
+    pid = fork();
+
+    if (pid ==0){
+      // child process
+      // echo server 
 
       while(1)    {
-
 	// First call is blocking
-	if((numbytes = recvfrom(sockfd, buff, BUFSIZE, 0,
+	if((numbytes = recvfrom(sockfd[0], buff, BUFSIZE, 0,
 				&cliAddr, &cliAddrLen)) == -1)
 	  {
 	    perror("DemoServer: recvfrom failed\n");
 	  }
 
+	/*
 	char* tmp = malloc(numbytes);
 
 	snprintf(tmp, numbytes+1, "%s", buff);
@@ -121,8 +137,9 @@ main (int argc, char** argv){
 
 	//        snprintf(echoString, len, "Echo: %s from %s", buff, get_ip_str(&cliAddr, ip, INET6_ADDRSTRLEN));
 	//        printf("The echoString is %s\n", echoString);
+	*/
 
-	if((numbytes = sendto(sockfd, buff, BUFSIZE, 0,
+	if((numbytes = sendto(sockfd[0], buff, BUFSIZE, 0,
 			      &cliAddr, cliAddrLen)) == -1)
 	  {
 	    perror("DemoServer: sento failed\n");
@@ -131,68 +148,128 @@ main (int argc, char** argv){
 	printf("Echo sent\n");
 	//free(echoString);
 	//free(tmp);
-
-	struct timeval tv;
-	fd_set rset;
-	tv.tv_sec = 2;
-	tv.tv_usec = 0;
-	FD_ZERO(&rset);
-	FD_SET(sockfd, &rset);
-	if ( select(sockfd+1,&rset,NULL,NULL, &tv) == 0){
-	  // timeout
-	  break; 
-	}
-
       }
 
-      printf("Done with the echo part.\n");
-
-      struct timespec t_sleep;
-      int flush_tries = 1000;
-      int i;
-      for (i = 0; i < flush_tries; i++){
-
-	//	printf("Sending %d \t", i);
-
-	if((numbytes = sendto(sockfd, buff, BUFSIZE, 0,
-			      &cliAddr, cliAddrLen)) == -1)
-	  {
-	    perror("DemoServer: sento failed\n");
-	  }
-
-	t_sleep.tv_sec = 0;
-	t_sleep.tv_nsec = 1000000;
-	nanosleep(&t_sleep, NULL);
-
-      } // end for loop
-
-
-
-
-
-
-      printf("Done with the flush part.\n");
-      sleep(3);
-
-      flush_tries = 300;
-      for (i = 0; i < flush_tries; i++){
-
-	//	printf("Sending %d \t", i);
-
-	if((numbytes = sendto(sockfd, buff, BUFSIZE, 0,
-			      &cliAddr, cliAddrLen)) == -1)
-	  {
-	    perror("DemoServer: sento failed\n");
-	  }
-
-	t_sleep.tv_sec = 0;
-	t_sleep.tv_nsec = 30000000;
-	nanosleep(&t_sleep, NULL);
-
-      } // end for loop
-
-      printf("Done with the slow part.\n");
+      return 0;
+      //===========================================================================
+    }else if (pid == -1){
+      perror("echo-server fork");
+      return -1;
     }
 
+    // only parent process will reach here
+
+    pid = fork();
+    if (pid ==0){
+
+      // child process
+      // flush server 
+      while (1){
+
+	// wait for flush request which is 0xffff
+	if((numbytes = recvfrom(sockfd[1], buff, BUFSIZE, 0,
+				&cliAddr, &cliAddrLen)) == -1)
+	  {
+	    perror("DemoServer: recvfrom failed\n");
+	  }
+
+	if (buff[0] == (char) 255 && buff[1] == (char) 255){
+
+	  struct timespec t_sleep;
+	  t_sleep.tv_sec = 0;
+	  t_sleep.tv_nsec = 1000000;
+	  int flush_tries = 1000;
+	  int i;
+	  int seqno = 1;
+	  for (i = 0; i < flush_tries; i++){
+
+	    //	printf("Sending %d \t", i);
+
+	    memcpy(buff, &i, sizeof(int));
+
+	    if((numbytes = sendto(sockfd[1], buff, BUFSIZE, 0,
+				  &cliAddr, cliAddrLen)) == -1)
+	      {
+		perror("DemoServer: sento failed\n");
+	      }
+
+	    nanosleep(&t_sleep, NULL);
+
+	  } // end for loop
+	  printf("Done with the flush part.\n");
+	}
+      } // end infinite while loop
+
+      return 0;
+      //===========================================================================
+    }else if (pid == -1){
+      perror("flush-server fork");
+      return -1;
+    }
+
+
+
+    // only parent process will reach here
+     // probe server 
+
+
+    while (1) {
+
+      // wait for the probe rate req packets to come
+
+      if((numbytes = recvfrom(sockfd[2], buff, BUFSIZE, 0,
+			      &cliAddr, &cliAddrLen)) == -1)
+	{
+	  perror("DemoServer: recvfrom failed\n");
+	}
+	
+      if (buff[1] == (char) 255){
+
+	uint8_t probe_rate = buff[0];
+	printf("requested probe rate: %d kbps\n", (int)probe_rate*10);
+
+	if (probe_rate == 0){
+	  probe_rate = 10;
+	}
+	struct timespec t_sleep;
+	t_sleep.tv_sec = 0;
+	t_sleep.tv_nsec = (long) 1000000/(probe_rate*10)*8*1400;
+
+
+	int probe_tries = (int) 5000/250*probe_rate;
+	if (probe_tries < 200){
+	  probe_tries = 200;
+	}
+	int i;
+	for (i = 0; i < probe_tries; i++){
+
+	  //	printf("Sending %d \t", i);
+
+	  memcpy(buff, &i, sizeof(int));
+
+	  if((numbytes = sendto(sockfd[2], buff, BUFSIZE, 0,
+				&cliAddr, cliAddrLen)) == -1)
+	    {
+	      perror("DemoServer: sento failed\n");
+	    }
+
+	  nanosleep(&t_sleep, NULL);
+
+	} // end for loop
+
+	printf("Done with the slow part.\n");
+      } else{
+	printf("Did not receive the correct message - buf[1] = %d \n", buff[1]);
+      }
+
+
+    } // end infinite while loop
+
+
+
     return 0;
+      //===========================================================================
+
+
+
 }
