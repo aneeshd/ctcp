@@ -18,7 +18,10 @@
 #define PORT0 "8887"
 #define PORT1 "8888"
 #define PORT2 "8889"
+#define PORT3 "8890"
+
 #define BUFSIZE 1400
+#define TCP_BUFFSIZE 50000
 
 
 
@@ -50,25 +53,30 @@ main (int argc, char** argv){
     struct addrinfo *result; //This is where the info about the server is stored
     struct sockaddr cliAddr;
     socklen_t cliAddrLen = sizeof cliAddr;
-    int       sockfd[3];
+    int       sockfd[4];
     int       rv;
     char      ip[INET6_ADDRSTRLEN] = {0};
     char      buff[BUFSIZE];
     int       numbytes;
-    char* port[3];
+    char* port[4];
     port[0] = PORT0;
     port[1] = PORT1;
     port[2] = PORT2;
+    port[3] = PORT3;
 
     printf("Starting Demo Server\n");
 
     int k;
-    for (k = 0; k < 3; k++){
+    for (k = 0; k < 4; k++){
 
       // Setup the hints struct
       memset(&hints, 0, sizeof hints);
       hints.ai_family   = AF_UNSPEC;
-      hints.ai_socktype = SOCK_DGRAM;
+      if (k == 3){
+	hints.ai_socktype = SOCK_STREAM;
+      }else{
+	hints.ai_socktype = SOCK_DGRAM;
+      }
       hints.ai_flags    = AI_PASSIVE;
 
       // Get the server's info
@@ -97,9 +105,7 @@ main (int argc, char** argv){
 	perror("atousrv: failed to initialize socket");
 	return 2;
       }
-
       freeaddrinfo(servinfo);
-
     }
 
 
@@ -198,6 +204,59 @@ main (int argc, char** argv){
 	  } // end for loop
 	  printf("Done with the flush part.\n");
 	}
+
+      } // end infinite while loop
+
+      return 0;
+      //===========================================================================
+    }else if (pid == -1){
+      perror("flush-server fork");
+      return -1;
+    }
+
+    // only parent process will reach here
+     // probe server 
+
+    pid = fork();
+    if (pid ==0){
+
+      if (listen(sockfd[3], 10) < 0){
+	perror("TCP listen failed");
+	return -1;
+      }
+
+
+      int tcp_sk;
+
+      while (1){
+      // wait for TCP connections
+
+	tcp_sk = accept(sockfd[3], &cliAddr, &cliAddrLen);
+
+	if (tcp_sk == -1){
+	  perror("accept");
+	  break;
+	}
+
+	if (!fork()){
+	  // this is the grandchild process
+	  close(sockfd[3]);
+	  int total_bytes_sent = 0;
+	  char tcp_buff[TCP_BUFFSIZE];
+	  memset(&tcp_buff, 0, TCP_BUFFSIZE);
+
+	  while (total_bytes_sent < 2000000){
+	    if( (numbytes = send(tcp_sk, tcp_buff, TCP_BUFFSIZE, 0)) == -1) {
+		perror("DemoServer: recvfrom failed\n");
+		break;
+	      }	    
+	      total_bytes_sent += numbytes;
+	  }
+
+	  close(tcp_sk);
+	  return 0;
+	}  // end fork
+
       } // end infinite while loop
 
       return 0;
@@ -223,14 +282,12 @@ main (int argc, char** argv){
 	  perror("DemoServer: recvfrom failed\n");
 	}
 	
-      if (buff[1] == (char) 255){
+      uint8_t probe_rate = buff[0];
 
-	uint8_t probe_rate = buff[0];
+      if (buff[1] == (char) 255 && probe_rate > 0){
+
 	printf("requested probe rate: %d kbps\n", (int)probe_rate*10);
 
-	if (probe_rate == 0){
-	  probe_rate = 10;
-	}
 	struct timespec t_sleep;
 	t_sleep.tv_sec = 0;
 	t_sleep.tv_nsec = (long) 1000000/(probe_rate*10)*8*1400;
@@ -259,7 +316,7 @@ main (int argc, char** argv){
 
 	printf("Done with the slow part.\n");
       } else{
-	printf("Did not receive the correct message - buf[1] = %d \n", buff[1]);
+	printf("Did not receive the correct message - buf[1] = %u \n", buff[1]);
       }
 
 
