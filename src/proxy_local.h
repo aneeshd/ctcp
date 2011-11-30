@@ -35,7 +35,7 @@
 #define FP_ALLOW              1
 #define FP_DENY               2
 
-extern char lease_file[256];
+extern char* lease_file;
 extern int  socks_port;
 extern char sz_logfile[256];
 extern char sz_pidfile[256];

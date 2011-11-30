@@ -1820,12 +1820,17 @@ log_cli_status(clictcp_sock* csk){
 
   // We have reached the beginning of the new line
 
-  len = sprintf(buff, "cli_status: %s\tThru %3.2f Mbps   \t", sk_status_msg[csk->status],  8.e-6*PAYLOAD_SIZE*(csk->acks)/(csk->end_time - csk->start_time + 0.1));
+  len = sprintf(buff, "cli_status: %s\tThru %3.2f Mbps Total loss %d Total old %d Total %d  \t", sk_status_msg[csk->status],  8.e-6*PAYLOAD_SIZE*(csk->acks)/(csk->end_time - csk->start_time + 0.1), csk->total_loss, csk->old_blk_pkts, csk->acks);
   write(csk->status_log_fd, buff, len);
 
   int i;
   for (i = 0; i < csk->substreams; i++){
-    len = sprintf(buff, "Path %d (%s): %s\t", i, inet_ntoa( ((struct sockaddr_in*)(csk->ifc_addr[i]))->sin_addr), path_status_msg[csk->pathstate[i]] );
+    if (csk->ifc_addr[0] != NULL){
+      len = sprintf(buff, "Path %d (%s): %s\t", i, inet_ntoa( ((struct sockaddr_in*)(csk->ifc_addr[i]))->sin_addr), path_status_msg[csk->pathstate[i]] );
+    } else {
+      len = sprintf(buff, "Path State: %s\t", path_status_msg[csk->pathstate[i]] );
+    }
+
     write(csk->status_log_fd, buff, len);
   }
 

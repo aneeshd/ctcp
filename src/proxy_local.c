@@ -37,7 +37,8 @@
 
 
 int  socks_port        = 1080;
-char lease_file[256]   = "client.lease";
+//char lease_file[256]   = "client.lease";
+char* lease_file       = NULL;
 char sz_logfile[256]   = "logs/"PROG_NAME".log";
 char sz_pidfile[256]   = PROG_NAME".pid";
 int  buf_size          = 64*1024;
