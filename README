@@ -1,112 +1,78 @@
-     atou   info
-       thd@ornl.gov  ffowler@cs.utk.edu
+CTCP: Coded TCP
 
-    atoucli/atousrv are client/server test harness for doing TCP like
-    transport over UDP.  See
-      http://www.csm.ornl.gov/~dunigan/netperf/atou.html
-      and tech report (though the web page is more up to date)
-      http://www.csm.ornl.gov/~dunigan/atou.ps
+Provides reliable transport mechanism that uses error correction codes
+to mask the adverse effects of packet loss. 
+
+Authors:  Ali ParandehGheibi (parandeh@mit.edu)
+          MinJi Kim (minjikim@mit.edu)
+          Leonardo Urbina (lurbina@mit.edu)
 
 FILES
 
-scoreboard.h	SACK structures used by both client and server
-atoucli.c	client (transmitter)
-atoursrv.c	server (receiver, ACKer)
-config		client config file
-probeall.pl     take client debug file on stdin and produce various
-                files for plotting  (e.g., probeall.pl < db.tmp )
+src/*                      source code for CTCP core as well as the proxy solution
+config/proxy_local.conf    config file for the client end of the proxy 
+config/proxy_remote.conf   config file for the server end of the proxy
+
+
+COMPILE
+
+Simply run the followin in ctcp folder
+
+$ make 
+or 
+$ make proxy
+or
+$ make remake
+
+You should see to executable files. proxy_local and proxy_remote
+
+
+SYSTEM CONFIGURATION
+
+The system operates as a chained SOCKSv5 proxy, i.e., 
+proxy_local works as a SOCKS proxy server running on a local machine
+connected to proxy_remote that runs another upstream SOCKS server running on 
+another machine, which in turn establishes connections with content servers. 
+
+
+Client APP  <-----> proxy_local <----------------------> proxy_remote  <-----> Server
+
+Using proxy_local.conf setup proxy_local to listen to port XXXX
+
+Using proxy_remote.conf setup proxy_local to listen to port YYYY
+
+Using proxy_local.conf setup proxy_local to use the proxy_remote 
+      as the upstream proxy by setting UP_PROXY_PORT To YYYY 
+      and UP_PROXY_ADDR to the address of remote proxy
+
+Setup the Client app (e.g. a web browser) to point to proxy_local by 
+      changing the proxy settings to SOCKS v5 proxy, with 
+      address 127.0.0.1 (if proxy_local on the same machine as browser) and 
+      port XXXX
+
 
 OPERATION
-   -start atousrv first, you have to ctrl-c it when client finishes.
-    You MUST restart it for each test!!!
-    You usually need to provide 1 MB or more of UDP socket buffer (-b NNN)
-  atousrv [-options]
-        -s      enable SACK
-        -d ##   delayed ack delay (ms), typical 200, default 0, no del. ACK
-        -p ##   port number to receive on (default 7890)
-        -b ##   set socket receive buffer size (default 8192)
-        -D ##   enable debug level
-   typical reno run would be   atousrv -b 1000000
-   or with delayed ACK:   atoursrv -b 2000000 -d 200
-   and with SACK:         atoursrv -b 2000000 -d 200 -s
-    
-  -edit a config file
-  -start the client
-     atoucli host [configfile]
-   the default config file is called "config"
-   Typical run would be     atoucli target >& tmp
-   A typical newreno config file would be
 
-	rcvrwin 100
-	newreno 1
-	maxtime 10
-	debug 3
-   A config for full SACK  (need -s on atousrv)
-	rcvrwin 100
-	newreno 0
-	fack 1
-	sack 1
-	rampdown 1
-	maxtime 10
-	debug 4
+First, run proxy_remote on the remote machine
 
-Here are the options (one per line) that can be put in the config file.
-See the web page for more info.
+$ sudo ./proxy_remote start
 
-      mss UDP datagram size, normally 1472 
-      rcvrwin receiver window size in segments (20)
-      newreno if 1, use newreno rather than reno 
-      sack if 1, use selective ack 
-      fack if 1, use Mathis selective ack 
-      rampdown if 1, use Mathis rampdown FACK option 
-      timeout timeout for retransmission (1 second) 
-      tick select timer, 0.5 seconds 
-      floyd  if 1 use Floyd's AIMD (0)
-      max_ssthresh  usually 100 to enable Floyd's slow-start  (0)
-      maxidle number of seconds with no ACKs before giving up (10)
-      initsegs number of segments in initial window (2)
-      multiplier cwnd = multiplier*cwnd if loss (0.5) 
-      increment in congestion avoidance, how much to add to cwnd each RTT (1) 
-      thresh_init percent of rcvwin to initially set ssthresh (1) 
-      ssincr amount to add to cwnd during slowstart (1)
-      dup_thresh number of dup ACKs to trigger re-transmit (3) 
-      burst_limit max number of segments to send at once (0 == unlimited) 
-      maxpkts how many segments to send  (0, unlimited)
-      maxtime number of seconds to send (10)
-      vegas   vegas off (0), 1: last RTT, 2: min RTT of last window 3: average 
-         4: max
-      valpha  vegas alpha (1)
-      vbeta   vegas beta  (3)
-      vgamma  vegas gamma (1)  slow-start threshold
-      vss vegas slow start 0-standard, 1-Floyd (0)
-      port UDP port number (7890)
-      sndbuf UDP SNDBUF size  (32768)
-      rcvbuf UDP RCVBUF size  (32768)
-      droplist list of segments to drop 
-      debug level of debugging (0)
+Second, run proxy_local on localhost
 
-When the client finishes it writes a summary to stdout.  Events are
-recorded to stderr depending on debug level.  A packet trace file (db.tmp)
-is written if debug > 3. With debug > 3 the client slows a bit due to tracing
-and the packets are less bursty, so sometimes you get better throughput.
-You should (MUST?) redirect stdout/stderr to a file for best performance.
-I usually say:    atoucli targethost >& tmp
+$ sudo ./proxy_local start
+
+The open the Client App and start operating the app. The traffic should now go through a CTCP tunnel.
+
+In order to stop the proxy applications use the following:
+
+$ sudo ./proxy_remote shutdown
+$ sudo ./proxy_local  shutdown
 
 
-The droplist can force packet loss.  You can even cause the same packet
-to be dropped more than once by listing the packet number more than once
-in the drop list.  This results in a "timeout" for that packet.
+CREATING HIGH LOSS SCENARIOS
 
-For big rcvwin sizes (e.g., 1000 pkts) you probably need to increase rcvbuf
-on the client to 128K, or more if sack is enabled,
-particularly with debug > 3 ( you may see q'ing
-in the OS at high data rates and trying to do disk i/o ....)
-so ACKs may be dropped in the kernel.
-(This may not be a bad thing after all.  A bigger UDP buffer on the client
-will reduce the dropped ACK's but increase the queueing and RTT and slow the
-throughput.)
-If they're dropped toward the end of transfer, you may see timeouts.
-netstat -s may tell you if your OS is dropping UDP packets.
-If you get enobuf errors on the client, increase the sndbuf size.
-On Linux 2.4 if the snduf is greater than the NIC txqueuelen, Linux
-may drop bursts of UDP packets.
+Use the script erasure_local.sh as follows
+$ sudo ./erasure_local.sh 
+
+to randomly drop incoming packets with certain probability. 
+This should significantly reduce TCP throughput, but when CTCP tunnel is active.
