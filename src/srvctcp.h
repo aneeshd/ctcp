@@ -38,11 +38,9 @@ typedef struct{
   double last_ack_time;
   uint32_t snd_nxt;
   uint32_t snd_una;
-  double snd_cwnd;                     
-  unsigned int snd_ssthresh;                // slow start threshold
+  uint32_t snd_cwnd;                     
+  uint32_t snd_ssthresh;                // slow start threshold
   int idle;                                 // successive timeouts 
-  double vdelta;
-  int slow_start;                           // in slow start
   double srtt;
   double rto;
   double slr;                               // Smoothed loss rate
@@ -52,10 +50,13 @@ typedef struct{
   int total_loss;
   double minrtt;
   double maxrtt;
+  double basertt;
   double avrgrtt;
   int vdecr;                                // vegas decrements or no adjusts 
   int v0;
   double max_delta;                         // vegas like tracker
+  uint32_t cntrtt;			    // vegas count of ACKs received
+  uint32_t beg_snd_nxt;        		    // marker for next cwnd update 
 
   srvpath_t pathstate;                     // connection states
 
@@ -93,7 +94,7 @@ typedef struct{
   double multiplier;               /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
   int ssincr;                      /* slow start increment */
   int initsegs;                    /* slowstart initial */
-  double valpha, vbeta;            /* vegas parameters (in terms of number of packets) */
+  int valpha, vbeta;            /* vegas parameters (in terms of number of packets) */
 
   //------------------Statistics----------------------------------//
   int ipkts,opkts,badacks,timeouts,enobufs, goodacks;

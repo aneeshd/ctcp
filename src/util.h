@@ -20,7 +20,7 @@ typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK} flag_t;
 // TODO: change such that we can change MSS, BLOCK_SIZE, CODING_WIN via config file
 
 #define BLOCK_SIZE 128 // Maximum # of packets in a block (Default block length)
-#define MAX_CWND 45
+#define MAX_CWND 1000 
 #define MAX_CODING_WND 128
 
 #define ACK_SIZE sizeof(double) \

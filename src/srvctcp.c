@@ -219,7 +219,7 @@ listen_srvctcp(srvctcp_sock* sk){
   char* log_name = NULL; // Name of the log
   Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
   memset(buff,0,BUFFSIZE);        /* pretouch */
-  
+
   log_srv_status(sk);
 
   if((numbytes = recvfrom(sk->sockfd, buff, BUFFSIZE, 0, (struct sockaddr*)&cli_addr, &clilen)) == -1){
@@ -852,7 +852,6 @@ timeout(srvctcp_sock* sk, int pin){
     if (subpath->snd_ssthresh < sk->initsegs) {
       subpath->snd_ssthresh = sk->initsegs;
     }
-    subpath->slow_start = 1;
     subpath->snd_cwnd = sk->initsegs;  /* drop window */
     subpath->snd_una = subpath->snd_nxt;
     
@@ -1240,9 +1239,9 @@ endSession(srvctcp_sock* sk){
     printf("**RTT** minrtt  %f maxrtt %f avrgrtt %f\n",
            sk->active_paths[i]->minrtt, sk->active_paths[i]->maxrtt,sk->active_paths[i]->avrgrtt);
     printf("**RTT** rto %f  srtt %f \n", sk->active_paths[i]->rto, sk->active_paths[i]->srtt);
-    printf("**VEGAS** max_delta %f vdecr %d v0 %d vdelta %f\n",
-           sk->active_paths[i]->max_delta, sk->active_paths[i]->vdecr, sk->active_paths[i]->v0, sk->active_paths[i]->vdelta);
-    printf("**CWND** snd_nxt %d snd_cwnd %5.3f  snd_una %d ssthresh %d goodacks %d\n\n",
+    printf("**VEGAS** max_delta %f vdecr %d v0 %d\n",
+           sk->active_paths[i]->max_delta, sk->active_paths[i]->vdecr, sk->active_paths[i]->v0);
+    printf("**CWND** snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d goodacks %d\n\n",
            sk->active_paths[i]->snd_nxt, sk->active_paths[i]->snd_cwnd, sk->active_paths[i]->snd_una,
            sk->active_paths[i]->snd_ssthresh, sk->goodacks);
   }
@@ -1270,6 +1269,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
   //------------- RTT calculations --------------------------//
   double rtt;
   rtt = subpath->last_ack_time - ack->tstamp; // this calculates the rtt for this coded packet
+  if (rtt < subpath->basertt) subpath->basertt = rtt;
   if (rtt < subpath->minrtt) subpath->minrtt = rtt;
   if (rtt > subpath->maxrtt) subpath->maxrtt = rtt;
   subpath->avrgrtt += rtt;
@@ -1279,11 +1279,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
   }else {
     subpath->rto = (1-g/5)*subpath->rto + g/5*beta*rtt;
   }
-  if (ackno > subpath->snd_una){
-    subpath->vdelta = 1-subpath->srtt/rtt;
-    // max_delta: only for statistics
-    if (subpath->vdelta > subpath->max_delta) subpath->max_delta = subpath->vdelta;  /* vegas delta */
-  }
+  subpath->cntrtt++;
   if (sk->debug > 6) {
     fprintf(sk->db,"%f %d %f  %d %d ack%d\n",
             subpath->last_ack_time, // - sk->start_time,
@@ -1332,8 +1328,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
      
     if (sk->debug > 2 && sk->curr_block%1==0){
-      printf("Now sending block %d, cwnd %f, SLR %f%%, SRTT %f ms \n",
-             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000);
+      printf("Now sending block %d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms \n",
+             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000);
     }
   }
 
@@ -1356,7 +1352,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
 
     if (sk->debug > 6){
-      fprintf(sk->db,"%f %d %f %d %f %f %f %f %f xmt\n",
+      fprintf(sk->db,"%f %d %d %d %f %f %f %f %f xmt\n",
 	      getTime()-sk->start_time,
 	      ack->blockno,
 	      subpath->snd_cwnd,
@@ -1442,8 +1438,8 @@ readConfig(char* configfile, srvctcp_sock* sk){
   sk->initsegs   = 8;          /* slowstart initial */
   sk->ssincr     = 1;           /* slow start increment */
   sk->maxidle    = 5;          /* max idle before abort */
-  sk->valpha     = 0.05;        /* vegas parameter */
-  sk->vbeta      = 0.2;         /* vegas parameter */
+  sk->valpha     = 2;        /* vegas parameter */
+  sk->vbeta      = 4;         /* vegas parameter */
   sk->debug      = 3           ;/* Debug level */
 
   /* read config if there, keyword value */
@@ -1479,49 +1475,61 @@ readConfig(char* configfile, srvctcp_sock* sk){
   printf("config: debug %d, %s",sk->debug, ctime(&t));
   printf("config: rcvrwin %d  increment %d  multiplier %f\n",
          sk->rcvrwin,sk->increment,sk->multiplier);
-  printf("config: alpha %f beta %f\n", sk->valpha,sk->vbeta);
+  printf("config: alpha %d beta %d\n", sk->valpha,sk->vbeta);
 
 }
-
 
 void
 advance_cwnd(srvctcp_sock* sk, int pin){
   /* advance cwnd according to slow-start of congestion avoidance */
   Substream_Path *subpath = sk->active_paths[pin];
-  if (subpath->snd_cwnd <= subpath->snd_ssthresh && subpath->slow_start) {
-    /* slow start, expo growth */
-    subpath->snd_cwnd = subpath->snd_cwnd + sk->ssincr;
-    return;
-  } else{
-    /* congestion avoidance phase */
-    int incr;
-    incr = sk->increment;
-    /*
-      Range --(1)-- valpha --(2)-- vbeta --(3)--
-      (1): increase window
-      (2): stay
-      (3): decrease window
-    */
-    if (subpath->vdelta > sk->vbeta ){
-      if (sk->debug > 6){
-        printf("vdelta %f going down from %f \n", subpath->vdelta, subpath->snd_cwnd);
-      }
-      incr= -sk->increment; /* too fast, -incr /RTT */
-      subpath->vdecr++;
-    } else if (subpath->vdelta > sk->valpha) {
-      if (sk->debug > 6){
-        printf("vdelta %f staying at %f\n", subpath->vdelta, subpath->snd_cwnd);
-      }
-      incr =0; /* just right */
-      subpath->v0++;
-    }
-    subpath->snd_cwnd += incr/subpath->snd_cwnd; /* ca */
-    subpath->slow_start = 0;
-  }
-	/*  if (subpath->slr > subpath->slr_long + subpath->slr_longstd){
-	    subpath->snd_cwnd -= subpath->slr/2;
-	  } */
-  if (subpath->snd_cwnd < sk->initsegs) subpath->snd_cwnd = sk->initsegs;
+  if (subpath->beg_snd_nxt <= subpath->snd_una) { //need to be more careful about wrapping of sequence numbers here. DL
+     subpath->beg_snd_nxt = subpath->snd_nxt;
+     if (subpath->cntrtt <= 2) {
+        // not enough RTT samples, do Reno increase 
+        // - need to be more careful about what to do here for links with small BDP
+        subpath->snd_cwnd++;
+     } else {
+        // do Vegas
+        uint32_t target_cwnd, diff;
+        // in linux they use minrtt here instead of srtt, but seems unreliable in user space. 
+        target_cwnd = subpath->snd_cwnd * subpath->basertt / subpath->srtt;
+        diff = subpath->snd_cwnd * (subpath->srtt-subpath->basertt) / subpath->basertt;
+        if (diff > subpath->max_delta) subpath->max_delta = diff;  /* keep stats on vegas diff */
+
+	//printf("diff=%u, sshthresh=%u, cwnd=%u, srtt=%f, minrtt=%f, basertt=%f\n",
+	//        diff,subpath->snd_ssthresh, subpath->snd_cwnd, 
+	//        subpath->srtt, subpath->minrtt, subpath->basertt);
+        if (diff > 1 && subpath->snd_cwnd <= subpath->snd_ssthresh) {
+           // exit slow-start
+           if (target_cwnd+1 < subpath->snd_cwnd) subpath->snd_cwnd=target_cwnd+1; 
+           if (subpath->snd_cwnd-1 < subpath->snd_ssthresh) subpath->snd_ssthresh=subpath->snd_cwnd-1;
+        } else if (subpath->snd_cwnd <= subpath->snd_ssthresh) {
+           // slow-start
+           subpath->snd_cwnd = subpath->snd_cwnd + 1;
+        } else {
+           // congestion avoidance
+           if (diff > sk->vbeta) {
+              subpath->snd_cwnd--;
+              subpath->vdecr++; // keep statistics
+              if (subpath->snd_cwnd-1 < subpath->snd_ssthresh) subpath->snd_ssthresh=subpath->snd_cwnd-1;
+           } else if (diff < sk->valpha) {
+              subpath->snd_cwnd++;
+           } else {
+              // do nothing
+              subpath->v0++; // keep statistics
+           }
+        }
+        if (subpath->snd_cwnd < sk->initsegs) subpath->snd_cwnd = sk->initsegs;
+        if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
+        if (subpath->snd_ssthresh < 0.75*subpath->snd_cwnd) subpath->snd_ssthresh=0.75*subpath->snd_cwnd;
+     }
+     subpath->cntrtt = 0;
+     subpath->minrtt = 999999.0;
+  } else if (subpath->snd_cwnd <= subpath->snd_ssthresh)
+     // slow-start
+     subpath->snd_cwnd = subpath->snd_cwnd + 1;
+
   if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
   return;
 }
@@ -1988,8 +1996,8 @@ create_srvctcp_sock(void){
   sk->ssincr     = 1;           /* slow start increment */
   sk->maxidle    = 10;       /* max idle before abort */
 
-  sk->valpha     = 0.05;        /* vegas parameter */
-  sk->vbeta      = 0.2;         /* vegas parameter */
+  sk->valpha     = 2;        /* vegas parameter */
+  sk->vbeta      = 4;         /* vegas parameter */
   sk->debug      = 3;           /* Debug level */
 
   //------------------Statistics----------------------------------//
@@ -2023,6 +2031,8 @@ init_stream(srvctcp_sock* sk, Substream_Path *subpath){
   subpath->snd_nxt = 1;
   subpath->snd_una = 1;
   subpath->snd_cwnd = sk->initsegs;
+  subpath->cntrtt = 0;
+  subpath->beg_snd_nxt = 0;
 
   if (sk->multiplier) {
     subpath->snd_ssthresh = sk->multiplier*MAX_CWND;
@@ -2031,14 +2041,13 @@ init_stream(srvctcp_sock* sk, Substream_Path *subpath){
   }
     // Statistics //
   subpath->idle       = 0;
-  subpath->vdelta     = 0;    /* Vegas delta */
   subpath->max_delta  = 0;
-  subpath->slow_start = 1;    /* in vegas slow start */
   subpath->vdecr      = 0;
   subpath->v0         = 0;    /* vegas decrements or no adjusts */
 
 
   subpath->minrtt     = 999999.0;
+  subpath->basertt    = 999999.0;
   subpath->maxrtt     = 0;
   subpath->avrgrtt    = 0;
   subpath->srtt       = 0;
