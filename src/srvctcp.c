@@ -1270,6 +1270,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
   //------------- RTT calculations --------------------------//
   double rtt;
   rtt = subpath->last_ack_time - ack->tstamp; // this calculates the rtt for this coded packet
+  subpath->rtt = rtt;
   if (rtt < subpath->basertt) subpath->basertt = rtt;
   if (rtt < subpath->minrtt) subpath->minrtt = rtt;
   if (rtt > subpath->maxrtt) subpath->maxrtt = rtt;
@@ -1489,11 +1490,12 @@ ctcp_probe(srvctcp_sock* sk, int pin) {
    }
 
    if (sk->db) {
-        fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %f\n",
+        fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %u %f\n",
            getTime(), sk->clientip, sk->clientport,
            MSS, subpath->snd_nxt, subpath->snd_una,
            subpath->snd_cwnd, subpath->snd_ssthresh, MAX_CWND,
-           (int) (subpath->srtt*1000), (int) (subpath->basertt*1000), 100*subpath->slr);
+           (int) (subpath->srtt*1000), (int) (subpath->basertt*1000), (int) (subpath->rtt*1000),
+           100*subpath->slr);
         fflush(sk->db);
    }
 }
@@ -1548,7 +1550,6 @@ advance_cwnd(srvctcp_sock* sk, int pin){
      subpath->snd_cwnd = subpath->snd_cwnd + 1;
      if (sk->debug > 2) ctcp_probe(sk, pin);
   }
-
   if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
   return;
 }
@@ -2070,6 +2071,7 @@ init_stream(srvctcp_sock* sk, Substream_Path *subpath){
   subpath->maxrtt     = 0;
   subpath->avrgrtt    = 0;
   subpath->srtt       = 0;
+  subpath->rtt	      = 0;
   subpath->rto        = INIT_RTO;
 
   subpath->slr        = 0;

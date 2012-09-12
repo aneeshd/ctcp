@@ -51,6 +51,7 @@ typedef struct{
   double minrtt;
   double maxrtt;
   double basertt;
+  double rtt;
   double avrgrtt;
   int vdecr;                                // vegas decrements or no adjusts 
   int v0;
