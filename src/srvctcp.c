@@ -1538,7 +1538,7 @@ advance_cwnd(srvctcp_sock* sk, int pin){
               subpath->v0++; // keep statistics
            }
         }
-        if (subpath->snd_cwnd < sk->initsegs) subpath->snd_cwnd = sk->initsegs;
+        if (subpath->snd_cwnd < 2) subpath->snd_cwnd = 2;
         if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
         if (subpath->snd_ssthresh < 0.75*subpath->snd_cwnd) subpath->snd_ssthresh=0.75*subpath->snd_cwnd;
      }
