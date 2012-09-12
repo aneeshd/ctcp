@@ -235,8 +235,9 @@ listen_srvctcp(srvctcp_sock* sk){
            inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
            ((struct sockaddr_in*)&cli_addr)->sin_port);
     */
-    char s[INET6_ADDRSTRLEN];
-    printf("Request for a new session: Client address %s Client port %d\n", get_addr(&cli_addr,s,INET6_ADDRSTRLEN), get_port(&cli_addr));
+    sk->clientport = get_port(&cli_addr);
+    get_addr(&cli_addr,sk->clientip,INET6_ADDRSTRLEN);
+    printf("Request for a new session: Client address %s Client port %d\n", sk->clientip, sk->clientport);
 
     if (sk->debug > 6) openLog(sk, log_name);
 
@@ -1480,6 +1481,24 @@ readConfig(char* configfile, srvctcp_sock* sk){
 }
 
 void
+ctcp_probe(srvctcp_sock* sk, int pin) {
+   Substream_Path *subpath = sk->active_paths[pin];
+   if (!sk->db) {
+     sk->db = fopen("/tmp/ctcp-probe", "a"); // probably shouldn't be a hard-wired filename
+     if(!sk->db) perror("An error ocurred while opening the /tmp/ctcp-probe log file");
+   }
+
+   if (sk->db) {
+        fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %f\n",
+           getTime(), sk->clientip, sk->clientport,
+           MSS, subpath->snd_nxt, subpath->snd_una,
+           subpath->snd_cwnd, subpath->snd_ssthresh, MAX_CWND,
+           (int) (subpath->srtt*1000), (int) (subpath->basertt*1000), 100*subpath->slr);
+        fflush(sk->db);
+   }
+}
+
+void
 advance_cwnd(srvctcp_sock* sk, int pin){
   /* advance cwnd according to slow-start of congestion avoidance */
   Substream_Path *subpath = sk->active_paths[pin];
@@ -1497,9 +1516,6 @@ advance_cwnd(srvctcp_sock* sk, int pin){
         diff = subpath->snd_cwnd * (subpath->srtt-subpath->basertt) / subpath->basertt;
         if (diff > subpath->max_delta) subpath->max_delta = diff;  /* keep stats on vegas diff */
 
-	//printf("diff=%u, sshthresh=%u, cwnd=%u, srtt=%f, minrtt=%f, basertt=%f\n",
-	//        diff,subpath->snd_ssthresh, subpath->snd_cwnd, 
-	//        subpath->srtt, subpath->minrtt, subpath->basertt);
         if (diff > 1 && subpath->snd_cwnd <= subpath->snd_ssthresh) {
            // exit slow-start
            if (target_cwnd+1 < subpath->snd_cwnd) subpath->snd_cwnd=target_cwnd+1; 
@@ -1526,9 +1542,12 @@ advance_cwnd(srvctcp_sock* sk, int pin){
      }
      subpath->cntrtt = 0;
      subpath->minrtt = 999999.0;
-  } else if (subpath->snd_cwnd <= subpath->snd_ssthresh)
+     if (sk->debug > 2) ctcp_probe(sk, pin);
+  } else if (subpath->snd_cwnd <= subpath->snd_ssthresh) {
      // slow-start
      subpath->snd_cwnd = subpath->snd_cwnd + 1;
+     if (sk->debug > 2) ctcp_probe(sk, pin);
+  }
 
   if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
   return;

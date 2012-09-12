@@ -67,6 +67,8 @@ typedef struct{
   Substream_Path** active_paths;            // 0-1 representing whether path alive
   int num_active;                           // Connection identifier
   socket_t sockfd;                          /* network file descriptor */
+  char clientip[INET6_ADDRSTRLEN];          // Client IP address for this connection
+  uint16_t clientport;                      // Client port.
 
   int dof_req_latest;                       /* Latest information about dofs of the current block */
   uint32_t curr_block; // Current block number
