@@ -1490,11 +1490,11 @@ ctcp_probe(srvctcp_sock* sk, int pin) {
    }
 
    if (sk->db) {
-        fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %u %f\n",
+        fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %u %u %f\n",
            getTime(), sk->clientip, sk->clientport,
            MSS, subpath->snd_nxt, subpath->snd_una,
            subpath->snd_cwnd, subpath->snd_ssthresh, MAX_CWND,
-           (int) (subpath->srtt*1000), (int) (subpath->basertt*1000), (int) (subpath->rtt*1000),
+           (int) (subpath->srtt*1000), (int) (subpath->basertt*1000), (int) (subpath->rtt*1000), (int) (subpath->minrtt*1000),
            100*subpath->slr);
         fflush(sk->db);
    }
@@ -1542,9 +1542,9 @@ advance_cwnd(srvctcp_sock* sk, int pin){
         if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
         if (subpath->snd_ssthresh < 0.75*subpath->snd_cwnd) subpath->snd_ssthresh=0.75*subpath->snd_cwnd;
      }
+     if (sk->debug > 2) ctcp_probe(sk, pin);
      subpath->cntrtt = 0;
      subpath->minrtt = 999999.0;
-     if (sk->debug > 2) ctcp_probe(sk, pin);
   } else if (subpath->snd_cwnd <= subpath->snd_ssthresh) {
      // slow-start
      subpath->snd_cwnd = subpath->snd_cwnd + 1;
