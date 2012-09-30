@@ -168,11 +168,13 @@ open_srvctcp(char *port){
   int rcvbuf     = MSS*MAX_CWND;/* UDP recv buff for ACKs*/
 
   int i = sizeof(sndbuf);
+  int on = 1;
   //--------------- Setting the UDP socket options -----------------------------//
   setsockopt(sk->sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,i);
   getsockopt(sk->sockfd,SOL_SOCKET,SO_SNDBUF,(char *) &sndbuf,(socklen_t*)&i);
   setsockopt(sk->sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,i);
   getsockopt(sk->sockfd,SOL_SOCKET,SO_RCVBUF,(char *) &rcvbuf,(socklen_t*)&i);
+  setsockopt(sk->sockfd, SOL_SOCKET, SO_TIMESTAMP, (const char *)&on, sizeof(on));
   //printf("config: sndbuf %d rcvbuf %d\n",sndbuf,rcvbuf);
   //---------------------------------------------------------------------------//
 
@@ -368,6 +370,20 @@ void
   int path_index=0;              // Connection identifier
   double rcvt;
 
+  struct iovec iov;
+  struct msghdr msg_sock;
+  char ctrl_buff[CMSG_SPACE(sizeof(struct timeval))];
+  struct cmsghdr *cmsg;
+  iov.iov_base = buff;
+  iov.iov_len = BUFFSIZE;
+  msg_sock.msg_iov = &iov;
+  msg_sock.msg_iovlen = 1;
+  msg_sock.msg_name = &cli_addr;
+  msg_sock.msg_namelen = clilen;
+  msg_sock.msg_control = (caddr_t)ctrl_buff;
+  msg_sock.msg_controllen = sizeof(ctrl_buff);
+  struct timeval time_now;
+
   memset(buff,0,BUFFSIZE);        /* pretouch */
   sk->start_time = getTime();
   pthread_rwlock_rdlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
@@ -394,9 +410,21 @@ void
 
     if (r > 0){  /* ack ready */
       // The recvfrom should be done to a separate buffer (not buff)
-      if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, (struct sockaddr*)&cli_addr, &clilen)) <= 0){
-        perror("Error in receveing ACKs\n");
+//      if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, (struct sockaddr*)&cli_addr, &clilen)) <= 0){
+      if((r = recvmsg(sk->sockfd, &msg_sock, 0))== -1){
+        perror("Error in receiving ACKs\n");
         continue;  
+      }
+ 
+      // use packet timestamp from kernel, if possible ...
+      cmsg = CMSG_FIRSTHDR(&msg_sock);
+      if (cmsg &&
+         cmsg->cmsg_level == SOL_SOCKET &&
+         cmsg->cmsg_type == SCM_TIMESTAMP &&
+         cmsg->cmsg_len == CMSG_LEN(sizeof(time_now))) {
+                           /* Copy to avoid alignment problems: */
+         memcpy(&time_now,CMSG_DATA(cmsg),sizeof(time_now));
+         rcvt = time_now.tv_sec + time_now.tv_usec*1e-6;
       }
 
       unmarshallAck(ack, buff);
@@ -1275,6 +1303,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
   if (rtt < subpath->minrtt) subpath->minrtt = rtt;
   if (rtt > subpath->maxrtt) subpath->maxrtt = rtt;
   subpath->avrgrtt += rtt;
+  // What value should g have here when ACK every packet ?  Normal TCP value would be 0.75.  DL
   subpath->srtt = (1-g)*subpath->srtt + g*rtt;
   if (rtt > subpath->rto/beta){
     subpath->rto = (1-g)*subpath->rto + g*beta*rtt;
@@ -1513,7 +1542,7 @@ advance_cwnd(srvctcp_sock* sk, int pin){
      } else {
         // do Vegas
         uint32_t target_cwnd, diff;
-        // in linux they use minrtt here instead of srtt, but seems unreliable in user space. 
+        // in linux they use minrtt here, another option could be srtt 
         target_cwnd = subpath->snd_cwnd * subpath->basertt / subpath->srtt;
         diff = subpath->snd_cwnd * (subpath->srtt-subpath->basertt) / subpath->basertt;
         if (diff > subpath->max_delta) subpath->max_delta = diff;  /* keep stats on vegas diff */

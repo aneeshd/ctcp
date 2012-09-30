@@ -267,9 +267,11 @@ connect_ctcp(char *host, char *port, char *lease_file){
     if (!rcvspace) rcvspace = MSS*MAX_CWND;
 
     optlen = sizeof(rcvspace);
+    int on = 1;
     for(k=0; k < csk->substreams; k++){
       setsockopt(csk->sockfd[k],SOL_SOCKET,SO_RCVBUF, (char *) &rcvspace, optlen);
       getsockopt(csk->sockfd[k], SOL_SOCKET, SO_RCVBUF, (char *) &rlth, (socklen_t*)&optlen);
+      setsockopt(csk->sockfd[k], SOL_SOCKET, SO_TIMESTAMP, (const char *)&on, sizeof(on)); 
     }
     //printf("ctcpcli using port %s rcvspace %d\n", port,rlth);
 
@@ -354,6 +356,21 @@ void
   int k, numbytes;//[MAX_SUBSTREAMS];
   char *buff = malloc(BUFFSIZE);
 
+  struct iovec iov;
+  struct msghdr msg_sock;
+  char ctrl_buff[CMSG_SPACE(sizeof(struct timeval))];
+  struct cmsghdr *cmsg;
+  iov.iov_base = buff;
+  iov.iov_len = BUFFSIZE;
+  msg_sock.msg_iov = &iov;
+  msg_sock.msg_iovlen = 1;
+  msg_sock.msg_name = &(csk->srv_addr);
+  msg_sock.msg_namelen = srvlen;
+  msg_sock.msg_control = (caddr_t)ctrl_buff;
+  msg_sock.msg_controllen = sizeof(ctrl_buff);
+
+  struct timeval time_now;
+
   // READING FROM MULTIPLE SOCKET
   struct pollfd read_set[MAX_SUBSTREAMS];
 
@@ -408,9 +425,7 @@ void
 
       do{
         if(read_set[curr_substream].revents & POLLIN){
-
-          if((numbytes = recvfrom(csk->sockfd[curr_substream], buff, MSS, 0,
-                                  &(csk->srv_addr), &srvlen)) == -1){
+          if((numbytes = recvmsg(csk->sockfd[curr_substream], &msg_sock, 0))== -1){
             err_sys("recvfrom",csk);
 
             // removing path if it returns -1 on recvfrom (doesn't exist anymore)
@@ -429,8 +444,20 @@ void
             log_cli_status(csk);
           }
           if(numbytes <= 0) break;
-          
-          csk->lastrcvt[curr_substream] = getTime();
+
+
+          // use packet timestamp from kernel, if possible ...
+          cmsg = CMSG_FIRSTHDR(&msg_sock);
+          if (cmsg &&
+             cmsg->cmsg_level == SOL_SOCKET &&
+             cmsg->cmsg_type == SCM_TIMESTAMP &&
+             cmsg->cmsg_len == CMSG_LEN(sizeof(time_now))) {
+                               /* Copy to avoid alignment problems: */
+             memcpy(&time_now,CMSG_DATA(cmsg),sizeof(time_now));
+             csk->lastrcvt[curr_substream] = time_now.tv_sec + time_now.tv_usec*1e-6;
+          } else {
+             csk->lastrcvt[curr_substream] = getTime();
+          }
           csk->idle_time[curr_substream] = INIT_IDLE_TIME;
           csk->idle_count[curr_substream] = 0;
 
@@ -802,7 +829,8 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
       ack->dof_rec = 0;
     }
 
-    ack->tstamp = msg->tstamp;
+    // compensate for processing time between when packet arrived and when send ack ...
+    ack->tstamp = msg->tstamp + getTime()-csk->lastrcvt[curr_substream];
 
     // Marshall the ack into buff
     int size = marshallAck(*ack, buff);
@@ -861,6 +889,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     } // end if the block is done
 
     free(buff);
+
 }
 //========================== END Build Ack ===============================================================
 
