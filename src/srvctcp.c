@@ -1544,7 +1544,7 @@ advance_cwnd(srvctcp_sock* sk, int pin){
         uint32_t target_cwnd, diff;
         // in linux they use minrtt here, another option could be srtt 
         target_cwnd = subpath->snd_cwnd * subpath->basertt / subpath->srtt;
-        diff = subpath->snd_cwnd * (subpath->srtt-subpath->basertt) / subpath->basertt;
+         diff = subpath->snd_cwnd - target_cwnd;
         if (diff > subpath->max_delta) subpath->max_delta = diff;  /* keep stats on vegas diff */
 
         if (diff > 1 && subpath->snd_cwnd <= subpath->snd_ssthresh) {
