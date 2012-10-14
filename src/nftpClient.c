@@ -23,14 +23,13 @@
 
 #define PORT "8777"
 #define HOST "127.0.0.1"
-#define FILE_NAME "Honda"
+#define FILE_NAME "NftpTestFile"
 
 void
 usage(void) {
     fprintf(stderr, "Usage: nftpClient [-options]             \n\
-\t -p   port number of the nftpServer. Default port 8777                \n\
-\t -h   specify the IP address of the host (nftpServer). Default host: 127.0.0.1               \n\
-\t -f   Name of the file to receive                  \n");
+\t -h   IP address of the host (nftpServer). Default host: 127.0.0.1               \n\
+\t -p   port number of the nftpServer. Default port 8777                \n");
     exit(0);
 }
 
@@ -51,9 +50,6 @@ main(int argc, char** argv){
         case 'p':
           port = optarg;
           break;
-        case 'f':
-          file_name = optarg;
-          break;
         default:
           usage();
         }
@@ -66,7 +62,7 @@ main(int argc, char** argv){
       return 1;
     } else{
       
-      char dst_file_name[100] = "Rcv_";
+      char dst_file_name[100] = "Recvd";
       strcat(dst_file_name, file_name);
       rcv_file = fopen(dst_file_name,  "wb");
 
@@ -78,18 +74,20 @@ main(int argc, char** argv){
       printf("Calling read ctcp... \n");
 
       uint32_t total_bytes = 0;
-      while(total_bytes < 500000000){
+      while(total_bytes < 500000000)  // limit the received file size to 500MB
+        {  
       
-        bytes_read = read_ctcp(csk, f_buffer, f_buf_size); 
+          bytes_read = read_ctcp(csk, f_buffer, f_buf_size); 
         
-        if (bytes_read == -1){
-          printf("read_ctcp is done!\n");
-          break;
+          if (bytes_read == -1){
+            printf("read_ctcp is done!\n");
+            break;
+          }
+
+          fwrite(f_buffer, 1, bytes_read, rcv_file);
+          total_bytes += bytes_read;
         }
 
-        fwrite(f_buffer, 1, bytes_read, rcv_file);
-        total_bytes += bytes_read;
-      }
       printf("%d Total bytes receieved\n", total_bytes);
       ctrlc(csk);
 

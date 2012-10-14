@@ -7,66 +7,116 @@ Authors:  Ali ParandehGheibi (parandeh@mit.edu)
           MinJi Kim (minjikim@mit.edu)
           Leonardo Urbina (lurbina@mit.edu)
 
+OVERVIEW
+
+You can compile and run CTCP in the "proxy" mode or "file transfer" mode. 
+
+The proxy mode is more involved in terms system configuration, 
+but allows SOCKS-enabled software tunnel their traffic over CTCP. 
+
+The file transfer mode provides a simple file transfer client and server 
+that perform a single file transfer session per execution and print some statistics. 
+This mode does not need any configuration except for the command line arguments. 
+
+
 FILES
 
 src/*                      source code for CTCP core as well as the proxy solution
 config/proxy_local.conf    config file for the client end of the proxy 
 config/proxy_remote.conf   config file for the server end of the proxy
 
-
 COMPILE
 
-Simply run the followin in ctcp folder
+Proxy Mode:
 
-$ make 
-or 
-$ make proxy
-or
-$ make remake
+      Simply run the followin in ctcp folder
 
-You should see to executable files. proxy_local and proxy_remote
+      $ make 
+      or 
+      $ make proxy
+      or
+      $ make remake
+
+      You should see two executable files. proxy_local and proxy_remote
+
+File Transfer Mode:
+     
+      $ make nftp 
+
+      You should see the executable files nftpServer and nftpClient.
+
 
 
 SYSTEM CONFIGURATION
 
-The system operates as a chained SOCKSv5 proxy, i.e., 
-proxy_local works as a SOCKS proxy server running on a local machine
-connected to proxy_remote that runs another upstream SOCKS server running on 
-another machine, which in turn establishes connections with content servers. 
+Proxy Mode:
+
+       The system operates as a chained SOCKSv5 proxy, i.e., 
+       proxy_local works as a SOCKS proxy server running on a local machine
+       connected to proxy_remote that runs another upstream SOCKS server running on 
+       another machine, which in turn establishes connections with content servers. 
 
 
-Client APP  <-----> proxy_local <----------------------> proxy_remote  <-----> Server
+       Client APP  <-----> proxy_local <----------------------> proxy_remote  <-----> Server
 
-Using proxy_local.conf setup proxy_local to listen to port XXXX
+       Using proxy_local.conf setup proxy_local to listen to port XXXX
 
-Using proxy_remote.conf setup proxy_local to listen to port YYYY
+       Using proxy_remote.conf setup proxy_local to listen to port YYYY
 
-Using proxy_local.conf setup proxy_local to use the proxy_remote 
-      as the upstream proxy by setting UP_PROXY_PORT To YYYY 
-      and UP_PROXY_ADDR to the address of remote proxy
+       Using proxy_local.conf setup proxy_local to use the proxy_remote 
+       as the upstream proxy by setting UP_PROXY_PORT To YYYY 
+       and UP_PROXY_ADDR to the address of remote proxy
 
-Setup the Client app (e.g. a web browser) to point to proxy_local by 
-      changing the proxy settings to SOCKS v5 proxy, with 
-      address 127.0.0.1 (if proxy_local on the same machine as browser) and 
-      port XXXX
+       Setup the Client app (e.g. a web browser) to point to proxy_local by 
+       changing the proxy settings to SOCKS v5 proxy, with 
+       address 127.0.0.1 (if proxy_local on the same machine as browser) and 
+       port XXXX
+
+
+File Transfer Mode:
+     
+     No extra configuration is required. 
 
 
 OPERATION
 
-First, run proxy_remote on the remote machine
+Proxy Mode:
 
-$ sudo ./proxy_remote start
+      First, run proxy_remote on the remote machine
 
-Second, run proxy_local on localhost
+      $ sudo ./proxy_remote start
 
-$ sudo ./proxy_local start
+      Second, run proxy_local on localhost
 
-The open the Client App and start operating the app. The traffic should now go through a CTCP tunnel.
+      $ sudo ./proxy_local start
 
-In order to stop the proxy applications use the following:
+      The open the Client App (e.g. browser) and start operating the app. 
+      The traffic should now go through a CTCP tunnel.
 
-$ sudo ./proxy_remote shutdown
-$ sudo ./proxy_local  shutdown
+      In order to stop the proxy applications use the following:
+
+      $ sudo ./proxy_remote shutdown
+      $ sudo ./proxy_local  shutdown
+
+File Transfer Mode:
+
+     First, on the server machine, run nftpServer as follows
+
+     $ ./nftpServer -f file -p port
+
+     where file is the name of local file to be sent over CTCP tunnel, 
+     and port is the listening port. The default port is 8777.
+
+     Second, on the client machine, run nftpClient as follows
+
+     $ ./nftpClient -h server_address -p server_port
+     
+     where server-address is the IP address of the machine running nftpServer,
+     and server_port is the port specified when running nftpServer.
+     The default address is 127.0.0.1 and default port is 8777.
+
+     You should see some logs printing on the server side, and after the session 
+     is compelte, some logs on the client side. 
 
 
 CREATING HIGH LOSS SCENARIOS
