@@ -18,9 +18,6 @@ typedef enum {SYN_SENT=0, SYN_ACK_RECV, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 
 //---------------- DEFAULT CONNECTION PARAMETERS ------------------//
 #define BUFFSIZE  3000
-#define PORT "88"
-#define HOST "127.0.0.1"
-#define FILE_NAME "Honda"
 
 #define NUM_BLOCKS 4
 #define MAX_SUBSTREAMS 5

@@ -113,6 +113,7 @@ clean:
 	$(RM) -rf srvctcp clictcp
 	$(RM) -rf demoServer demoClient
 	$(RM) -rf proxy_local proxy_remote
+	$(RM) -rf nftpServer nftpClient
 
 .PHONY: remake
 remake: clean proxy
@@ -153,12 +154,25 @@ proxy_remote: $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_
 	$(MKDIR) -p $(dir $@)
 	$(CXX) -o $@ $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
+nftpServer: $(BINDIR)/nftpServer.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
+	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(MKDIR) -p $(dir $@)
+	$(CXX) -o $@ $(BINDIR)/nftpServer.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
+
+nftpClient: $(BINDIR)/nftpClient.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
+	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(MKDIR) -p $(dir $@)
+	$(CXX) -o $@ $(BINDIR)/nftpClient.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS) -lrt
 
 all: proxy
 
 demo: demoClient demoServer
 
 proxy: proxy_local proxy_remote
+
+nftp: nftpServer nftpClient
+
+
 
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)

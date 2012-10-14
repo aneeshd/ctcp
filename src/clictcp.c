@@ -14,17 +14,6 @@
 #include <errno.h>
 #include "clictcp.h"
 
-void
-usage(void) {
-    fprintf(stderr, "Usage: clictcp [-options]             \n\
-\t -p   port number to receive on. Defauls to 9999                \n\
-\t -b   set socket receive buffer size (default 8192)               \n\
-\t -D   enable debug level                                                \n\
-\t -i   specify the interface (IP address) to bind to               \n\
-\t -s   number of additional substreams (established over the main interface)\n");
-    exit(0);
-}
-
 
 uint8_t inv_vec[256]={
   0x00, 0x01 ,0x8d ,0xf6 ,0xcb ,0x52 ,0x7b ,0xd1 ,0xe8 ,0x4f ,0x29 ,0xc0 ,0xb0 ,0xe1 ,0xe5 ,0xc7,
@@ -352,7 +341,7 @@ void
 *handle_connection(void* arg){
 
   clictcp_sock* csk = (clictcp_sock*) arg;
-  socklen_t srvlen;
+  socklen_t srvlen = sizeof(csk->srv_addr);
   int k, numbytes;//[MAX_SUBSTREAMS];
   char *buff = malloc(BUFFSIZE);
 
@@ -426,7 +415,7 @@ void
       do{
         if(read_set[curr_substream].revents & POLLIN){
           if((numbytes = recvmsg(csk->sockfd[curr_substream], &msg_sock, 0))== -1){
-            err_sys("recvfrom",csk);
+            err_sys("recvmsg",csk);
 
             // removing path if it returns -1 on recvfrom (doesn't exist anymore)
             csk->pathstate[curr_substream] = CLOSING;
