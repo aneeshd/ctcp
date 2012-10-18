@@ -51,6 +51,7 @@ int filter_policy      = FP_ALLOW;
 int filter_except_cnt  = 0;
 uint32_t filter_excepts[MAX_FILTER_EXCEPTS];
 int filter_except_masks[MAX_FILTER_EXCEPTS];
+char cong_control[32]  = "aimd";
 
 char            sz_cfgfile[256] = "config/"PROG_NAME".conf";
 int             con_cnt         = 0;
@@ -311,7 +312,7 @@ int main( int argc, char **argv )
         child = 1;
         close(sk_socks);
         logstr("Incoming connection",&ad_client);
-        res = handle_con(ctcp_port);
+        res = handle_con(ctcp_port, cong_control);
         close(sk_client);
         exit(res);
         break;
@@ -424,7 +425,7 @@ int load_config()
 	"CONNECTION_IDLE_TIMEOUT", "BIND_TIMEOUT", "SHUTDOWN_TIMEOUT",
 	"MAX_CONNECTIONS", "FILTER_POLICY", "FILTER_EXCEPTION",
 	"UP_PROXY_TYPE", "UP_PROXY_ADDR","UP_PROXY_PORT",
-	"UP_PROXY_USER", "UP_PROXY_PASSWD", "MOCKS_ADDR"
+	"UP_PROXY_USER", "UP_PROXY_PASSWD", "MOCKS_ADDR", "CONGESTION_CONTROL"
     };
     void *var_ptr[CFG_VARS_CNT] = {
 	&socks_port, sz_logfile, sz_pidfile,
@@ -432,7 +433,7 @@ int load_config()
 	&con_idle_timeo, &bind_timeo, &shutd_timeo,
 	&max_con_cnt, NULL, NULL,
 	NULL, proxy_name, &proxy_port,
-	proxy_usr, proxy_pwd, ad_socks.sa_data+2
+	proxy_usr, proxy_pwd, ad_socks.sa_data+2, cong_control
     };
     char var_type[CFG_VARS_CNT] = {
 	'n','s','s',
@@ -440,7 +441,7 @@ int load_config()
 	'n','n','n',
 	'n','s','s',
 	's','s','n',
-	's','s','a'
+	's','s','a','s'
     };
 
 

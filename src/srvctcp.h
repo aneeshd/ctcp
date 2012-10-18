@@ -58,9 +58,9 @@ typedef struct{
   double max_delta;                         // vegas like tracker
   uint32_t cntrtt;			    // vegas count of ACKs received
   uint32_t beg_snd_nxt;        		    // marker for next cwnd update 
+  int losscnt;
 
   srvpath_t pathstate;                     // connection states
-
   
 } Substream_Path;
 
@@ -70,6 +70,7 @@ typedef struct{
   socket_t sockfd;                          /* network file descriptor */
   char clientip[INET6_ADDRSTRLEN];          // Client IP address for this connection
   uint16_t clientport;                      // Client port.
+  char cong_control[32];
 
   int dof_req_latest;                       /* Latest information about dofs of the current block */
   uint32_t curr_block; // Current block number
@@ -147,7 +148,7 @@ void free_coded_pkt(void* a);
 int sockaddr_cmp(struct sockaddr_storage* addr1, struct sockaddr_storage* addr2);
 
 srvctcp_sock* create_srvctcp_sock(void);
-srvctcp_sock* open_srvctcp(char *port);
+srvctcp_sock* open_srvctcp(char *port, char *cong_control);
 int listen_srvctcp(srvctcp_sock* sk);
 void close_srvctcp(srvctcp_sock* sk);
 size_t send_ctcp(srvctcp_sock* sk, const void *usr_buf, size_t usr_buf_len);

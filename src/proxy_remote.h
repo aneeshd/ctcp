@@ -29,7 +29,7 @@
 #define PROG_NAME             "proxy_remote"
 #define PROG_DATE             "2011"
 
-#define CFG_VARS_CNT          18
+#define CFG_VARS_CNT          19
 #define MAX_FILTER_EXCEPTS    256
 
 #define FP_ALLOW              1
@@ -54,6 +54,7 @@ extern int  filter_policy;
 extern int  filter_except_cnt;
 extern uint32_t filter_excepts[MAX_FILTER_EXCEPTS];
 extern int  filter_except_masks[MAX_FILTER_EXCEPTS];
+extern char cong_control[32];
 
 extern char            sz_cfgfile[256];
 extern int             con_cnt;

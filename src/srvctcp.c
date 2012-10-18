@@ -113,12 +113,14 @@ main (int argc, char** argv){
 
 
 srvctcp_sock*
-open_srvctcp(char *port){ 
+open_srvctcp(char *port, char *cong_control){ 
   int numbytes, rv;  
   struct addrinfo *result; //This is where the info about the server is stored
   struct addrinfo hints, *servinfo;
   srvctcp_sock* sk =  create_srvctcp_sock();
-  
+ 
+  strcpy(sk->cong_control, cong_control);
+ 
   // signal(SIGINT, ctrlc);
 
   // Setup the hints struct
@@ -1359,8 +1361,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
      
     if (sk->debug > 2 && sk->curr_block%1==0){
-      printf("Now sending block %d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms \n",
-             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000);
+      printf("Now sending block %d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms \n",
+             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000);
     }
   }
 
@@ -1405,6 +1407,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     } else {
       sk->goodacks++;
       int losses = ackno - (subpath->snd_una +1);
+      subpath->losscnt += losses;
       /*
         if (losses > 0){
         printf("Loss report curr block %d ackno - snd_una[path_id] %d\n", curr_block, ackno - snd_una[path_id]);
@@ -1529,57 +1532,116 @@ ctcp_probe(srvctcp_sock* sk, int pin) {
    }
 }
 
+int loss_occurred(srvctcp_sock* sk, int pin) {
+  Substream_Path *subpath = sk->active_paths[pin];
+  return (subpath->losscnt>0) 
+           && (  (subpath->srtt - subpath->basertt >0.005) 
+              || (subpath->minrtt - subpath->basertt >0.002) );
+}
+
+void decrease_cwnd(srvctcp_sock* sk, int pin) {
+  Substream_Path *subpath = sk->active_paths[pin];
+ 
+  if (subpath->cntrtt > 2) {
+     int decrease = subpath->snd_cwnd * (1-subpath->basertt/subpath->minrtt);
+     subpath->snd_cwnd -= decrease;
+  } else
+     subpath->snd_cwnd = (int) (subpath->snd_cwnd/2);
+  if (subpath->snd_cwnd < 2) subpath->snd_cwnd = 2;
+  subpath->snd_ssthresh=0.75*subpath->snd_cwnd; 
+}
+
+void constrain_cwnd(srvctcp_sock* sk, int pin) {
+  Substream_Path *subpath = sk->active_paths[pin];
+
+  if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
+  if (subpath->snd_cwnd < 2) subpath->snd_cwnd = 2;
+}
+
 void
 advance_cwnd(srvctcp_sock* sk, int pin){
   /* advance cwnd according to slow-start of congestion avoidance */
   Substream_Path *subpath = sk->active_paths[pin];
+  
   if (subpath->beg_snd_nxt <= subpath->snd_una) { //need to be more careful about wrapping of sequence numbers here. DL
      subpath->beg_snd_nxt = subpath->snd_nxt;
-     if (subpath->cntrtt <= 2) {
-        // not enough RTT samples, do Reno increase 
-        // - need to be more careful about what to do here for links with small BDP
-        subpath->snd_cwnd++;
-     } else {
-        // do Vegas
-        uint32_t target_cwnd, diff;
-        // in linux they use minrtt here, another option could be srtt 
-        target_cwnd = subpath->snd_cwnd * subpath->basertt / subpath->srtt;
-         diff = subpath->snd_cwnd - target_cwnd;
-        if (diff > subpath->max_delta) subpath->max_delta = diff;  /* keep stats on vegas diff */
-
-        if (diff > 1 && subpath->snd_cwnd <= subpath->snd_ssthresh) {
-           // exit slow-start
-           if (target_cwnd+1 < subpath->snd_cwnd) subpath->snd_cwnd=target_cwnd+1; 
-           if (subpath->snd_cwnd-1 < subpath->snd_ssthresh) subpath->snd_ssthresh=subpath->snd_cwnd-1;
-        } else if (subpath->snd_cwnd <= subpath->snd_ssthresh) {
-           // slow-start
-           subpath->snd_cwnd = subpath->snd_cwnd + 1;
-        } else {
-           // congestion avoidance
-           if (diff > sk->vbeta) {
-              subpath->snd_cwnd--;
-              subpath->vdecr++; // keep statistics
+     uint32_t target_cwnd, diff;
+     target_cwnd = subpath->snd_cwnd * subpath->basertt / subpath->srtt;
+     diff = subpath->snd_cwnd - target_cwnd;
+     if (!strcmp(sk->cong_control,"aimd")) { 
+        // use AIMD cwnd update with adaptive backoff
+        if (!loss_occurred(sk,pin)) {
+           if (diff > 1 && subpath->snd_cwnd <= subpath->snd_ssthresh) {
+              // exit slow-start using Vegas approach
+              if (target_cwnd+1 < subpath->snd_cwnd) subpath->snd_cwnd=target_cwnd+1;
               if (subpath->snd_cwnd-1 < subpath->snd_ssthresh) subpath->snd_ssthresh=subpath->snd_cwnd-1;
-           } else if (diff < sk->valpha) {
+           } else
               subpath->snd_cwnd++;
-           } else {
-              // do nothing
-              subpath->v0++; // keep statistics
+           constrain_cwnd(sk,pin);
+           if (subpath->snd_ssthresh < 0.75*subpath->snd_cwnd) subpath->snd_ssthresh=0.75*subpath->snd_cwnd;
+        } else 
+           decrease_cwnd(sk, pin); 
+     } else if (!strcmp(sk->cong_control,"vegas")) {
+        // use Vegas cwnd update
+        if (subpath->cntrtt <= 2) {
+           // not enough RTT samples, do Reno increase
+           // - need to be more careful about what to do here for links with small BDP
+           subpath->snd_cwnd++;
+        } else {
+           // do Vegas
+           // in linux they use minrtt here, another option could be srtt
+           double rtt;
+           if (subpath->snd_cwnd <= subpath->snd_ssthresh)
+              //slow start - use srtt as packet trains can make minrtt an unreliable congestion indicator
+              rtt = subpath->srtt;
+           else {
+              // congestion avoidance - use minrtt
+              rtt = subpath->minrtt;
            }
+           target_cwnd = subpath->snd_cwnd * subpath->basertt / rtt;
+           diff = subpath->snd_cwnd - target_cwnd;
+           if (diff > subpath->max_delta) subpath->max_delta = diff;  /* keep stats on vegas diff */
+           if (diff > 1 && subpath->snd_cwnd <= subpath->snd_ssthresh) {
+              // exit slow-start
+              if (target_cwnd+1 < subpath->snd_cwnd) subpath->snd_cwnd=target_cwnd+1;
+              if (subpath->snd_cwnd-1 < subpath->snd_ssthresh) subpath->snd_ssthresh=subpath->snd_cwnd-1;
+           } else if (subpath->snd_cwnd <= subpath->snd_ssthresh) {
+              // slow-start 
+              subpath->snd_cwnd++; 
+           } else {
+              // congestion avoidance
+              if (diff > sk->vbeta ) {
+                 subpath->snd_cwnd--;
+                 subpath->vdecr++; // keep statistics
+                 if (subpath->snd_cwnd-1 < subpath->snd_ssthresh) subpath->snd_ssthresh=subpath->snd_cwnd-1;
+              } else if (diff < sk->valpha) {
+                 subpath->snd_cwnd++;
+              } else {
+                 // do nothing
+                 subpath->v0++; // keep statistics
+              }                                                                                                              }
+           constrain_cwnd(sk,pin);
+           if (subpath->snd_ssthresh < 0.75*subpath->snd_cwnd) subpath->snd_ssthresh=0.75*subpath->snd_cwnd;
         }
-        if (subpath->snd_cwnd < 2) subpath->snd_cwnd = 2;
-        if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
-        if (subpath->snd_ssthresh < 0.75*subpath->snd_cwnd) subpath->snd_ssthresh=0.75*subpath->snd_cwnd;
-     }
+     } else
+        printf("Unknown congestion control option: %s\n", sk->cong_control);
      if (sk->debug > 2) ctcp_probe(sk, pin);
      subpath->cntrtt = 0;
      subpath->minrtt = 999999.0;
+     subpath->losscnt=0;
   } else if (subpath->snd_cwnd <= subpath->snd_ssthresh) {
      // slow-start
-     subpath->snd_cwnd = subpath->snd_cwnd + 1;
+     if (!strcmp(sk->cong_control,"aimd")) {
+        // use AIMD cwnd update with adaptive backoff - exit slow start on loss
+        subpath->snd_cwnd++;
+     } else if (!strcmp(sk->cong_control,"vegas")) {
+        // use vegas cwnd update
+        subpath->snd_cwnd++;
+     } else
+        printf("Unknown congestion control option: %s\n", sk->cong_control);
      if (sk->debug > 2) ctcp_probe(sk, pin);
   }
-  if (subpath->snd_cwnd > MAX_CWND) subpath->snd_cwnd = MAX_CWND;
+  constrain_cwnd(sk,pin);
   return;
 }
 
@@ -2081,6 +2143,7 @@ init_stream(srvctcp_sock* sk, Substream_Path *subpath){
   subpath->snd_una = 1;
   subpath->snd_cwnd = sk->initsegs;
   subpath->cntrtt = 0;
+  subpath->losscnt = 0;
   subpath->beg_snd_nxt = 0;
 
   if (sk->multiplier) {

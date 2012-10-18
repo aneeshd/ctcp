@@ -27,7 +27,7 @@ extern struct sockaddr ad_client;
 extern int             sk_target;
 extern struct sockaddr ad_target;
 
-int  handle_con(int ctcp_port);
+int  handle_con(int ctcp_port, char* cong_control);
 int  negotiate( struct sockaddr *ad_cl_local, int ctcp_port);
 int  connect_client();
 int  bind_client();
