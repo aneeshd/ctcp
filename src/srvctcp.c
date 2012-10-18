@@ -1361,8 +1361,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
      
     if (sk->debug > 2 && sk->curr_block%1==0){
-      printf("Now sending block %d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms \n",
-             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000);
+      printf("Now sending block %d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms, RATE %f Mbps (%f) \n",
+             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000, 8.e-6*(subpath->rate*PAYLOAD_SIZE), 8.e-6*(subpath->snd_una*MSS)/(getTime() - sk->start_time));
     }
   }
 
@@ -1522,12 +1522,12 @@ ctcp_probe(srvctcp_sock* sk, int pin) {
    }
 
    if (sk->db) {
-        fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %u %u %f\n",
+        fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %u %u %f %f\n",
            getTime(), sk->clientip, sk->clientport,
            MSS, subpath->snd_nxt, subpath->snd_una,
            subpath->snd_cwnd, subpath->snd_ssthresh, MAX_CWND,
            (int) (subpath->srtt*1000), (int) (subpath->basertt*1000), (int) (subpath->rtt*1000), (int) (subpath->minrtt*1000),
-           100*subpath->slr);
+           100*subpath->slr, subpath->rate*PAYLOAD_SIZE*8e-6);
         fflush(sk->db);
    }
 }
@@ -1564,7 +1564,10 @@ advance_cwnd(srvctcp_sock* sk, int pin){
   Substream_Path *subpath = sk->active_paths[pin];
   
   if (subpath->beg_snd_nxt <= subpath->snd_una) { //need to be more careful about wrapping of sequence numbers here. DL
+     subpath->rate = (subpath->snd_una - subpath->beg_snd_una) /(getTime()-subpath->time_snd_nxt);
      subpath->beg_snd_nxt = subpath->snd_nxt;
+     subpath->beg_snd_una = subpath->snd_una;
+     subpath->time_snd_nxt = getTime();
      uint32_t target_cwnd, diff;
      target_cwnd = subpath->snd_cwnd * subpath->basertt / subpath->srtt;
      diff = subpath->snd_cwnd - target_cwnd;
@@ -2145,6 +2148,7 @@ init_stream(srvctcp_sock* sk, Substream_Path *subpath){
   subpath->cntrtt = 0;
   subpath->losscnt = 0;
   subpath->beg_snd_nxt = 0;
+  subpath->beg_snd_una = 0;
 
   if (sk->multiplier) {
     subpath->snd_ssthresh = sk->multiplier*MAX_CWND;
