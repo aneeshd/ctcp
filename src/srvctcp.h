@@ -36,12 +36,14 @@ typedef struct{
   double tx_time[MAX_CWND];
   int packets_sent[NUM_BLOCKS]; 
   double last_ack_time;
+  double last_ack_time_user;
   uint32_t snd_nxt;
   uint32_t snd_una;
   uint32_t snd_cwnd;                     
   uint32_t snd_ssthresh;                // slow start threshold
   int idle;                                 // successive timeouts 
   double srtt;
+  double srtt_user;                         // used to keep track of delay added by user space operation
   double rto;
   double slr;                               // Smoothed loss rate
   double slr_long;                          // slr with longer memory
