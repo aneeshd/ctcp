@@ -1084,7 +1084,8 @@ send_segs(srvctcp_sock* sk, int pin){
     for (j = 0; j < sk->num_active; j++){
 
       // Compensate for server's over estimation of the loss rate caused by lost acks
-      p = sk->active_paths[j]->slr/(2.0 - sk->active_paths[j]->slr);
+      //p = sk->active_paths[j]->slr/(2.0 - sk->active_paths[j]->slr);
+      p = sk->active_paths[j]->slr;
 
       delay_diff_tmp = subpath->srtt - d[j];
       if ((delay_diff_tmp > 0) && (d[j] > 0)){
@@ -1096,7 +1097,8 @@ send_segs(srvctcp_sock* sk, int pin){
       mean_OnFly += (1-p)*(CurrOnFly[j]);
     }
 
-    p = subpath->slr/(2.0 - subpath->slr);
+    //p = subpath->slr/(2.0 - subpath->slr);
+    p = sk->active_paths[j]->slr;
 
     // The total number of dofs the we think we should be sending (for the current block) from now on
     dof_needed = 0;
