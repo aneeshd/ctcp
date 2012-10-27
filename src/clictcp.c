@@ -750,6 +750,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
               break;
             }else{
               uint8_t pivot = msg->packet_coeff[0];
+              uint8_t logpivot = xFFlog(pivot);
               int i;
 
               if (csk->debug > 9){
@@ -769,12 +770,12 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
               msg->packet_coeff[0] = 0; // TODO check again
               // Subtract row with index start with the row at hand (coffecients)
               for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
-                msg->packet_coeff[i] ^= FFmult(csk->blocks[blockno%NUM_BLOCKS].rows[start][i], pivot);
+                msg->packet_coeff[i] ^= fastFFmult(csk->blocks[blockno%NUM_BLOCKS].rows[start][i], logpivot);
               }
 
               // Subtract row with index start with the row at hand (content)
               for(i = 0; i < PAYLOAD_SIZE; i++){
-                msg->payload[i] ^= FFmult(csk->blocks[blockno%NUM_BLOCKS].content[start][i], pivot);
+                msg->payload[i] ^= fastFFmult(csk->blocks[blockno%NUM_BLOCKS].content[start][i], logpivot);
               }
 
               // Shift the row
@@ -957,14 +958,14 @@ void
 normalize(uint8_t* coefficients, char*  payload, uint8_t size){
   if (coefficients[0] != 1){
     uint8_t pivot = inv_vec[coefficients[0]];
+    uint8_t logpivot=xFFlog(pivot);
     int i;
-    
     for(i = 0; i < size; i++){
-      coefficients[i] = FFmult(pivot,  coefficients[i]);
+      coefficients[i] = fastFFmult(coefficients[i], logpivot);
     }
     
     for(i = 0; i < PAYLOAD_SIZE; i++){
-      payload[i] = FFmult(pivot,  payload[i]);
+      payload[i] = fastFFmult(payload[i],logpivot);
     }
   }
 }
@@ -1023,6 +1024,7 @@ unwrap(Coded_Block_t *blk){
     int row;
     int offset;
     int byte;
+    uint8_t log;
     //prettyPrint(blocks[blockno%NUM_BLOCKS].rows, MAX_CODING_WND);
     for(row = blk->max_packet_index-2; row >= blk->dofs_pushed; row--){
       
@@ -1038,10 +1040,10 @@ unwrap(Coded_Block_t *blk){
         for(offset = 1; offset <  blk->row_len[row]; offset++){
             if(blk->rows[row][offset] == 0)
                 continue;
+            log = xFFlog(blk->rows[row][offset]);
             for(byte = 0; byte < PAYLOAD_SIZE; byte++){
                 blk->content[row][byte]
-                    ^= FFmult(blk->rows[row][offset],
-                              blk->content[row+offset][byte] );
+                    ^= fastFFmult(blk->content[row+offset][byte], log );
             }
         }
 

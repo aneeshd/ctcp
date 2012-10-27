@@ -1751,6 +1751,7 @@ coding_job(void *a){
 
     int i, j;
     int dof_ix, row;
+    uint8_t logcoeff;
 
     int coding_wnd_slope = floor((MAX_CODING_WND - coding_wnd)/dof_request);
 
@@ -1776,8 +1777,9 @@ coding_job(void *a){
       for(i = 1; i < num_packets; i++){
         msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
 
+        logcoeff = xFFlog(msg->packet_coeff[i]);
         for(j = 0; j < PAYLOAD_SIZE; j++){
-          msg->payload[j] ^= FFmult(msg->packet_coeff[i], sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j]);
+          msg->payload[j] ^= fastFFmult(sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j], logcoeff);
         }
       }
 

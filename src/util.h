@@ -99,5 +99,7 @@ void ntohpData(Data_Pckt *msg);
 void ntohpAck(Ack_Pckt *msg);
 void prettyPrint(char** coeffs, int window);
 uint8_t FFmult(uint8_t x, uint8_t y);
+inline uint8_t xFFlog(uint8_t x);
+inline uint8_t fastFFmult(uint8_t x, uint8_t logy);
 
 #endif // UTIL_H_
