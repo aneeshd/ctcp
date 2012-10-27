@@ -371,6 +371,7 @@ void
   double idle_timer;
   int path_index=0;              // Connection identifier
   double rcvt;
+  double rcvt_user;
 
   struct iovec iov;
   struct msghdr msg_sock;
@@ -408,6 +409,7 @@ void
     idle_timer = getTime();
     r = timedread(sk->sockfd, rto_min + RTO_BIAS);
     rcvt = getTime();
+    rcvt_user = 0;
     sk->idle_total += getTime() - idle_timer;
 
     if (r > 0){  /* ack ready */
@@ -427,6 +429,8 @@ void
                            /* Copy to avoid alignment problems: */
          memcpy(&time_now,CMSG_DATA(cmsg),sizeof(time_now));
          rcvt = time_now.tv_sec + time_now.tv_usec*1e-6;
+         // record delay between a packet being received at the NIC and it becoming available here
+         rcvt_user = getTime()-rcvt;
       }
 
       unmarshallAck(ack, buff);
@@ -457,6 +461,7 @@ void
             sk->active_paths[sk->num_active]->pathstate = SYN_RECV;
             log_srv_status(sk);
             sk->active_paths[sk->num_active]->last_ack_time = getTime();
+            sk->active_paths[path_index]->last_ack_time_user = 0;
 
             send_flag(sk, sk->num_active, SYN_ACK);
             sk->active_paths[sk->num_active]->tx_time[0] = getTime();  // save the tx time to estimate rtt later
@@ -479,6 +484,7 @@ void
         // Packet from known path
         
         sk->active_paths[path_index]->last_ack_time = rcvt;
+        sk->active_paths[path_index]->last_ack_time_user = rcvt_user;
 
         if (ack->flag == NORMAL) {
           
@@ -492,6 +498,7 @@ void
 
             // Initialize srtt based on the first round 
             sk->active_paths[path_index]->srtt = getTime() - sk->active_paths[path_index]->tx_time[0];
+            sk->active_paths[path_index]->srtt_user = 0;
             sk->active_paths[path_index]->tx_time[0] = 0;
 
             sk->active_paths[path_index]->pathstate = ESTABLISHED;
@@ -1307,6 +1314,9 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
   subpath->avrgrtt += rtt;
   // What value should g have here when ACK every packet ?  Normal TCP value would be 0.75.  DL
   subpath->srtt = (1-g)*subpath->srtt + g*rtt;
+  // This keeps track of the average delay between a packet being received at the NIC and it becoming available to server_worker()
+  // i.e. the extra delay associated with user-space operation
+  subpath->srtt_user = (1-g)*subpath->srtt_user + g*subpath->last_ack_time_user;
   if (rtt > subpath->rto/beta){
     subpath->rto = (1-g)*subpath->rto + g*beta*rtt;
   }else {
@@ -1361,8 +1371,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
      
     if (sk->debug > 2 && sk->curr_block%1==0){
-      printf("Now sending block %d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms, RATE %f Mbps (%f) \n",
-             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000, 8.e-6*(subpath->rate*PAYLOAD_SIZE), 8.e-6*(subpath->snd_una*MSS)/(getTime() - sk->start_time));
+      printf("Now sending block %d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms, RATE %f Mbps (%f), win %d, SRTT_user %f \n",
+             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000, 8.e-6*(subpath->rate*PAYLOAD_SIZE), 8.e-6*(subpath->snd_una*MSS)/(getTime() - sk->start_time), subpath->snd_cwnd - (subpath->snd_nxt - subpath->snd_una), subpath->srtt_user*1000);
     }
   }
 
@@ -1408,7 +1418,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
       sk->goodacks++;
       int losses = ackno - (subpath->snd_una +1);
       subpath->losscnt += losses;
-      /*
+      /*      
         if (losses > 0){
         printf("Loss report curr block %d ackno - snd_una[path_id] %d\n", curr_block, ackno - snd_una[path_id]);
         }
