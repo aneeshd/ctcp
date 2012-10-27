@@ -1098,7 +1098,7 @@ send_segs(srvctcp_sock* sk, int pin){
     }
 
     //p = subpath->slr/(2.0 - subpath->slr);
-    p = sk->active_paths[j]->slr;
+    p = subpath->slr;
 
     // The total number of dofs the we think we should be sending (for the current block) from now on
     dof_needed = 0;
