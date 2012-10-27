@@ -14,7 +14,7 @@ typedef enum {NONE=0, CLOSE_ERR, CLIHUP} ctcp_err_t;
 typedef enum {SYN_RECV=0, SYN_ACK_SENT, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN_RECV, FIN_ACK_SENT, CLOSING} srvpath_t;
 
 // ------------ CTCP parameters ---------------//
-#define NUM_BLOCKS 4
+#define NUM_BLOCKS 25 
 #define THREADS 5
 #define ALPHA (0.0)           // The number of std to deviate from mean to get 1% target error probability
 #define MIN_DOF_REQUEST 0
