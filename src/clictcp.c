@@ -733,7 +733,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
               // Set the coefficients to be all zeroes (for padding if necessary)
               memset(csk->blocks[blockno%NUM_BLOCKS].rows[start], 0, msg->num_packets);
               // Normalize the coefficients and the packet contents
-              normalize(msg->packet_coeff, msg->payload, msg->num_packets);
+              if (GF==256) normalize(msg->packet_coeff, msg->payload, msg->num_packets);
               // Put the coefficients into the matrix
               memcpy(csk->blocks[blockno%NUM_BLOCKS].rows[start], msg->packet_coeff, msg->num_packets);
               // Put the payload into the corresponding place
@@ -750,7 +750,6 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
               break;
             }else{
               uint8_t pivot = msg->packet_coeff[0];
-              uint8_t logpivot = xFFlog(pivot);
               int i;
 
               if (csk->debug > 9){
@@ -769,13 +768,27 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
 
               msg->packet_coeff[0] = 0; // TODO check again
               // Subtract row with index start with the row at hand (coffecients)
-              for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
-                msg->packet_coeff[i] ^= fastFFmult(csk->blocks[blockno%NUM_BLOCKS].rows[start][i], logpivot);
-              }
+              if (GF==256) {
+                 uint8_t logpivot = xFFlog(pivot);
+                 for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
+                   msg->packet_coeff[i] ^= fastFFmult(csk->blocks[blockno%NUM_BLOCKS].rows[start][i], logpivot);
+                 }
 
-              // Subtract row with index start with the row at hand (content)
-              for(i = 0; i < PAYLOAD_SIZE; i++){
-                msg->payload[i] ^= fastFFmult(csk->blocks[blockno%NUM_BLOCKS].content[start][i], logpivot);
+                 // Subtract row with index start with the row at hand (content)
+                 for(i = 0; i < PAYLOAD_SIZE; i++){
+                   msg->payload[i] ^= fastFFmult(csk->blocks[blockno%NUM_BLOCKS].content[start][i], logpivot);
+                 }
+              } else {
+                 // GF(2)
+                 for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
+                    msg->packet_coeff[i] ^= csk->blocks[blockno%NUM_BLOCKS].rows[start][i];
+                 }
+                 for(i = 0; i < PAYLOAD_SIZE; i+=4){
+                    msg->payload[i] ^= csk->blocks[blockno%NUM_BLOCKS].content[start][i];
+                    msg->payload[i+1] ^= csk->blocks[blockno%NUM_BLOCKS].content[start][i+1];
+                    msg->payload[i+2] ^= csk->blocks[blockno%NUM_BLOCKS].content[start][i+2];
+                    msg->payload[i+3] ^= csk->blocks[blockno%NUM_BLOCKS].content[start][i+3];
+                 }
               }
 
               // Shift the row
@@ -818,7 +831,6 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     if (ack->blockno >= csk->curr_block + NUM_BLOCKS){
       ack->dof_rec = 0;
     }
-
     // compensate for processing time between when packet arrived and when send ack ...
     ack->tstamp = msg->tstamp + getTime()-csk->lastrcvt[curr_substream];
 
@@ -958,8 +970,8 @@ void
 normalize(uint8_t* coefficients, char*  payload, uint8_t size){
   if (coefficients[0] != 1){
     uint8_t pivot = inv_vec[coefficients[0]];
-    uint8_t logpivot=xFFlog(pivot);
     int i;
+    uint8_t logpivot=xFFlog(pivot);
     for(i = 0; i < size; i++){
       coefficients[i] = fastFFmult(coefficients[i], logpivot);
     }
@@ -1040,10 +1052,17 @@ unwrap(Coded_Block_t *blk){
         for(offset = 1; offset <  blk->row_len[row]; offset++){
             if(blk->rows[row][offset] == 0)
                 continue;
-            log = xFFlog(blk->rows[row][offset]);
-            for(byte = 0; byte < PAYLOAD_SIZE; byte++){
-                blk->content[row][byte]
-                    ^= fastFFmult(blk->content[row+offset][byte], log );
+            if (GF==256) {
+               log = xFFlog(blk->rows[row][offset]);
+               for(byte = 0; byte < PAYLOAD_SIZE; byte++){
+                   blk->content[row][byte]
+                       ^= fastFFmult(blk->content[row+offset][byte], log );
+               }
+            } else if (blk->rows[row][offset]>0) {
+               // GF(2)
+               for(byte = 0; byte < PAYLOAD_SIZE; byte++){
+                  blk->content[row][byte] ^= blk->content[row+offset][byte];
+               }
             }
         }
 

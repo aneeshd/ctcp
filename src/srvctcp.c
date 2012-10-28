@@ -1781,11 +1781,21 @@ coding_job(void *a){
       memcpy(msg->payload, sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet], PAYLOAD_SIZE);
 
       for(i = 1; i < num_packets; i++){
-        msg->packet_coeff[i] = (uint8_t)(1 + random()%255);
-
-        logcoeff = xFFlog(msg->packet_coeff[i]);
-        for(j = 0; j < PAYLOAD_SIZE; j++){
-          msg->payload[j] ^= fastFFmult(sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j], logcoeff);
+        msg->packet_coeff[i] = (uint8_t)(random()%GF);
+        if (msg->packet_coeff[i] == 0) continue;
+        if (GF==256) {
+           logcoeff = xFFlog(msg->packet_coeff[i]);
+           for(j = 0; j < PAYLOAD_SIZE; j++){
+             msg->payload[j] ^= fastFFmult(sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j], logcoeff);
+           }
+        } else {
+           // GF(2)
+           for(j = 0; j < PAYLOAD_SIZE; j+=4){
+              msg->payload[j] ^= sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j];
+              msg->payload[j+1] ^= sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j+1];
+              msg->payload[j+2] ^= sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j+2];
+              msg->payload[j+3] ^= sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j+3];
+           }
         }
       }
 

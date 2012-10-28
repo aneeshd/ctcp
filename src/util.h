@@ -19,9 +19,10 @@ typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK} flag_t;
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 // TODO: change such that we can change MSS, BLOCK_SIZE, CODING_WIN via config file
 
+#define GF 256  // field size for coding, options are 2 or 256
 #define BLOCK_SIZE 32 // Maximum # of packets in a block (Default block length)
 #define MAX_CWND 1000 
-#define MAX_CODING_WND 128
+#define MAX_CODING_WND 32 
 
 #define ACK_SIZE sizeof(double) \
     + sizeof(int)               \
