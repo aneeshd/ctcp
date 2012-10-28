@@ -63,6 +63,7 @@ typedef struct{
   uint32_t beg_snd_una; 
   double time_snd_nxt;			    // keep track of time elaped between cwnd updates, for tput logging
   double rate;
+  double goodput;
   int losscnt;
 
   srvpath_t pathstate;                     // connection states

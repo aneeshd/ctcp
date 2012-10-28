@@ -1347,6 +1347,10 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     pthread_rwlock_wrlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
 
     log_srv_status(sk);
+    if (sk->curr_block ==1)
+       subpath->goodput = sk->blocks[sk->curr_block%NUM_BLOCKS].len *PAYLOAD_SIZE;
+    else
+       subpath->goodput += sk->blocks[sk->curr_block%NUM_BLOCKS].len *PAYLOAD_SIZE;
 
     freeBlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS]));
     
@@ -1373,8 +1377,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
      
     if (sk->debug > 2 && sk->curr_block%1==0){
-      printf("Now sending block %d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms, RATE %f Mbps (%f), win %d, SRTT_user %f \n",
-             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000, 8.e-6*(subpath->rate*PAYLOAD_SIZE), 8.e-6*(subpath->snd_una*MSS)/(getTime() - sk->start_time), subpath->snd_cwnd - (subpath->snd_nxt - subpath->snd_una), subpath->srtt_user*1000);
+      printf("Now sending block %d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms, RATE %f Mbps (%f/%f), win %d, SRTT_user %f \n",
+             sk->curr_block, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000, 8.e-6*(subpath->rate*PAYLOAD_SIZE), 8.e-6*(subpath->snd_una*MSS)/(getTime() - sk->start_time), 8.e-6*subpath->goodput/(getTime() - sk->start_time), subpath->snd_cwnd - (subpath->snd_nxt - subpath->snd_una), subpath->srtt_user*1000);
     }
   }
 
