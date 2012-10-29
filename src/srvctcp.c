@@ -1780,6 +1780,7 @@ coding_job(void *a){
     int dof_ix;
     uint8_t logcoeff;
     uint8_t coeff[BLOCK_SIZE];
+    int nonzero;
 
     for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
 
@@ -1788,10 +1789,17 @@ coding_job(void *a){
       msg->num_packets = block_len;
       msg->flag = CODED;
       memset(msg->payload, 0, PAYLOAD_SIZE);
-      msg->packet_coeff[0] = (uint8_t) (random()%256); //record random seed used
-      seedfastrand((uint32_t) (msg->packet_coeff[0]+blockno));
+      // generate random coefficients.  loop is to make sure that at least one is non-zero.
+      nonzero=0;
+      while (nonzero == 0) {
+        msg->packet_coeff[0] = (uint8_t) (random()%256); //record random seed used
+        seedfastrand((uint32_t) (msg->packet_coeff[0]+blockno));
+        for(i = 0; i < block_len; i++){
+          coeff[i] = (uint8_t) (fastrand()%GF);
+          if (coeff[i]>0) nonzero++;
+        }
+      }
       for(i = 0; i < block_len; i++){
-        coeff[i] = (uint8_t)(1+fastrand()%(GF-1));
         if (coeff[i] == 0) continue;
         if (GF==256) {
            logcoeff = xFFlog(coeff[i]);

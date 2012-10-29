@@ -717,7 +717,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
           if (msg->flag == CODED) {
             // reconstruct random linear coefficients for coded packets
             seedfastrand((uint32_t) (msg->packet_coeff[0]+blockno));
-            for (int i=0; i<msg->num_packets; i++) msg->packet_coeff[i]= (uint8_t) (1+fastrand()%(GF-1));
+            for (int i=0; i<msg->num_packets; i++) msg->packet_coeff[i]= (uint8_t) (fastrand()%GF);
           } 
           
           // Shift the row to make SHURE the leading coefficient is not zero
