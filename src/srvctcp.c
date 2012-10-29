@@ -1777,31 +1777,15 @@ coding_job(void *a){
     //fprintf(stdout, "coding job for %d coded packets \n", dof_request);
 
     int i, j;
-    int dof_ix, row;
+    int dof_ix;
     uint8_t logcoeff;
-
-    int coding_wnd_slope = floor((MAX_CODING_WND - coding_wnd)/dof_request);
 
     for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
 
-      coding_wnd += coding_wnd_slope;
-
-      uint8_t num_packets = MIN(coding_wnd, block_len);
-      int partition_size = ceil(block_len/num_packets);
-      Data_Pckt *msg = dataPacket(0, blockno, num_packets);
-
-      row = (random()%partition_size)*num_packets;
-      // TODO Fix this, i.e., make sure every packet is involved in coding_wnd equations
-      msg->start_packet = MIN(row, block_len - num_packets);
-
-      //printf("selected row: %d, start packet %d \n", row, msg->start_packet);
-
+      Data_Pckt *msg = dataPacket(0, blockno, block_len);
+      msg->start_packet = 0;
       memset(msg->payload, 0, PAYLOAD_SIZE);
-
-      msg->packet_coeff[0] = 1;
-      memcpy(msg->payload, sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet], PAYLOAD_SIZE);
-
-      for(i = 1; i < num_packets; i++){
+      for(i = 0; i < block_len; i++){
         msg->packet_coeff[i] = (uint8_t)(random()%GF);
         if (msg->packet_coeff[i] == 0) continue;
         if (GF==256) {
