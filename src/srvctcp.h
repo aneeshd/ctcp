@@ -20,7 +20,8 @@ typedef enum {SYN_RECV=0, SYN_ACK_SENT, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 #define MIN_DOF_REQUEST 0
 #define SLR_LONG_INIT 0.05
 #define RTO_BIAS 0.010      // (seconds) Bias the time-out timer
-#define INIT_RTO 0.5
+#define INIT_RTO 1 
+#define RTO_MIN 0.2
 #define INIT_CODING_WND 5
 #define CONTROL_MAX_RETRIES 10
 
@@ -44,6 +45,9 @@ typedef struct{
   int idle;                                 // successive timeouts 
   double srtt;
   double srtt_user;                         // used to keep track of delay added by user space operation
+  double rttvar;
+  double mdev;
+  double mdev_max;
   double rto;
   double slr;                               // Smoothed loss rate
   double slr_long;                          // slr with longer memory

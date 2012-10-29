@@ -407,7 +407,7 @@ void
     }
 
     idle_timer = getTime();
-    r = timedread(sk->sockfd, rto_min + RTO_BIAS);
+    r = timedread(sk->sockfd, rto_min);
     rcvt = getTime();
     rcvt_user = 0;
     sk->idle_total += getTime() - idle_timer;
@@ -499,6 +499,9 @@ void
             // Initialize srtt based on the first round 
             sk->active_paths[path_index]->srtt = getTime() - sk->active_paths[path_index]->tx_time[0];
             sk->active_paths[path_index]->srtt_user = 0;
+            sk->active_paths[path_index]->mdev = sk->active_paths[path_index]->srtt;
+            sk->active_paths[path_index]->mdev_max = RTO_MIN/4;
+            sk->active_paths[path_index]->rttvar = RTO_MIN/4;
             sk->active_paths[path_index]->tx_time[0] = 0;
 
             sk->active_paths[path_index]->pathstate = ESTABLISHED;
@@ -610,7 +613,7 @@ void
       // Check all the other paths, and see if any of them timed-out.
       for (i = 0; i < sk->num_active; i++){
 	path_index = (path_index+i)%(sk->num_active);
-	if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto + RTO_BIAS){
+	if(rcvt - sk->active_paths[path_index]->last_ack_time > sk->active_paths[path_index]->rto){
 	  if (timeout(sk, path_index)==TRUE){
           
 	    // printf("Timeout %d:", path_index);
@@ -1308,23 +1311,41 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
   //------------- RTT calculations --------------------------//
   double rtt;
+  double m;
   rtt = subpath->last_ack_time - ack->tstamp; // this calculates the rtt for this coded packet
   subpath->rtt = rtt;
   if (rtt < subpath->basertt) subpath->basertt = rtt;
   if (rtt < subpath->minrtt) subpath->minrtt = rtt;
   if (rtt > subpath->maxrtt) subpath->maxrtt = rtt;
   subpath->avrgrtt += rtt;
-  // What value should g have here when ACK every packet ?  Normal TCP value would be 0.75.  DL
-  subpath->srtt = (1-g)*subpath->srtt + g*rtt;
-  // This keeps track of the average delay between a packet being received at the NIC and it becoming available to server_worker()
-  // i.e. the extra delay associated with user-space operation
-  subpath->srtt_user = (1-g)*subpath->srtt_user + g*subpath->last_ack_time_user;
-  if (rtt > subpath->rto/beta){
-    subpath->rto = (1-g)*subpath->rto + g*beta*rtt;
-  }else {
-    subpath->rto = (1-g/5)*subpath->rto + g/5*beta*rtt;
+  //  Following RTO calcs are similar to Linux
+  m = rtt-subpath->srtt;
+  if (m < 0) {
+    m = -m; 
+    if (m > subpath->mdev) m = m/8; // slow decrease
+  } 
+  subpath->mdev = 0.75*subpath->mdev + 0.25*m;
+  if (subpath->mdev > subpath->mdev_max) {
+    subpath->mdev_max = subpath->mdev;
+    if (subpath->mdev_max > subpath->rttvar) 
+       subpath->rttvar = subpath->mdev_max;
   }
+  // What value should g have here when ACK every packet ?  Normal TCP value would be 1/8.  DL
+  subpath->srtt = (1-g)*subpath->srtt + g*rtt;
+  if (subpath->cntrtt == 0) {
+     // once per RTT update
+     if (subpath->mdev_max < subpath->rttvar) 
+        subpath->rttvar = 0.75*subpath->rttvar + 0.25*subpath->mdev_max;
+     subpath->mdev_max = RTO_MIN/4;
+  }
+  subpath->rto = subpath->srtt + 4*subpath->rttvar;
+  
+  // This keeps track of the average delay between a packet being received at the NIC and it becoming available
+  // to server_worker() i.e. the extra delay associated with user-space operation
+  subpath->srtt_user = (1-g)*subpath->srtt_user + g*subpath->last_ack_time_user;
+
   subpath->cntrtt++;
+
   if (sk->debug > 6) {
     fprintf(sk->db,"%f %d %f  %d %d ack%d\n",
             subpath->last_ack_time, // - sk->start_time,
