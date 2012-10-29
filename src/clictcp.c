@@ -714,6 +714,11 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
         if(csk->blocks[blockno%NUM_BLOCKS].dofs < csk->blocks[blockno%NUM_BLOCKS].len){
 
           start = msg->start_packet;
+          if (msg->flag == CODED) {
+            // reconstruct random linear coefficients for coded packets
+            seedfastrand((uint32_t) (msg->packet_coeff[0]+blockno));
+            for (int i=0; i<msg->num_packets; i++) msg->packet_coeff[i]= (uint8_t) (1+fastrand()%(GF-1));
+          } 
           
           // Shift the row to make SHURE the leading coefficient is not zero
           int shift = shift_row(msg->packet_coeff, msg->num_packets);
@@ -781,7 +786,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
               } else {
                  // GF(2)
                  for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
-                    msg->packet_coeff[i] ^= csk->blocks[blockno%NUM_BLOCKS].rows[start][i];
+                   msg->packet_coeff[i] ^= csk->blocks[blockno%NUM_BLOCKS].rows[start][i];
                  }
                  for(i = 0; i < PAYLOAD_SIZE; i+=4){
                     msg->payload[i] ^= csk->blocks[blockno%NUM_BLOCKS].content[start][i];
@@ -1141,7 +1146,7 @@ unmarshallData(Data_Pckt* msg, char* buf, clictcp_sock *csk){
     memset(msg->packet_coeff, 0, coding_wnd);
 
     int i;
-    for(i = 0; i < msg->num_packets; i++){
+    for(i = 0; i < 1; i++){
         memcpy(&msg->packet_coeff[i], buf+index, (part = sizeof(msg->packet_coeff[i])));
         index += part;
     }

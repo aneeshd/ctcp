@@ -169,5 +169,21 @@ FFmult(uint8_t x, uint8_t y)
     return FFantilog[FFlog[x]+FFlog[y]];
 }
 
+/* random number generation */
+#define rotl(r,n) (((r)<<(n)) | ((r)>>((8*sizeof(r))-(n))))
 
-
+typedef unsigned uint32_t;  // or use <stdint.h> if available
+uint32_t x, y, z;
+ 
+void seedfastrand(uint32_t seed) {
+   x = (seed >> 16)    + 4125832013u; // upper 16 bits + offset
+   y = (seed & 0xffff) +  814584116u; // lower 16 bits + offset
+   z = 542;
+}
+ 
+uint32_t fastrand() {  // Combined period = 2^81.95
+   x *=  255519323u; x = rotl(x,13); // CMR, period = 4294785923 (prime)
+   y *= 3166389663u; y = rotl(y,17); // CMR, period = 4294315741 (prime)
+   z -= rotl(z,11);  z = rotl(z,27); // RSR, period = 253691 = 2^3*3^2*71*557
+   return x ^ y ^ z;
+}

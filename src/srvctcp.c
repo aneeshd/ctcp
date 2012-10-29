@@ -1779,17 +1779,22 @@ coding_job(void *a){
     int i, j;
     int dof_ix;
     uint8_t logcoeff;
+    uint8_t coeff[BLOCK_SIZE];
 
     for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
 
-      Data_Pckt *msg = dataPacket(0, blockno, block_len);
+      Data_Pckt *msg = dataPacket(0, blockno, 1);
       msg->start_packet = 0;
+      msg->num_packets = block_len;
+      msg->flag = CODED;
       memset(msg->payload, 0, PAYLOAD_SIZE);
+      msg->packet_coeff[0] = (uint8_t) (random()%256); //record random seed used
+      seedfastrand((uint32_t) (msg->packet_coeff[0]+blockno));
       for(i = 0; i < block_len; i++){
-        msg->packet_coeff[i] = (uint8_t)(random()%GF);
-        if (msg->packet_coeff[i] == 0) continue;
+        coeff[i] = (uint8_t)(1+fastrand()%(GF-1));
+        if (coeff[i] == 0) continue;
         if (GF==256) {
-           logcoeff = xFFlog(msg->packet_coeff[i]);
+           logcoeff = xFFlog(coeff[i]);
            for(j = 0; j < PAYLOAD_SIZE; j++){
              msg->payload[j] ^= fastFFmult(sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet+i][j], logcoeff);
            }
@@ -1970,7 +1975,7 @@ marshallData(Data_Pckt msg, char* buf){
     + sizeof(msg.blockno)
     + sizeof(msg.start_packet)
     + sizeof(msg.num_packets)
-    + msg.num_packets*sizeof(msg.packet_coeff);
+    + sizeof(msg.packet_coeff);
 
   //Set to zeroes before startingr
   memset(buf, 0, size);
@@ -1994,7 +1999,7 @@ marshallData(Data_Pckt msg, char* buf){
   index += part;
 
   int i;
-  for(i = 0; i < msg.num_packets; i ++){
+  for(i = 0; i < 1; i ++){
     memcpy(buf + index, &msg.packet_coeff[i], (part = sizeof(msg.packet_coeff[i])));
     index += part;
   }

@@ -10,7 +10,7 @@ typedef int bool;
 #define MAX(x,y) (y)^(((x) ^ (y)) & - ((x) > (y)))
 
 // flags for Data_Pckt
-typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK} flag_t;
+typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK, CODED} flag_t;
 
 //---------------- CTCP parameters ------------------//
 #define MSS 1500
@@ -39,7 +39,8 @@ typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK} flag_t;
    + sizeof(uint32_t) \
    + sizeof(uint8_t) \
    + sizeof(uint8_t) \
-   + MAX_CODING_WND*sizeof(uint8_t) ) ) 
+   + sizeof(uint8_t) \
+   ) ) 
 
 typedef int socket_t;
 typedef struct timeval timeval_t;
@@ -103,4 +104,6 @@ void prettyPrint(char** coeffs, int window);
 uint8_t FFmult(uint8_t x, uint8_t y);
 inline uint8_t xFFlog(uint8_t x);
 inline uint8_t fastFFmult(uint8_t x, uint8_t logy);
+void seedfastrand(uint32_t seed);
+uint32_t fastrand();
 #endif // UTIL_H_
