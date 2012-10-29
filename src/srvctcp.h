@@ -26,7 +26,7 @@ typedef enum {SYN_RECV=0, SYN_ACK_SENT, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 #define CONTROL_MAX_RETRIES 10
 
 //---------------Constants -----------------------//
-#define slr_mem          1.0/BLOCK_SIZE      // The memory of smoothing function
+#define slr_mem          1.0/128      // The memory of smoothing function
 #define slr_longmem      1.0/(BLOCK_SIZE*10) // Long term memory smoothing constant
 #define g                1.0/(BLOCK_SIZE/5)      // Memory for updating slr, rto
 #define beta             2.5                 // rto range compared to rtt
