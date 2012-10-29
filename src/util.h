@@ -13,8 +13,9 @@ typedef int bool;
 typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK} flag_t;
 
 //---------------- CTCP parameters ------------------//
-#define MSS 1450
-#define UDP_HEADER_SIZE 0 // We have to take into account the UDP header 
+#define MSS 1500
+#define IPUDP_HEADER_SIZE 32 // We have to take into account the IP+UDP header
+                             // Max IP header is 24B, UDP header is 8B 
 
 #define CHECKSUM_SIZE 16 // MD5 is a 16 byte checksum
 // TODO: change such that we can change MSS, BLOCK_SIZE, CODING_WIN via config file
@@ -31,7 +32,7 @@ typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK} flag_t;
     + sizeof(uint8_t)           
 
 #define PAYLOAD_SIZE (MSS \
-  - UDP_HEADER_SIZE \
+  - IPUDP_HEADER_SIZE \
   - (sizeof(double) \
    + sizeof(flag_t) \
    + sizeof(uint32_t) \
@@ -102,5 +103,4 @@ void prettyPrint(char** coeffs, int window);
 uint8_t FFmult(uint8_t x, uint8_t y);
 inline uint8_t xFFlog(uint8_t x);
 inline uint8_t fastFFmult(uint8_t x, uint8_t logy);
-
 #endif // UTIL_H_
