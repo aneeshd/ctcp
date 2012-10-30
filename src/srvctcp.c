@@ -1105,7 +1105,7 @@ send_segs(srvctcp_sock* sk, int pin){
 
     // The total number of dofs the we think we should be sending (for the current block) from now on
     dof_needed = 0;
-    while ( (dof_needed < win) &&  ( (dof_needed)*(1-p) + (mean_rate*subpath->srtt - mean_latency + mean_OnFly) + 0.5  < dof_request_tmp) ) {
+    while ( (dof_needed < win) &&  ( (dof_needed)*(1-p) + (mean_rate*subpath->srtt - mean_latency + mean_OnFly)  < dof_request_tmp) ) {
       dof_needed++;
     }
 
