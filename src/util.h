@@ -22,6 +22,7 @@ typedef enum {NORMAL=0, SYN, SYN_ACK, FIN, FIN_ACK, CODED} flag_t;
 
 #define GF 256  // field size for coding, options are 2 or 256
 #define BLOCK_SIZE 32 // Maximum # of packets in a block (Default block length)
+#define NUM_BLOCKS 50
 #define MAX_CWND 1000 
 #define MAX_CODING_WND 32 
 

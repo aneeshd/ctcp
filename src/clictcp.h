@@ -19,7 +19,6 @@ typedef enum {SYN_SENT=0, SYN_ACK_RECV, ESTABLISHED, FIN_SENT, FIN_ACK_RECV, FIN
 //---------------- DEFAULT CONNECTION PARAMETERS ------------------//
 #define BUFFSIZE  3000
 
-#define NUM_BLOCKS 25 
 #define MAX_SUBSTREAMS 5
 #define INIT_IDLE_TIME 0.5 // in seconds
 
