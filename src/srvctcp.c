@@ -1564,7 +1564,7 @@ ctcp_probe(srvctcp_sock* sk, int pin) {
            PAYLOAD_SIZE, subpath->snd_nxt, subpath->snd_una,
            subpath->snd_cwnd, subpath->snd_ssthresh, MAX_CWND,
            (int) (subpath->srtt*1000), (int) (subpath->basertt*1000), (int) (subpath->rtt*1000), (int) (subpath->minrtt*1000),
-           100*subpath->slr, subpath->rate*PAYLOAD_SIZE*8e-6, subpath->goodput*PAYLOAD_SIZE*8e-6);
+           subpath->total_loss, subpath->rate*PAYLOAD_SIZE*8e-6, subpath->goodput*PAYLOAD_SIZE*8e-6);
         fflush(sk->db);
    }
 }
