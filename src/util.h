@@ -71,7 +71,7 @@ typedef struct{
   pthread_cond_t  block_free_condv;
   pthread_cond_t  block_ready_condv;
   uint32_t len; // Number of bare packets inside the block
-  char** content; // Array of pointers that point to the marshalled data of the bare packets
+  char content[BLOCK_SIZE][PAYLOAD_SIZE]; // Array of pointers that point to the marshalled data of the bare packets
 } Block_t;
 
 typedef struct{
@@ -86,9 +86,9 @@ typedef struct{
 typedef struct{
   uint8_t dofs; // Number of degrees of freedom thus far
   uint8_t len;
-  char** rows; // Matrix of the coefficients of the coded packets
-  char** content; // Contents of the coded packets
-  int* row_len;  // maximum number of non-zeros in each row
+  char rows[BLOCK_SIZE][BLOCK_SIZE]; // Matrix of the coefficients of the coded packets
+  char content[BLOCK_SIZE][PAYLOAD_SIZE]; // Contents of the coded packets
+  int row_len[BLOCK_SIZE];  // maximum number of non-zeros in each row
   int max_coding_wnd; //largest number of packets mixed together
   int dofs_pushed;
   int max_packet_index;

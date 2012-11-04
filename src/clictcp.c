@@ -726,15 +726,11 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
           
           // THE while loop!
           while(!isEmpty(msg->packet_coeff, msg->num_packets)){
-            if(csk->blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
+            if(csk->blocks[blockno%NUM_BLOCKS].rows[start][0] == -1){
               
               msg->num_packets = MIN(msg->num_packets, BLOCK_SIZE - start);
               
-              // Allocate the memory for the coefficients in the matrix for this block
-              csk->blocks[blockno%NUM_BLOCKS].rows[start] = (char *) malloc(msg->num_packets*sizeof(char));
               csk->blocks[blockno%NUM_BLOCKS].row_len[start] = msg->num_packets;              
-              // Allocate the memory for the content of the packet
-              csk->blocks[blockno%NUM_BLOCKS].content[start] = malloc(PAYLOAD_SIZE);
               // Set the coefficients to be all zeroes (for padding if necessary)
               memset(csk->blocks[blockno%NUM_BLOCKS].rows[start], 0, msg->num_packets);
               // Normalize the coefficients and the packet contents
@@ -916,7 +912,7 @@ partial_write(clictcp_sock* csk){
     unwrap(&(csk->blocks[blockno%NUM_BLOCKS]));
  }
   do {
-    if ( csk->blocks[blockno%NUM_BLOCKS].rows[start] == NULL){
+    if ( csk->blocks[blockno%NUM_BLOCKS].rows[start][0] == -1){
       push_ready = FALSE;
     } else {
       for (i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
@@ -1030,9 +1026,8 @@ initCodedBlock(Coded_Block_t *blk){
 
     int i;
     for(i = 0; i < BLOCK_SIZE; i++){
-        blk->rows[i]    = NULL;
+        blk->rows[i][0]    = -1;
         blk->row_len[i]    = 0;
-        blk->content[i] = NULL;
     }
 }
 
@@ -1102,13 +1097,6 @@ writeAndFreeBlock(Coded_Block_t *blk, fifo_t *buffer){
           bytes_pushed += push_tmp;
         }
 
-    }
-
-    for(i = 0; i < blk->len; i++){
-      // Free the content
-      free(blk->content[i]);
-      // Free the matrix
-      free(blk->rows[i]);
     }
 }
 
@@ -1439,9 +1427,6 @@ create_clictcp_sock(void){
     
   // Initialize the blocks
   for(k = 0; k < NUM_BLOCKS; k++){
-    sk->blocks[k].rows = malloc(BLOCK_SIZE*sizeof(char*));
-    sk->blocks[k].content = malloc(BLOCK_SIZE*sizeof(char*));
-    sk->blocks[k].row_len = malloc(BLOCK_SIZE*sizeof(int));
     initCodedBlock(&(sk->blocks[k]));
   }
 
@@ -1690,12 +1675,6 @@ close_clictcp(clictcp_sock* csk){
   }
   
   fifo_free(&(csk->usr_cache));  
-
-  for(k = 0; k < NUM_BLOCKS; k++){
-    free(csk->blocks[k].rows);
-    free(csk->blocks[k].content);
-    free(csk->blocks[k].row_len);
-  }
 
   free(csk);
 

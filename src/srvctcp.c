@@ -912,9 +912,15 @@ send_flag(srvctcp_sock* sk, int path_id, flag_t flag ){
   char *buff = malloc(BUFFSIZE);
   int numbytes;
   // FIN_CLI sequence number is meaningless
-  Data_Pckt *msg = dataPacket(0, sk->curr_block, 0);
+  //Data_Pckt *msg = dataPacket(0, sk->curr_block, 0);
+  Data_Pckt* msg    = (Data_Pckt*) malloc(sizeof(Data_Pckt));
+  msg->flag         = flag;
+  msg->blockno      = sk->curr_block;
+  msg->num_packets  = 0;
+  msg->start_packet = 0;
+  msg->payload = NULL;
+  msg->packet_coeff = NULL;
   msg->tstamp = getTime();
-  msg->flag = flag;
 
   int size = marshallData(*msg, buff);
 
@@ -931,8 +937,7 @@ send_flag(srvctcp_sock* sk, int path_id, flag_t flag ){
     return -1;
   }
   
-  //free(msg->payload);
-  free(msg);
+  free_coded_pkt(msg);
   free(buff);
   return 0;
 }
@@ -1250,11 +1255,7 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
   subpath->tx_time[subpath->snd_nxt%MAX_CWND] = msg->tstamp + 1.5*subpath->srtt + RTO_BIAS;
   //printf("Freeing the message - blockno %d snd_nxt[path_id] %d ....", blockno, snd_nxt[path_id]);
   sk->opkts++;
-  free(msg->packet_coeff);
-  if (msg->num_packets > 1){
-    free(msg->payload);
-  }
-  free(msg);
+  free_coded_pkt(msg);
   free(buff);
   //printf("---------- Done Freeing the message\n-------------");
 }
@@ -1846,7 +1847,7 @@ free_coded_pkt(void* a)
   Data_Pckt* msg = (Data_Pckt*) a;
   //printf("freeing msg blockno %d start pkt %d\n", msg->blockno, msg->start_packet);
   free(msg->packet_coeff);
-  if (msg->num_packets > 1){
+  if (msg->flag == CODED){
     free(msg->payload);
   }
   free(msg);
@@ -1861,7 +1862,7 @@ readBlock(Block_t* blk, const void *buf, size_t buf_len){
   uint16_t bytes_read; 
   uint32_t bytes_left = buf_len; 
   while(blk->len < BLOCK_SIZE && bytes_left){
-    char* tmp = malloc(PAYLOAD_SIZE);
+    char* tmp = blk->content[blk->len]; 
     memset(tmp, 0, PAYLOAD_SIZE); // This is done to pad with 0's
     bytes_read = (uint16_t) MIN(PAYLOAD_SIZE-2, bytes_left);
     memcpy(tmp+2, buf+buf_len-bytes_left, bytes_read);
@@ -1871,8 +1872,6 @@ readBlock(Block_t* blk, const void *buf, size_t buf_len){
     bytes_read = ntohs(bytes_read);
     //printf("bytes_read from block %d = %d \t bytes_left %d\n", blockno, bytes_read, bytes_left);
     
-    // Insert this pointer into the blocks datastructure
-    blk->content[blk->len] = tmp;
     blk->len++;
     bytes_left -= bytes_read;
   }
@@ -1886,11 +1885,6 @@ readBlock(Block_t* blk, const void *buf, size_t buf_len){
  */
 void
 freeBlock(Block_t* blk){
-  int i;
-  for(i = 0; i < blk->len; i++){
-    free(blk->content[i]);
-  }
-
   // reset the counters
   blk->len = 0;
 }
@@ -2010,13 +2004,15 @@ marshallData(Data_Pckt msg, char* buf){
   memcpy(buf + index, &msg.num_packets, (part = sizeof(msg.num_packets)));
   index += part;
 
-  int i;
-  for(i = 0; i < 1; i ++){
-    memcpy(buf + index, &msg.packet_coeff[i], (part = sizeof(msg.packet_coeff[i])));
-    index += part;
+  if (msg.packet_coeff) {
+    int i;
+    for(i = 0; i < 1; i ++){
+      memcpy(buf + index, &msg.packet_coeff[i], (part = sizeof(msg.packet_coeff[i])));
+      index += part;
+    }
   }
 
-  memcpy(buf + index, msg.payload, (part = PAYLOAD_SIZE));
+  if (msg.payload) memcpy(buf + index, msg.payload, (part = PAYLOAD_SIZE));
   index += part;
 
   /*
@@ -2134,7 +2130,6 @@ create_srvctcp_sock(void){
 
   for(i = 0; i < NUM_BLOCKS; i++){
     sk->dof_remain[i] = 0;
-    sk->blocks[i].content = malloc(BLOCK_SIZE*sizeof(char*));
   }
 
   // initialize the thread pool
