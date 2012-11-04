@@ -1578,9 +1578,13 @@ int loss_occurred(srvctcp_sock* sk, int pin) {
 
 void decrease_cwnd(srvctcp_sock* sk, int pin) {
   Substream_Path *subpath = sk->active_paths[pin];
- 
+
+  if (subpath->dec_snd_nxt >= subpath->snd_una) return; 
+  subpath->dec_snd_nxt = subpath->snd_una + subpath->snd_cwnd ; // no more backoffs within the next RTT
+  subpath->snd_cwnd -= subpath->toggle; // undo last increase 
   if (subpath->cntrtt > 2) {
      int decrease = subpath->snd_cwnd * (1-subpath->basertt/subpath->minrtt);
+     if (decrease > subpath->snd_cwnd/2) decrease = subpath->snd_cwnd/2;
      subpath->snd_cwnd -= decrease;
   } else
      subpath->snd_cwnd = (int) (subpath->snd_cwnd/2);
@@ -1602,7 +1606,7 @@ advance_cwnd(srvctcp_sock* sk, int pin){
   
   if (subpath->beg_snd_nxt <= subpath->snd_una) { //need to be more careful about wrapping of sequence numbers here. DL
      subpath->rate = (subpath->snd_una - subpath->beg_snd_una) /(getTime()-subpath->time_snd_nxt);
-     subpath->beg_snd_nxt = subpath->snd_nxt;
+     subpath->beg_snd_nxt = subpath->snd_una + subpath->snd_cwnd; // NB: can't use snd_nxt here as stale following receipt of ack
      subpath->beg_snd_una = subpath->snd_una;
      subpath->time_snd_nxt = getTime();
      uint32_t target_cwnd, diff;
@@ -1610,17 +1614,15 @@ advance_cwnd(srvctcp_sock* sk, int pin){
      diff = subpath->snd_cwnd - target_cwnd;
      if (!strcmp(sk->cong_control,"aimd")) { 
         // use AIMD cwnd update with adaptive backoff
-        if (!loss_occurred(sk,pin)) {
-           if (diff > 1 && subpath->snd_cwnd <= subpath->snd_ssthresh) {
-              // exit slow-start using Vegas approach
-              if (target_cwnd+1 < subpath->snd_cwnd) subpath->snd_cwnd=target_cwnd+1;
-              if (subpath->snd_cwnd-1 < subpath->snd_ssthresh) subpath->snd_ssthresh=subpath->snd_cwnd-1;
-           } else
-              subpath->snd_cwnd++;
-           constrain_cwnd(sk,pin);
-           if (subpath->snd_ssthresh < 0.75*subpath->snd_cwnd) subpath->snd_ssthresh=0.75*subpath->snd_cwnd;
-        } else 
-           decrease_cwnd(sk, pin); 
+        if (diff > 1 && subpath->snd_cwnd <= subpath->snd_ssthresh) {
+           // exit slow-start using Vegas approach
+           if (target_cwnd+1 < subpath->snd_cwnd) subpath->snd_cwnd=target_cwnd+1;
+           if (subpath->snd_cwnd-1 < subpath->snd_ssthresh) subpath->snd_ssthresh=subpath->snd_cwnd-1;
+        } else if (subpath->dec_snd_nxt < subpath->snd_una)
+           subpath->snd_cwnd += subpath->toggle;
+        if (loss_occurred(sk,pin)) decrease_cwnd(sk, pin);
+        constrain_cwnd(sk,pin);
+        if (subpath->snd_ssthresh < 0.75*subpath->snd_cwnd) subpath->snd_ssthresh=0.75*subpath->snd_cwnd;
      } else if (!strcmp(sk->cong_control,"vegas")) {
         // use Vegas cwnd update
         if (subpath->cntrtt <= 2) {
@@ -1667,6 +1669,8 @@ advance_cwnd(srvctcp_sock* sk, int pin){
         printf("Unknown congestion control option: %s\n", sk->cong_control);
      if (sk->debug > 2) ctcp_probe(sk, pin);
      subpath->cntrtt = 0;
+     //subpath->toggle = (subpath->toggle+1)%2; // for fairness with delayed acking
+     subpath->toggle = 1; // for fairness with appropriate byte counting
      subpath->minrtt = 999999.0;
      subpath->losscnt=0;
   } else if (subpath->snd_cwnd <= subpath->snd_ssthresh) {
@@ -2192,9 +2196,11 @@ init_stream(srvctcp_sock* sk, Substream_Path *subpath){
   subpath->snd_una = 1;
   subpath->snd_cwnd = sk->initsegs;
   subpath->cntrtt = 0;
+  subpath->toggle = 1;
   subpath->losscnt = 0;
   subpath->beg_snd_nxt = 0;
   subpath->beg_snd_una = 0;
+  subpath->dec_snd_nxt = 0;
 
   if (sk->multiplier) {
     subpath->snd_ssthresh = sk->multiplier*MAX_CWND;

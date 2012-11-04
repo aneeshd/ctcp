@@ -63,6 +63,8 @@ typedef struct{
   int v0;
   double max_delta;                         // vegas like tracker
   uint32_t cntrtt;			    // vegas count of ACKs received
+  uint32_t dec_snd_nxt;
+  int toggle;
   uint32_t beg_snd_nxt;        		    // marker for next cwnd update 
   uint32_t beg_snd_una; 
   double time_snd_nxt;			    // keep track of time elaped between cwnd updates, for tput logging
