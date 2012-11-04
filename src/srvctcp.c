@@ -1559,7 +1559,7 @@ ctcp_probe(srvctcp_sock* sk, int pin) {
    }
 
    if (sk->db) {
-        fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %u %u %f %f %f\n",
+        fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %u %u %u %f %f\n",
            getTime(), sk->clientip, sk->clientport,
            PAYLOAD_SIZE, subpath->snd_nxt, subpath->snd_una,
            subpath->snd_cwnd, subpath->snd_ssthresh, MAX_CWND,
