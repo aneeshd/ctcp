@@ -81,7 +81,7 @@ void err_sys(char *s, clictcp_sock *csk);
 void open_status_log(clictcp_sock* csk, char* port);
 void log_cli_status(clictcp_sock* csk);
 
-void bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int substream);
+void bldack(clictcp_sock* csk, Skb *skb, bool match, int substream);
 
 void normalize(uint8_t* coefficients, char*  payload, uint8_t size);
 int  shift_row(uint8_t* buf, int len);
@@ -92,7 +92,7 @@ void unwrap(Coded_Block_t *blk);
 void writeAndFreeBlock(Coded_Block_t *blk, fifo_t *buffer);
 void partial_write(clictcp_sock* csk);
 
-bool unmarshallData(Data_Pckt* msg, char* buf, clictcp_sock *csk);
+bool unmarshallData(Msgbuf* msgbuf, clictcp_sock *csk);
 int  marshallAck(Ack_Pckt msg, char* buf);
 
 int  readLease(char *leasefile, dhcp_lease *leases);

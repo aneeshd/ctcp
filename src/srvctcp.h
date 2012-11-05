@@ -151,7 +151,7 @@ void send_one(srvctcp_sock* sk, unsigned int n, int pin);
 void advance_cwnd(srvctcp_sock* sk, int pin);
 void readConfig(char* configfile, srvctcp_sock* sk);
 void err_sys(srvctcp_sock* sk, char* s);
-int marshallData(Data_Pckt msg, char* buf);
+int marshallData(Msgbuf* msgbuf);
 bool unmarshallAck(Ack_Pckt* msg, char* buf);
 void openLog(srvctcp_sock* sk, char* log_name);
 void* coding_job(void *a);

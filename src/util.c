@@ -9,6 +9,7 @@
 #include <math.h>
 #include "util.h"
 #include "md5.h"
+#include <pthread.h>
 
 
 /*
@@ -89,8 +90,7 @@ dataPacket(uint32_t seqno, uint32_t blockno, uint8_t num_packets){
     packet->seqno        = seqno;
     packet->blockno      = blockno;
     packet->num_packets  = num_packets;
-    packet->packet_coeff = (uint8_t*) malloc(num_packets*sizeof(uint8_t));
-    packet->payload      = (char*) malloc(PAYLOAD_SIZE);
+    packet->packet_coeff = 0; 
     return packet;
 }
 
@@ -187,3 +187,47 @@ uint32_t fastrand() {  // Combined period = 2^81.95
    z -= rotl(z,11);  z = rotl(z,27); // RSR, period = 253691 = 2^3*3^2*71*557
    return x ^ y ^ z;
 }
+
+/* memory management */
+
+
+static Skb* first = NULL;
+static int num=0;
+pthread_mutex_t skb_pool_ = PTHREAD_MUTEX_INITIALIZER;
+
+Skb* alloc_skb() {
+  Skb* freeskb;
+  pthread_mutex_lock(&skb_pool_);
+  if (first == NULL) {
+    // allocate a new skb
+    num++;
+    if (num > 5000) printf("WARNING: mem pool %u\n", num);
+    freeskb = malloc(sizeof(Skb));
+    if (!freeskb) return NULL; // malloc failed
+  } else {
+    // otherwise, we can recycle
+    freeskb=first;
+    first=first->next;
+  }
+  freeskb->next = NULL;
+  freeskb->used = TRUE;
+  pthread_mutex_unlock(&skb_pool_);
+  return freeskb;
+}
+
+void free_skb(void* a) {
+
+  Skb* freeskb = (Skb*) a;
+  if (freeskb->used == FALSE) return; // already freed
+  pthread_mutex_lock(&skb_pool_);
+  if (first == NULL) {
+     first = freeskb;
+     first->next=NULL;
+  } else {
+     freeskb->next = first;
+     first=freeskb;
+  }
+  first->used = FALSE;
+  pthread_mutex_unlock(&skb_pool_);
+}
+

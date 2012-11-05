@@ -343,23 +343,20 @@ void
   clictcp_sock* csk = (clictcp_sock*) arg;
   socklen_t srvlen = sizeof(csk->srv_addr);
   int k, numbytes;//[MAX_SUBSTREAMS];
-  char *buff = malloc(BUFFSIZE);
-
+  struct timeval time_now;
   struct iovec iov;
   struct msghdr msg_sock;
   char ctrl_buff[CMSG_SPACE(sizeof(struct timeval))];
   struct cmsghdr *cmsg;
-  iov.iov_base = buff;
-  iov.iov_len = BUFFSIZE;
+  iov.iov_len = MSS;
   msg_sock.msg_iov = &iov;
   msg_sock.msg_iovlen = 1;
   msg_sock.msg_name = &(csk->srv_addr);
   msg_sock.msg_namelen = srvlen;
   msg_sock.msg_control = (caddr_t)ctrl_buff;
   msg_sock.msg_controllen = sizeof(ctrl_buff);
-
-  struct timeval time_now;
-
+  Skb* skb;
+ 
   // READING FROM MULTIPLE SOCKET
   struct pollfd read_set[MAX_SUBSTREAMS];
 
@@ -368,7 +365,6 @@ void
     read_set[k].events = POLLIN;
   }
 
-  Data_Pckt *msg = malloc(sizeof(Data_Pckt));
   double idle_timer;
   int curr_substream=0;
   int ready, i;
@@ -388,15 +384,8 @@ void
 
 
   do{
-
     idle_timer = getTime();
 
-    /*
-    double mintime = 5; // 5 seconds at least
-    for (k=0; k< csk->substreams; k++){
-      if (mintime > csk->idle_time[k]) mintime = csk->idle_time[k];
-    }   
-    */
     // value -1 blocks until something is ready to read
     ready = ppoll(read_set, csk->substreams, NULL, &(sa.sa_mask));
 
@@ -411,8 +400,11 @@ void
       //ready = POLL_TO_FLG;
     }else{
       srvlen = sizeof(csk->srv_addr); 
-
       do{
+        skb = alloc_skb();
+        Msgbuf* msgbuf = &(skb->msgbuf);
+        iov.iov_base = msgbuf->buff;
+        Data_Pckt* msg = &(msgbuf->msg);
         if(read_set[curr_substream].revents & POLLIN){
           if((numbytes = recvmsg(csk->sockfd[curr_substream], &msg_sock, 0))== -1){
             err_sys("recvmsg",csk);
@@ -433,8 +425,6 @@ void
             log_cli_status(csk);
           }
           if(numbytes <= 0) break;
-
-
           // use packet timestamp from kernel, if possible ...
           cmsg = CMSG_FIRSTHDR(&msg_sock);
           if (cmsg &&
@@ -455,7 +445,7 @@ void
           if (csk->start_time == 0) csk->start_time =  csk->lastrcvt[curr_substream];   /* first pkt time */
 
           // Unmarshall the packet
-          bool match = unmarshallData(msg, buff, csk);
+          bool match = unmarshallData(msgbuf, csk);
 
           switch (msg->flag){
 
@@ -554,12 +544,12 @@ void
             }
             
             if(csk->pathstate[curr_substream] == ESTABLISHED){
-              bldack(csk, msg, match, curr_substream);            
+              bldack(csk, skb, match, curr_substream);            
             }else if(csk->pathstate[curr_substream] == SYN_ACK_RECV ||
                      csk->pathstate[curr_substream] == SYN_SENT){
               csk->pathstate[curr_substream] = ESTABLISHED;
               log_cli_status(csk);
-              bldack(csk, msg, match, curr_substream);            
+              bldack(csk, skb, match, curr_substream);            
             }else{
               //printf("State %d: Received a data packet\n", csk->pathstate[curr_substream]);
             }
@@ -571,9 +561,7 @@ void
         if(curr_substream == csk->substreams) curr_substream = 0;
 
       }while(ready>0);
-
     }
-
     if (csk->status != CLOSED){
       for(k = 0; k<csk->substreams; k++){
         if(getTime() - csk->lastrcvt[k] > csk->idle_time[k]){     
@@ -638,13 +626,7 @@ void
       log_cli_status(csk);
       fifo_release(&(csk->usr_cache));      
     }
-
   }while(csk->status == ACTIVE); 
-
-
-  free(msg);
-  free(buff);
-
   pthread_exit(NULL);
   
 }
@@ -678,12 +660,15 @@ err_sys(char *s, clictcp_sock *csk){
 }
 
 void
-bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
+bldack(clictcp_sock* csk, Skb* skb, bool match, int curr_substream){
   socklen_t srvlen;
   char *buff = malloc(BUFFSIZE);
   double elimination_timer = getTime();
+  Data_Pckt* msg = &(skb->msgbuf.msg);
   uint32_t blockno = msg->blockno;    //The block number of incoming packet
   uint8_t start;
+  uint8_t coeff[BLOCK_SIZE];
+  bool save_skb=FALSE;
 
   csk->end_time = getTime();  /* last read */
 
@@ -703,7 +688,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
       }
       csk->old_blk_pkts++;
     }else if (blockno >= csk->curr_block + NUM_BLOCKS){
-        printf("BAD packet: The block does not exist yet.\n");
+      printf("BAD packet: The block %u, %u does not exist yet.\n", blockno, msg->seqno);
     }else{
         // Otherwise, the packet should go to one of the blocks in the memory
         // perform the Gaussian elimination on the packet and put in proper block
@@ -716,29 +701,33 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
           start = msg->start_packet;
           if (msg->flag == CODED) {
             // reconstruct random linear coefficients for coded packets
-            seedfastrand((uint32_t) (msg->packet_coeff[0]+blockno));
-            for (int i=0; i<msg->num_packets; i++) msg->packet_coeff[i]= (uint8_t) (fastrand()%GF);
-          } 
+            seedfastrand((uint32_t) (msg->packet_coeff+blockno));
+            for (int i=0; i<msg->num_packets; i++) coeff[i]= (uint8_t) (fastrand()%GF);
+          } else 
+            coeff[0]=1;
           
           // Shift the row to make SHURE the leading coefficient is not zero
-          int shift = shift_row(msg->packet_coeff, msg->num_packets);
+          int shift = shift_row(coeff, msg->num_packets);
           start += shift;
           
           // THE while loop!
-          while(!isEmpty(msg->packet_coeff, msg->num_packets)){
+          while(!isEmpty(coeff, msg->num_packets)){
             if(csk->blocks[blockno%NUM_BLOCKS].rows[start][0] == -1){
-              
               msg->num_packets = MIN(msg->num_packets, BLOCK_SIZE - start);
               
               csk->blocks[blockno%NUM_BLOCKS].row_len[start] = msg->num_packets;              
               // Set the coefficients to be all zeroes (for padding if necessary)
               memset(csk->blocks[blockno%NUM_BLOCKS].rows[start], 0, msg->num_packets);
               // Normalize the coefficients and the packet contents
-              if (GF==256) normalize(msg->packet_coeff, msg->payload, msg->num_packets);
+              if (GF==256) normalize(coeff, msg->payload, msg->num_packets);
               // Put the coefficients into the matrix
-              memcpy(csk->blocks[blockno%NUM_BLOCKS].rows[start], msg->packet_coeff, msg->num_packets);
+              memcpy(csk->blocks[blockno%NUM_BLOCKS].rows[start], coeff, msg->num_packets);
               // Put the payload into the corresponding place
-              memcpy(csk->blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
+              //memcpy(csk->blocks[blockno%NUM_BLOCKS].content[start], msg->payload, PAYLOAD_SIZE);
+              csk->blocks[blockno%NUM_BLOCKS].content[start] = msg->payload;
+              // and keep a pointer to the original skb, so we can release it later
+              csk->blocks[blockno%NUM_BLOCKS].skb[start] = skb;
+              save_skb = TRUE;
 
               if (csk->blocks[blockno%NUM_BLOCKS].rows[start][0] != 1){
                 printf("blockno %d\n", blockno);
@@ -750,16 +739,16 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
               csk->blocks[blockno%NUM_BLOCKS].dofs++;
               break;
             }else{
-              uint8_t pivot = msg->packet_coeff[0];
+              uint8_t pivot = coeff[0];
               int i;
 
               if (csk->debug > 9){
                 int ix;
                 for (ix = 0; ix < msg->num_packets; ix++){
-                  printf(" %d ", msg->packet_coeff[ix]);
+                  printf(" %d ", coeff[ix]);
                 }
                 printf("seqno %d start%d isEmpty %d \n Row coeff", 
-                       msg->seqno, start, isEmpty(msg->packet_coeff, msg->num_packets)==1);
+                       msg->seqno, start, isEmpty(coeff, msg->num_packets)==1);
 
                 for (ix = 0; ix < msg->num_packets; ix++){
                   printf(" %d ",csk->blocks[blockno%NUM_BLOCKS].rows[start][ix]);
@@ -767,12 +756,12 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
                 printf("\n");
               }
 
-              msg->packet_coeff[0] = 0; // TODO check again
+              coeff[0] = 0; // TODO check again
               // Subtract row with index start with the row at hand (coffecients)
               if (GF==256) {
                  uint8_t logpivot = xFFlog(pivot);
                  for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
-                   msg->packet_coeff[i] ^= fastFFmult(csk->blocks[blockno%NUM_BLOCKS].rows[start][i], logpivot);
+                   coeff[i] ^= fastFFmult(csk->blocks[blockno%NUM_BLOCKS].rows[start][i], logpivot);
                  }
 
                  // Subtract row with index start with the row at hand (content)
@@ -782,7 +771,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
               } else {
                  // GF(2)
                  for(i = 1; i < csk->blocks[blockno%NUM_BLOCKS].row_len[start]; i++){
-                   msg->packet_coeff[i] ^= csk->blocks[blockno%NUM_BLOCKS].rows[start][i];
+                   coeff[i] ^= csk->blocks[blockno%NUM_BLOCKS].rows[start][i];
                  }
                  for(i = 0; i < PAYLOAD_SIZE; i+=4){
                     msg->payload[i] ^= csk->blocks[blockno%NUM_BLOCKS].content[start][i];
@@ -793,7 +782,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
               }
 
               // Shift the row
-              shift = shift_row(msg->packet_coeff, msg->num_packets);
+              shift = shift_row(coeff, msg->num_packets);
               start += shift;
             }
           } // end while
@@ -820,7 +809,6 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     // Build the ack packet according to the new information
     Ack_Pckt* ack = ackPacket(msg->seqno+1, csk->curr_block,
                               csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
-
     while( (ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len) && 
            (ack->blockno < csk->curr_block + NUM_BLOCKS)  ){
         // The current block is decodable, so need to request for the next block
@@ -842,13 +830,9 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
     /*    if(sendto(csk->sockfd[curr_substream],buff, size, 0, &(csk->srv_addr), srvlen) == -1){
       err_sys("bldack: sendto",csk);
       } */
-
     send_over(csk, curr_substream, buff, size);
 
     csk->acks++;
-
-    free(msg->packet_coeff);
-    free(msg->payload);
 
     free(ack);
 
@@ -890,7 +874,7 @@ bldack(clictcp_sock* csk, Data_Pckt *msg, bool match, int curr_substream){
                  csk->curr_block, csk->blocks[(csk->curr_block)%NUM_BLOCKS].max_packet_index);
         }
     } // end if the block is done
-
+    if (!save_skb) free_skb(skb);
     free(buff);
 
 }
@@ -1028,6 +1012,7 @@ initCodedBlock(Coded_Block_t *blk){
     for(i = 0; i < BLOCK_SIZE; i++){
         blk->rows[i][0]    = -1;
         blk->row_len[i]    = 0;
+        blk->content[i] = NULL;
     }
 }
 
@@ -1098,81 +1083,22 @@ writeAndFreeBlock(Coded_Block_t *blk, fifo_t *buffer){
         }
 
     }
+
+    for(i = 0; i < blk->len; i++){
+       free_skb(blk->skb[i]);
+    }
+
 }
 
 bool
-unmarshallData(Data_Pckt* msg, char* buf, clictcp_sock *csk){
-    int index = 0;
-    int part = 0;
-
-    memcpy(&msg->tstamp, buf+index, (part = sizeof(msg->tstamp)));
-    index += part;
-    memcpy(&msg->flag, buf+index, (part = sizeof(msg->flag)));
-    index += part;
-    memcpy(&msg->seqno, buf+index, (part = sizeof(msg->seqno)));
-    index += part;
-    memcpy(&msg->blockno, buf+index, (part = sizeof(msg->blockno)));
-    index += part;
-
-    ntohpData(msg);
-
-    memcpy(&msg->start_packet, buf+index, (part = sizeof(msg->start_packet)));
-    index += part;
-
-    memcpy(&msg->num_packets, buf+index, (part = sizeof(msg->num_packets)));
-    index += part;
-
+unmarshallData(Msgbuf *msgbuf, clictcp_sock *csk){
+    
+    ntohpData(&(msgbuf->msg));
     // Need to make sure all the incoming packet_coeff are non-zero
-    if (msg->blockno >= csk->curr_block){
-      csk->blocks[msg->blockno%NUM_BLOCKS].max_packet_index = MAX(msg->start_packet + msg->num_packets , csk->blocks[msg->blockno%NUM_BLOCKS].max_packet_index);
+    if (msgbuf->msg.blockno >= csk->curr_block){
+      csk->blocks[msgbuf->msg.blockno%NUM_BLOCKS].max_packet_index = MAX(msgbuf->msg.start_packet + msgbuf->msg.num_packets , csk->blocks[msgbuf->msg.blockno%NUM_BLOCKS].max_packet_index);
     }
-
-    int coding_wnd = MAX(msg->num_packets, csk->blocks[msg->blockno%NUM_BLOCKS].max_coding_wnd);
-    msg->packet_coeff = (uint8_t *) malloc(coding_wnd*sizeof(uint8_t));
-
-    // Padding with zeroes
-    memset(msg->packet_coeff, 0, coding_wnd);
-
-    int i;
-    for(i = 0; i < 1; i++){
-        memcpy(&msg->packet_coeff[i], buf+index, (part = sizeof(msg->packet_coeff[i])));
-        index += part;
-    }
-
-    msg->num_packets = coding_wnd;
-
-
-    msg->payload = malloc(PAYLOAD_SIZE);
-    memcpy(msg->payload, buf+index, (part = PAYLOAD_SIZE));
-    index += part;
-
-    bool match = TRUE;
-    /*
-      int begin_checksum = index;
-
-      // -------------------- Extract the MD5 Checksum --------------------//
-      int i;
-      for(i=0; i < CHECKSUM_SIZE; i++){
-      memcpy(&msg->checksum[i], buf+index, (part = sizeof(msg->checksum[i])));
-      index += part;
-      }
-
-      // Before computing the checksum, fill zeroes where the checksum was
-      memset(buf+begin_checksum, 0, CHECKSUM_SIZE);
-
-      //-------------------- MD5 Checksum Calculation  -------------------//
-      MD5_CTX mdContext;
-      MD5Init(&mdContext);
-      MD5Update(&mdContext, buf, msg->payload_size + HDR_SIZE);
-      MD5Final(&mdContext);
-
-
-      for(i = 0; i < CHECKSUM_SIZE; i++){
-      if(msg->checksum[i] != mdContext.digest[i]){
-      match = FALSE;
-      }
-      }*/
-    return match;
+    return TRUE;
 }
 
 
@@ -1491,8 +1417,7 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
 
 int 
 poll_flag(clictcp_sock *csk, flag_t* flag, int timeout){
-  char *buff = malloc(BUFFSIZE);
-  Data_Pckt *msg = malloc(sizeof(Data_Pckt));
+  Msgbuf msgbuf;
   int k, ready, numbytes;
   int curr_substream = 0;
   socklen_t srvlen;
@@ -1509,18 +1434,16 @@ poll_flag(clictcp_sock *csk, flag_t* flag, int timeout){
 
   if(ready == -1){
     perror("poll");
-    free(buff);
     return -1;
   }else if (ready == 0){
     // printf("Timeout occurred during poll!\n");
-    free(buff);
     return -1;
   }else{
     srvlen = sizeof(csk->srv_addr);
     while (curr_substream < csk->substreams){
 
       if(read_set[curr_substream].revents & POLLIN){
-        if((numbytes = recvfrom(csk->sockfd[curr_substream], buff, MSS, 0,
+        if((numbytes = recvfrom(csk->sockfd[curr_substream], &(msgbuf.buff), MSS, 0,
                                 &(csk->srv_addr), &srvlen)) == -1){
           err_sys("recvfrom",csk);
 
@@ -1538,28 +1461,16 @@ poll_flag(clictcp_sock *csk, flag_t* flag, int timeout){
           curr_substream--;
         }
         if(numbytes <= 0) {
-          free(msg->packet_coeff);
-          free(msg->payload);
-          free(msg);
-          free(buff);
           return -1;
         }
           
         // Unmarshall the packet
-        bool match = unmarshallData(msg, buff, csk);
-        if (msg->flag == *flag){
-          free(msg->packet_coeff);
-          free(msg->payload);
-          free(msg);
-          free(buff);
+        bool match = unmarshallData(&msgbuf, csk);
+        if (msgbuf.msg.flag == *flag){
           return curr_substream;
         }else{
           // printf("Expected flag ACK, received something else!\n");
-          *flag = msg->flag;
-          free(msg->packet_coeff);
-          free(msg->payload);
-          free(msg);
-          free(buff);
+          *flag = msgbuf.msg.flag;
           return -2;
         }
       }
@@ -1569,10 +1480,6 @@ poll_flag(clictcp_sock *csk, flag_t* flag, int timeout){
   }
   
   //  printf("poll flag *** %d *** \n", *flag);
-  free(msg->packet_coeff);
-  free(msg->payload);
-  free(msg);
-  free(buff);
   return -1;
 
 }
@@ -1582,6 +1489,7 @@ void
 close_clictcp(clictcp_sock* csk){
 
   status_t sock_status_old = csk->status;
+
   csk->status = CLOSED;
 
   fifo_release(&(csk->usr_cache));      
@@ -1653,8 +1561,6 @@ close_clictcp(clictcp_sock* csk){
     }
   }
 
-
-  
   log_cli_status(csk);
   if (close(csk->status_log_fd) == -1){
     perror("Could not close the status file");

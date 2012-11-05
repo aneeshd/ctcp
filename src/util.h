@@ -53,10 +53,23 @@ typedef struct{
   uint32_t  blockno; // Base of the current block
   uint8_t start_packet; // The # of the first packet that is mixed
   uint8_t  num_packets; // The number of packets that are mixed
-  uint8_t* packet_coeff; // The coefficients of the mixed packets
+  uint8_t packet_coeff; // Seed for coefficients of the mixed packets
   //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
-  char *payload;  // The payload size is negotiated at the beginning of the transaction
+  char payload[PAYLOAD_SIZE];  
 } Data_Pckt;
+
+// used for zero copy 
+typedef union {
+   Data_Pckt msg;
+   char buff[MSS];
+} Msgbuf;
+
+// used to provide pool of packets for mem management
+typedef struct Skb {
+   Msgbuf msgbuf;
+   struct Skb* next;
+   bool used;
+} Skb;
 
 typedef struct{
   uint16_t payload_size;
@@ -71,7 +84,8 @@ typedef struct{
   pthread_cond_t  block_free_condv;
   pthread_cond_t  block_ready_condv;
   uint32_t len; // Number of bare packets inside the block
-  char content[BLOCK_SIZE][PAYLOAD_SIZE]; // Array of pointers that point to the marshalled data of the bare packets
+  char* content[BLOCK_SIZE]; // Array of pointers that point to the marshalled data of the bare packets
+  Skb* skb[BLOCK_SIZE]; // for memory management
 } Block_t;
 
 typedef struct{
@@ -87,11 +101,12 @@ typedef struct{
   uint8_t dofs; // Number of degrees of freedom thus far
   uint8_t len;
   char rows[BLOCK_SIZE][BLOCK_SIZE]; // Matrix of the coefficients of the coded packets
-  char content[BLOCK_SIZE][PAYLOAD_SIZE]; // Contents of the coded packets
+  char* content[BLOCK_SIZE]; // Contents of the coded packets
   int row_len[BLOCK_SIZE];  // maximum number of non-zeros in each row
   int max_coding_wnd; //largest number of packets mixed together
   int dofs_pushed;
   int max_packet_index;
+  Skb* skb[BLOCK_SIZE]; // for memory management
 } Coded_Block_t;
 
 double getTime(void);
@@ -107,4 +122,6 @@ inline uint8_t xFFlog(uint8_t x);
 inline uint8_t fastFFmult(uint8_t x, uint8_t logy);
 void seedfastrand(uint32_t seed);
 uint32_t fastrand();
+Skb* alloc_skb();
+void free_skb(void* skb);
 #endif // UTIL_H_

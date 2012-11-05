@@ -909,24 +909,22 @@ timeout(srvctcp_sock* sk, int pin){
 */
 int 
 send_flag(srvctcp_sock* sk, int path_id, flag_t flag ){
-  char *buff = malloc(BUFFSIZE);
   int numbytes;
   // FIN_CLI sequence number is meaningless
-  //Data_Pckt *msg = dataPacket(0, sk->curr_block, 0);
-  Data_Pckt* msg    = (Data_Pckt*) malloc(sizeof(Data_Pckt));
+  Msgbuf msgbuf;
+  Data_Pckt* msg = &(msgbuf.msg);
   msg->flag         = flag;
   msg->blockno      = sk->curr_block;
   msg->num_packets  = 0;
   msg->start_packet = 0;
-  msg->payload = NULL;
-  msg->packet_coeff = NULL;
+  msg->packet_coeff = 0;
   msg->tstamp = getTime();
 
-  int size = marshallData(*msg, buff);
+  int size = marshallData(&msgbuf);
 
   do{
     socklen_t clilen = sizeof(sk->active_paths[path_id]->cli_addr);
-    if((numbytes = sendto(sk->sockfd, buff, size, 0, (struct sockaddr*)&(sk->active_paths[path_id]->cli_addr), clilen)) == -1){
+    if((numbytes = sendto(sk->sockfd, msgbuf.buff, size, 0, (struct sockaddr*)&(sk->active_paths[path_id]->cli_addr), clilen)) == -1){
       perror("send_Fin_Cli error: sendto");
       return -1;
     }
@@ -937,8 +935,6 @@ send_flag(srvctcp_sock* sk, int path_id, flag_t flag ){
     return -1;
   }
   
-  free_coded_pkt(msg);
-  free(buff);
   return 0;
 }
 
@@ -1186,7 +1182,6 @@ send_segs(srvctcp_sock* sk, int pin){
 void
 send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
 
-  char *buff = malloc(BUFFSIZE);
   int numbytes;
 
   // Send coded packet from block number blockno
@@ -1202,7 +1197,9 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
   // Get a coded packet from the queue
   // q_pop is blocking. If the queue is empty, we wait until the coded packets are created
   // We should decide in send_segs whether we need more coded packets in the queue
-  Data_Pckt *msg = (Data_Pckt*) q_pop(&(sk->coded_q[blockno%NUM_BLOCKS]));
+  Skb* skb = (Skb*) q_pop(&(sk->coded_q[blockno%NUM_BLOCKS]));
+  Msgbuf* msgbuf = &(skb->msgbuf);
+  Data_Pckt* msg = &(msgbuf->msg);
 
   // Correct the header information of the outgoing message
   msg->seqno = subpath->snd_nxt;
@@ -1226,11 +1223,11 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
   }
 
   // Marshall msg into buf
-  int message_size = marshallData(*msg, buff);
+  int message_size = marshallData(msgbuf);
   socklen_t clilen = sizeof(subpath->cli_addr);
 
   do{
-    if((numbytes = sendto(sk->sockfd, buff, message_size, 0,
+    if((numbytes = sendto(sk->sockfd, &(msgbuf->buff), message_size, 0,
                           (struct sockaddr*)&subpath->cli_addr, clilen)) == -1){
       printf("Sending... on blockno %d blocklen %d  seqno %d  snd_una %d snd_nxt %d  start pkt %d snd_cwnd %d   port %d \n",
              blockno,
@@ -1255,8 +1252,7 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
   subpath->tx_time[subpath->snd_nxt%MAX_CWND] = msg->tstamp + 1.5*subpath->srtt + RTO_BIAS;
   //printf("Freeing the message - blockno %d snd_nxt[path_id] %d ....", blockno, snd_nxt[path_id]);
   sk->opkts++;
-  free_coded_pkt(msg);
-  free(buff);
+  if (msg->flag != NORMAL) free_skb(skb);
   //printf("---------- Done Freeing the message\n-------------");
 }
 
@@ -1382,7 +1378,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
 
     sk->dof_remain[sk->curr_block%NUM_BLOCKS] = 0;
 
-    q_free(&(sk->coded_q[sk->curr_block%NUM_BLOCKS]), &free_coded_pkt);
+    q_free(&(sk->coded_q[sk->curr_block%NUM_BLOCKS]), &free_skb);
 
     sk->curr_block++;            // Update the current block identifier
     sk->maxblockno = MAX(sk->curr_block, sk->maxblockno);
@@ -1743,33 +1739,16 @@ coding_job(void *a){
     int end = MIN((start + dof_request), block_len);
     for (row = start; row < end; row++){
 
-      //      Data_Pckt *msg = dataPacket(0, blockno, num_packets);
-
-      // creat a new data packet 
-      Data_Pckt* msg    = (Data_Pckt*) malloc(sizeof(Data_Pckt));
+      // construct a data packet 
+      if (sk->blocks[blockno%NUM_BLOCKS].skb[row] == NULL) {printf("WARNING: Failed to get a normal skb\n");continue;}
+      Data_Pckt* msg    = &(sk->blocks[blockno%NUM_BLOCKS].skb[row]->msgbuf.msg);
       msg->flag         = NORMAL;
       msg->blockno      = blockno;
       msg->num_packets  = 1;
-      msg->packet_coeff = (uint8_t*) malloc(sizeof(uint8_t));
-
       msg->start_packet = row;
-      msg->packet_coeff[0] = 1;
+      msg->packet_coeff = 1;
 
-      msg->payload = sk->blocks[blockno%NUM_BLOCKS].content[msg->start_packet];
-
-      /*
-        printf("Pushing ... block %d, row %d \t start pkt %d\n", blockno, row, msg->start_packet);
-        fprintf(stdout, "before BEFORE push  queue size %d HEAD %d, TAIL %d\n",coded_q[blockno%NUM_BLOCKS].size, coded_q[blockno%NUM_BLOCKS].head, coded_q[blockno%NUM_BLOCKS].tail);
-
-        if (coded_q[blockno%NUM_BLOCKS].size > 0){
-        int k;
-        for (k=1; k <= coded_q[blockno%NUM_BLOCKS].size; k++){
-        Data_Pckt *tmp = (Data_Pckt*) coded_q[blockno%NUM_BLOCKS].q_[coded_q[blockno%NUM_BLOCKS].tail+k];
-        printf("before BEFORE push buff msg block no %d start pkt %d\n", tmp->blockno, tmp->start_packet);
-        }
-        }
-      */
-      q_push_back(&(sk->coded_q[blockno%NUM_BLOCKS]), msg);
+      q_push_back(&(sk->coded_q[blockno%NUM_BLOCKS]), sk->blocks[blockno%NUM_BLOCKS].skb[row]);
     }  // Done with forming the initial set of coded packets
     dof_request = MAX(0, dof_request - (block_len - start));  // This many more to go
   }
@@ -1789,7 +1768,10 @@ coding_job(void *a){
 
     for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
 
-      Data_Pckt *msg = dataPacket(0, blockno, 1);
+      Skb* skb=alloc_skb(); 
+      if (!skb) {printf("WARNING: Failed to get a coded skb\n"); continue;} 
+      Data_Pckt *msg = &(skb->msgbuf.msg);
+      msg->blockno      = blockno;
       msg->start_packet = 0;
       msg->num_packets = block_len;
       msg->flag = CODED;
@@ -1797,8 +1779,8 @@ coding_job(void *a){
       // generate random coefficients.  loop is to make sure that at least one is non-zero.
       nonzero=0;
       while (nonzero == 0) {
-        msg->packet_coeff[0] = (uint8_t) (random()%256); //record random seed used
-        seedfastrand((uint32_t) (msg->packet_coeff[0]+blockno));
+        msg->packet_coeff = (uint8_t) (random()%256); //record random seed used
+        seedfastrand((uint32_t) (msg->packet_coeff+blockno));
         for(i = 0; i < block_len; i++){
           coeff[i] = (uint8_t) (fastrand()%GF);
           if (coeff[i]>0) nonzero++;
@@ -1821,8 +1803,7 @@ coding_job(void *a){
            }
         }
       }
-
-      q_push_back(&(sk->coded_q[blockno%NUM_BLOCKS]), msg);
+      q_push_back(&(sk->coded_q[blockno%NUM_BLOCKS]), skb);
 
     }  // Done with forming the remaining set of coded packets
 
@@ -1840,19 +1821,6 @@ coding_job(void *a){
 
 //----------------END WORKER ---------------------------------------
 
-// Free Handler for the coded packets in coded_q
-void
-free_coded_pkt(void* a)
-{
-  Data_Pckt* msg = (Data_Pckt*) a;
-  //printf("freeing msg blockno %d start pkt %d\n", msg->blockno, msg->start_packet);
-  free(msg->packet_coeff);
-  if (msg->flag == CODED){
-    free(msg->payload);
-  }
-  free(msg);
-}
-
 //--------------------------------------------------------------------
 uint32_t
 readBlock(Block_t* blk, const void *buf, size_t buf_len){
@@ -1862,7 +1830,10 @@ readBlock(Block_t* blk, const void *buf, size_t buf_len){
   uint16_t bytes_read; 
   uint32_t bytes_left = buf_len; 
   while(blk->len < BLOCK_SIZE && bytes_left){
-    char* tmp = blk->content[blk->len]; 
+    Skb* skb = alloc_skb(); 
+    if (!skb) {printf("WARNING: readBlock failed to get an skb\n"); break;} 
+    blk->skb[blk->len]=skb;
+    char* tmp = skb->msgbuf.msg.payload;
     memset(tmp, 0, PAYLOAD_SIZE); // This is done to pad with 0's
     bytes_read = (uint16_t) MIN(PAYLOAD_SIZE-2, bytes_left);
     memcpy(tmp+2, buf+buf_len-bytes_left, bytes_read);
@@ -1871,7 +1842,8 @@ readBlock(Block_t* blk, const void *buf, size_t buf_len){
 
     bytes_read = ntohs(bytes_read);
     //printf("bytes_read from block %d = %d \t bytes_left %d\n", blockno, bytes_read, bytes_left);
-    
+   
+    blk->content[blk->len] = tmp; 
     blk->len++;
     bytes_left -= bytes_read;
   }
@@ -1886,6 +1858,10 @@ readBlock(Block_t* blk, const void *buf, size_t buf_len){
 void
 freeBlock(Block_t* blk){
   // reset the counters
+  int i;
+  for(i = 0; i < blk->len; i++){
+    free_skb(blk->skb[i]);
+  }
   blk->len = 0;
 }
 
@@ -1969,67 +1945,10 @@ void
  * The return value is the number of bytes used for the marshalling
  */
 int
-marshallData(Data_Pckt msg, char* buf){
-  int index = 0;
-  int part = 0;
-
-  // the total size in bytes of the current packet
-  int size = PAYLOAD_SIZE
-    + sizeof(double)
-    + sizeof(flag_t)
-    + sizeof(msg.seqno)
-    + sizeof(msg.blockno)
-    + sizeof(msg.start_packet)
-    + sizeof(msg.num_packets)
-    + sizeof(msg.packet_coeff);
-
-  //Set to zeroes before startingr
-  memset(buf, 0, size);
-
+marshallData(Msgbuf* msgbuf){
   // Marshall the fields of the packet into the buffer
-
-  htonpData(&msg);
-  memcpy(buf + index, &msg.tstamp, (part = sizeof(msg.tstamp)));
-  index += part;
-  memcpy(buf + index, &msg.flag, (part = sizeof(msg.flag)));
-  index += part;
-  memcpy(buf + index, &msg.seqno, (part = sizeof(msg.seqno)));
-  index += part;
-  memcpy(buf + index, &msg.blockno, (part = sizeof(msg.blockno)));
-  index += part;
-
-  memcpy(buf + index, &msg.start_packet, (part = sizeof(msg.start_packet)));
-  index += part;
-
-  memcpy(buf + index, &msg.num_packets, (part = sizeof(msg.num_packets)));
-  index += part;
-
-  if (msg.packet_coeff) {
-    int i;
-    for(i = 0; i < 1; i ++){
-      memcpy(buf + index, &msg.packet_coeff[i], (part = sizeof(msg.packet_coeff[i])));
-      index += part;
-    }
-  }
-
-  if (msg.payload) memcpy(buf + index, msg.payload, (part = PAYLOAD_SIZE));
-  index += part;
-
-  /*
-  //----------- MD5 Checksum calculation ---------//
-  MD5_CTX mdContext;
-  MD5Init(&mdContext);
-  MD5Update(&mdContext, buf, size);
-  MD5Final(&mdContext);
-
-  // Put the checksum in the marshalled buffer
-  int i;
-  for(i = 0; i < CHECKSUM_SIZE; i++){
-  memcpy(buf + index, &mdContext.digest[i], (part = sizeof(mdContext.digest[i])));
-  index += part;
-  }*/
-
-  return index;
+  htonpData(&(msgbuf->msg));
+  return sizeof(msgbuf->msg);
 }
 
 bool
