@@ -1580,8 +1580,8 @@ void decrease_cwnd(srvctcp_sock* sk, int pin) {
   subpath->dec_snd_nxt = subpath->snd_una + subpath->snd_cwnd ; // no more backoffs within the next RTT
   subpath->snd_cwnd -= subpath->toggle; // undo last increase 
   if (subpath->cntrtt > 2) {
-     int decrease = subpath->snd_cwnd * (1-subpath->basertt/subpath->minrtt);
-     if (decrease > subpath->snd_cwnd/2) decrease = subpath->snd_cwnd/2;
+     int decrease = (int) (0.5+subpath->snd_cwnd * (1-subpath->basertt/subpath->minrtt));
+     if (decrease > (int) (0.5+subpath->snd_cwnd/2)) decrease = (int) (0.5+subpath->snd_cwnd/2);
      subpath->snd_cwnd -= decrease;
   } else
      subpath->snd_cwnd = (int) (subpath->snd_cwnd/2);
