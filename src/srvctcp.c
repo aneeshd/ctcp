@@ -219,19 +219,19 @@ listen_srvctcp(srvctcp_sock* sk){
   struct sockaddr_storage cli_addr;
   socklen_t clilen = sizeof(cli_addr);
   int numbytes, rv;
-  char *buff = malloc(BUFFSIZE);
   char* log_name = NULL; // Name of the log
-  Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
-  memset(buff,0,BUFFSIZE);        /* pretouch */
-
+  Skb* skb=alloc_skb();
+  char* buff = (char*) &(skb->msgbuf.buff);
+  Ack_Pckt* ack;
   log_srv_status(sk);
 
-  if((numbytes = recvfrom(sk->sockfd, buff, BUFFSIZE, 0, (struct sockaddr*)&cli_addr, &clilen)) == -1){
+  if((numbytes = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, (struct sockaddr*)&cli_addr, &clilen)) == -1){
     perror("recvfrom: Failed to receive the request\n");
     return -1;
   }
     
-  unmarshallAck(ack, buff);
+  unmarshallAck(&(skb->msgbuf));
+  ack = &(skb->msgbuf.ack);
 
   if (ack->flag == SYN){
     /*
@@ -262,8 +262,7 @@ listen_srvctcp(srvctcp_sock* sk){
       log_srv_status(sk);
     }
 
-    free(buff);
-    free(ack);
+    free_skb(skb);
 
     rv = pthread_create( &(sk->daemon_thread), NULL, server_worker, (void *) sk);
           
@@ -274,8 +273,7 @@ listen_srvctcp(srvctcp_sock* sk){
     printf("Expecting SYN packet, received something else\n");
   }
 
-  free(ack);
-  free(buff);
+  free_skb(skb);
   return -1;
 }
 
@@ -364,7 +362,9 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 void 
 *server_worker(void *arg){
   srvctcp_sock* sk = (srvctcp_sock*) arg;
-  char *buff = malloc(BUFFSIZE);
+  Skb* skb=alloc_skb();
+  char *buff = (char*) &(skb->msgbuf.buff);
+  Ack_Pckt *ack;
   int numbytes, i, r;
   struct sockaddr_storage cli_addr;
   socklen_t clilen = sizeof cli_addr;
@@ -378,7 +378,7 @@ void
   char ctrl_buff[CMSG_SPACE(sizeof(struct timeval))];
   struct cmsghdr *cmsg;
   iov.iov_base = buff;
-  iov.iov_len = BUFFSIZE;
+  iov.iov_len = MSS;
   msg_sock.msg_iov = &iov;
   msg_sock.msg_iovlen = 1;
   msg_sock.msg_name = &cli_addr;
@@ -387,18 +387,12 @@ void
   msg_sock.msg_controllen = sizeof(ctrl_buff);
   struct timeval time_now;
 
-  memset(buff,0,BUFFSIZE);        /* pretouch */
   sk->start_time = getTime();
   pthread_rwlock_rdlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
   sk->dof_req_latest = sk->blocks[sk->curr_block%NUM_BLOCKS].len ;     
 
   // reset the dof counter for the current block
   pthread_rwlock_unlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_rwlock));
-
-  /* send out initial segments, then go for it */  // First send_seg
-  // send_segs(sk, path_index);
-
-  Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
 
   while(sk->status != CLOSED){
     double rto_min = 1000;
@@ -414,7 +408,6 @@ void
 
     if (r > 0){  /* ack ready */
       // The recvfrom should be done to a separate buffer (not buff)
-//      if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, (struct sockaddr*)&cli_addr, &clilen)) <= 0){
       if((r = recvmsg(sk->sockfd, &msg_sock, 0))== -1){
         perror("Error in receiving ACKs\n");
         continue;  
@@ -433,7 +426,8 @@ void
          rcvt_user = getTime()-rcvt;
       }
 
-      unmarshallAck(ack, buff);
+      unmarshallAck(&(skb->msgbuf));
+      ack = &(skb->msgbuf.ack);
 
       if (sk->debug > 6){
         printf("Got an ACK: ackno %d blockno %d dof_rec %d -- RTT est %f \n",
@@ -563,7 +557,8 @@ void
 		  sk->error = CLOSE_ERR;
 		  tries++;
 		}else{
-		  unmarshallAck(ack, buff);
+		  unmarshallAck(&(skb->msgbuf));
+                  ack = &(skb->msgbuf.ack);
 		
 		  if (ack->flag == FIN_ACK){
 
@@ -652,8 +647,7 @@ void
 
   // TODO free all the blocks up to maxblockno
   pthread_cond_signal( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv));
-  free(ack);
-  free(buff);
+  free_skb(skb);
 
   // Just for printing statistics
   // ctrlc(sk);
@@ -666,10 +660,11 @@ void
 void
 close_srvctcp(srvctcp_sock* sk){
   int i, r, tries, success;
-  char *buff = malloc(BUFFSIZE);
   struct sockaddr_storage cli_addr;
   socklen_t clilen = sizeof(cli_addr);
-  Ack_Pckt *ack = malloc(sizeof(Ack_Pckt));
+  Skb* skb=alloc_skb();
+  char* buff = (char*) &(skb->msgbuf.buff);
+  Ack_Pckt *ack = &(skb->msgbuf.ack);
   // Check whether send_segs have finished
 
   if (sk->num_active > 0){
@@ -729,7 +724,8 @@ close_srvctcp(srvctcp_sock* sk){
             sk->error = CLOSE_ERR;
             tries++;
           }else{
-            unmarshallAck(ack, buff);
+            unmarshallAck(&(skb->msgbuf));
+            ack = &(skb->msgbuf.ack);
           
             if (ack->flag == FIN){
 
@@ -821,8 +817,7 @@ close_srvctcp(srvctcp_sock* sk){
   free(sk->active_paths);
 
   free(sk);
-  free(buff);
-  free(ack);
+  free_skb(skb);
 
   //  printf("Cleared the ctcp socket %u\n", getpid());
 
@@ -1951,50 +1946,10 @@ marshallData(Msgbuf* msgbuf){
   return sizeof(msgbuf->msg);
 }
 
-bool
-unmarshallAck(Ack_Pckt* msg, char* buf){
-  int index = 0;
-  int part = 0;
-
-  memcpy(&msg->tstamp, buf+index, (part = sizeof(msg->tstamp)));
-  index += part;
-  memcpy(&msg->flag, buf+index, (part = sizeof(msg->flag)));
-  index += part;
-  memcpy(&msg->ackno, buf+index, (part = sizeof(msg->ackno)));
-  index += part;
-  memcpy(&msg->blockno, buf+index, (part = sizeof(msg->blockno)));
-  index += part;
-  memcpy(&msg->dof_rec, buf+index, (part = sizeof(msg->dof_rec)));
-  index += part;
-  ntohpAck(msg);
-
-  bool match = TRUE;
-  /*
-    int begin_checksum = index;
-
-    // -------------------- Extract the MD5 Checksum --------------------//
-    int i;
-    for(i=0; i < CHECKSUM_SIZE; i++){
-    memcpy(&msg->checksum[i], buf+index, (part = sizeof(msg->checksum[i])));
-    index += part;
-    }
-
-    // Before computing the checksum, fill zeroes where the checksum was
-    memset(buf+begin_checksum, 0, CHECKSUM_SIZE);
-
-    //-------------------- MD5 Checksum Calculation  -------------------//
-    MD5_CTX mdContext;
-    MD5Init(&mdContext);
-    MD5Update(&mdContext, buf, msg->payload_size + HDR_SIZE);
-    MD5Final(&mdContext);
-
-
-    for(i = 0; i < CHECKSUM_SIZE; i++){
-    if(msg->checksum[i] != mdContext.digest[i]){
-    match = FALSE;
-    }
-    }*/
-  return match;
+bool 
+unmarshallAck(Msgbuf* msgbuf){
+  ntohpAck(&(msgbuf->ack));
+  return TRUE;
 }
 
 

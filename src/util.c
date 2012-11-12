@@ -82,26 +82,15 @@ getTime(void){
     return(time.tv_sec+ time.tv_usec*1.e-6);
 }
 
-Data_Pckt*
-dataPacket(uint32_t seqno, uint32_t blockno, uint8_t num_packets){
-    Data_Pckt* packet    = (Data_Pckt*) malloc(sizeof(Data_Pckt));
-    //packet->tstamp     = getTime();   // We set this properly in send_one()
-    packet->flag         = NORMAL;
-    packet->seqno        = seqno;
-    packet->blockno      = blockno;
-    packet->num_packets  = num_packets;
-    packet->packet_coeff = 0; 
-    return packet;
-}
-
-Ack_Pckt*
+Skb*
 ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left){
-    Ack_Pckt* ack = (Ack_Pckt*) malloc(sizeof(Ack_Pckt));
+    Skb* skb = alloc_skb();
+    Ack_Pckt* ack = (Ack_Pckt*) &(skb->msgbuf.ack);
     ack->flag     = NORMAL;
     ack->ackno    = ackno;
     ack->blockno  = blockno;
     ack->dof_rec  = dofs_left;
-    return ack;
+    return skb;
 }
 
 void

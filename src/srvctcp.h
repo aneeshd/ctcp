@@ -152,7 +152,7 @@ void advance_cwnd(srvctcp_sock* sk, int pin);
 void readConfig(char* configfile, srvctcp_sock* sk);
 void err_sys(srvctcp_sock* sk, char* s);
 int marshallData(Msgbuf* msgbuf);
-bool unmarshallAck(Ack_Pckt* msg, char* buf);
+bool unmarshallAck(Msgbuf* msgbuf);
 void openLog(srvctcp_sock* sk, char* log_name);
 void* coding_job(void *a);
 void free_coded_pkt(void* a);

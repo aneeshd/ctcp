@@ -93,7 +93,7 @@ void writeAndFreeBlock(Coded_Block_t *blk, fifo_t *buffer);
 void partial_write(clictcp_sock* csk);
 
 bool unmarshallData(Msgbuf* msgbuf, clictcp_sock *csk);
-int  marshallAck(Ack_Pckt msg, char* buf);
+int  marshallAck(Msgbuf* msgbuf);
 
 int  readLease(char *leasefile, dhcp_lease *leases);
 int  add_routing_tables(char *lease_file);

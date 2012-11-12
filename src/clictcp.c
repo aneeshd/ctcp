@@ -662,7 +662,6 @@ err_sys(char *s, clictcp_sock *csk){
 void
 bldack(clictcp_sock* csk, Skb* skb, bool match, int curr_substream){
   socklen_t srvlen;
-  char *buff = malloc(BUFFSIZE);
   double elimination_timer = getTime();
   Data_Pckt* msg = &(skb->msgbuf.msg);
   uint32_t blockno = msg->blockno;    //The block number of incoming packet
@@ -807,8 +806,9 @@ bldack(clictcp_sock* csk, Skb* skb, bool match, int curr_substream){
     //------------------------------------------------------------------------------------------------------
 
     // Build the ack packet according to the new information
-    Ack_Pckt* ack = ackPacket(msg->seqno+1, csk->curr_block,
+    Skb* ackskb = ackPacket(msg->seqno+1, csk->curr_block,
                               csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
+    Ack_Pckt* ack = &(ackskb->msgbuf.ack);
     while( (ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len) && 
            (ack->blockno < csk->curr_block + NUM_BLOCKS)  ){
         // The current block is decodable, so need to request for the next block
@@ -824,17 +824,15 @@ bldack(clictcp_sock* csk, Skb* skb, bool match, int curr_substream){
     ack->tstamp = msg->tstamp + getTime()-csk->lastrcvt[curr_substream];
 
     // Marshall the ack into buff
-    int size = marshallAck(*ack, buff);
+    int size = marshallAck(&(ackskb->msgbuf));
+    char* buff = (char*) &(ackskb->msgbuf.buff);
     srvlen = sizeof(csk->srv_addr);
 
-    /*    if(sendto(csk->sockfd[curr_substream],buff, size, 0, &(csk->srv_addr), srvlen) == -1){
-      err_sys("bldack: sendto",csk);
-      } */
     send_over(csk, curr_substream, buff, size);
 
     csk->acks++;
 
-    free(ack);
+    free_skb(ackskb);
 
     if (csk->debug > 6){
         printf("Sent an ACK: ackno %d blockno %d\n", ack->ackno, ack->blockno);
@@ -875,7 +873,6 @@ bldack(clictcp_sock* csk, Skb* skb, bool match, int curr_substream){
         }
     } // end if the block is done
     if (!save_skb) free_skb(skb);
-    free(buff);
 
 }
 //========================== END Build Ack ===============================================================
@@ -1103,42 +1100,9 @@ unmarshallData(Msgbuf *msgbuf, clictcp_sock *csk){
 
 
 int
-marshallAck(Ack_Pckt msg, char* buf){
-    int index = 0;
-    int part = 0;
-    int ack_size = ACK_SIZE;
-
-    //Set to zeroes before starting
-    memset(buf, 0, ack_size);
-
-    // Marshall the fields of the packet into the buffer
-    htonpAck(&msg);
-    memcpy(buf + index, &msg.tstamp, (part = sizeof(msg.tstamp)));
-    index += part;
-    memcpy(buf + index, &msg.flag, (part = sizeof(msg.flag)));
-    index += part;
-    memcpy(buf + index, &msg.ackno, (part = sizeof(msg.ackno)));
-    index += part;
-    memcpy(buf + index, &msg.blockno, (part = sizeof(msg.blockno)));
-    index += part;
-    memcpy(buf + index, &msg.dof_rec, (part = sizeof(msg.dof_rec)));
-    index += part;
-
-    /*
-    //----------- MD5 Checksum calculation ---------//
-    MD5_CTX mdContext;
-    MD5Init(&mdContext);
-    MD5Update(&mdContext, buf, size);
-    MD5Final(&mdContext);
-
-    // Put the checksum in the marshalled buffer
-    int i;
-    for(i = 0; i < CHECKSUM_SIZE; i++){
-    memcpy(buf + index, &mdContext.digest[i], (part = sizeof(mdContext.digest[i])));
-    index += part;
-    }*/
-
-    return index;
+marshallAck(Msgbuf* msgbuf){
+    htonpAck(&(msgbuf->ack));
+    return ACK_SIZE;
 }
 
 int
@@ -1392,25 +1356,24 @@ create_clictcp_sock(void){
 int
 send_flag(clictcp_sock *csk, int path_id, flag_t flag){
 
-  char *buff = malloc(BUFFSIZE);
   int numbytes;
-  Ack_Pckt *msg = ackPacket(0,0,0);
+  Skb* ackskb = ackPacket(0,0,0);
+  Ack_Pckt* msg = &(ackskb->msgbuf.ack);
   msg->tstamp = getTime();
   msg->flag = flag;
 
-  int size = marshallAck(*msg, buff);
+  int size = marshallAck(&(ackskb->msgbuf));
+  char* buff = (char*) &(ackskb->msgbuf.buff);
 
   if (send_over(csk, path_id, buff, size) == -1){
     perror("send_flag error: sendto");
-    free(msg);
-    free(buff);
+    free_skb(ackskb);
     return -1;
   }
   
   //  printf("Sent flag *** %d *** %u\n", flag, getpid());
 
-  free(msg);
-  free(buff);
+  free_skb(ackskb);
   return 0;
 }
 

@@ -58,9 +58,19 @@ typedef struct{
   char payload[PAYLOAD_SIZE];  
 } Data_Pckt;
 
+typedef struct{
+  double tstamp;
+  flag_t flag;
+  uint32_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
+  uint32_t  blockno; // Base of the current block
+  uint8_t dof_rec;  // Number of dofs left from the block
+  //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
+} Ack_Pckt;
+
 // used for zero copy 
 typedef union {
    Data_Pckt msg;
+   Ack_Pckt ack;
    char buff[MSS];
 } Msgbuf;
 
@@ -89,15 +99,6 @@ typedef struct{
 } Block_t;
 
 typedef struct{
-  double tstamp;
-  flag_t flag;
-  uint32_t  ackno; // The sequence # that is being acked --> this is to make it Reno-like
-  uint32_t  blockno; // Base of the current block
-  uint8_t dof_rec;  // Number of dofs left from the block
-  //  unsigned char checksum[CHECKSUM_SIZE];  // MD5 checksum
-} Ack_Pckt;
-
-typedef struct{
   uint8_t dofs; // Number of degrees of freedom thus far
   uint8_t len;
   char rows[BLOCK_SIZE][BLOCK_SIZE]; // Matrix of the coefficients of the coded packets
@@ -111,7 +112,7 @@ typedef struct{
 
 double getTime(void);
 Data_Pckt* dataPacket(uint32_t seqno, uint32_t blockno, uint8_t num_packets);
-Ack_Pckt* ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left);
+Skb* ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left);
 void htonpData(Data_Pckt *msg);
 void htonpAck(Ack_Pckt *msg);
 void ntohpData(Data_Pckt *msg);
