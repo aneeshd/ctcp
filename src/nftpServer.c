@@ -72,7 +72,7 @@ main (int argc, char** argv){
 
   ////////// open ctcp server //////////////
 
-  srvctcp_sock* sk = open_srvctcp(port);
+  srvctcp_sock* sk = open_srvctcp(port,"aimd");
 
   if (sk == NULL){
     printf("Could not create CTCP socket\n");
