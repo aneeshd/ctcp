@@ -1128,7 +1128,8 @@ send_segs(srvctcp_sock* sk, int pin){
 
       for (j = 0; j < sk->num_active; j++){
         if (d[j] < subpath->srtt){
-          d[j] = t0;
+          //d[j] = t0;
+          d[j] = subpath->srtt;
         }
       }
 
