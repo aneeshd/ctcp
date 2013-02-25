@@ -1931,6 +1931,7 @@ void
       sprintf(log_name, "%s/%s",
               dir_name,
               file );
+      free(file);
     }
 
   sk->db = fopen(log_name, "w+");
@@ -1942,7 +1943,6 @@ void
 
   if(auto_log)
     {
-      free(file);
       free(dir_name);
       free(log_name);
     }
