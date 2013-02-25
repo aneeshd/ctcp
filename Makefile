@@ -26,12 +26,12 @@ THRIFT	=	/usr/local/bin/thrift
 AR	=	$(AT)ar
 ARFLAGS	=	rcs
 
-CC		=	$(AT) gcc
-CXX             =	$(AT) g++
+#CC             =       $(AT) gcc
+#CXX             =      $(AT) g++
 FPIC		=	-fPIC
 INCLUDES	=	-I$(HERE) -I. -I$(SRCDIR)
 CFLAGS	 	= 	-c -g -Wall $(INCLUDES)
-LDFLAGS		= -lnsl 
+LDFLAGS		= 	-lnsl 
 
 CWARN			=	-Wall -Wno-sign-compare -Wno-unused-variable
 CXXWARN			=	$(CWARN) $(FPIC) -Wno-deprecated -Woverloaded-virtual
@@ -39,7 +39,7 @@ CXXWARN			=	$(CWARN) $(FPIC) -Wno-deprecated -Woverloaded-virtual
 COMMON_CFLAGS		=	-c -g -std=gnu99 -D_GNU_SOURCE=1 \
 					-D_REENTRANT  $(CWARN) $(FPIC)\
 
-COMMON_CXXFLAGS		=	-c -g $(CXXWARN) -D__cplusplus
+COMMON_CXXFLAGS         =       -c -g $(CXXWARN) 
 
 
 DBG_CFLAGS		=	$(COMMON_CFLAGS) -DDEBUG_MODE=1
@@ -50,10 +50,11 @@ OPT_CFLAGS		=	$(COMMON_CFLAGS) -DNDEBUG \
 OPT_CXXFLAGS		=	$(COMMON_CXXFLAGS) -DNDEBUG \
 				$(OPTIMIZATION_FLAGS) -fno-omit-frame-pointer
 
-COMMON_LDFLAGS		=	-g $(FPIC) -Wl,--eh-frame-hdr -L$(ZLIBDIR) -lm -lpthread
+COMMON_LDFLAGS		=	-g $(FPIC) -Wl,--eh-frame-hdr -lm -lpthread
 DBG_LDFLAGS		=	$(COMMON_LDFLAGS)
 OPT_LDFLAGS		=	$(COMMON_LDFLAGS) -O3 -fno-omit-frame-pointer
 
+OPT	=	1
 ifneq ($(strip $(OPT)),)
 	CFLAGS		=	$(OPT_CFLAGS)
 	CXXFLAGS	=	$(OPT_CXXFLAGS)
@@ -86,13 +87,13 @@ endif
 
 # Rule for compiling c files.
 $(BINDIR)/%.o : %.c .buildmode Makefile
-	$(ECHO) "[\033[01;34mCC\033[22;37m] compiling $<"
+	$(ECHO) "compiling $<"
 	$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $<
 
 # Rule for compiling c++ files.
 $(BINDIR)/%.o: %.cpp
-	$(ECHO) "[\033[01;34mCXX\033[22;37m] compiling $<"
+	$(ECHO) "compiling $<"
 	$(MKDIR) -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
@@ -104,7 +105,7 @@ ifneq ($(OLDMODE),$(NEWMODE))
 endif
 
 .PHONY: all
-all:
+all: proxy_local proxy_remote nftpServer nftpClient
 
 .PHONY: clean
 clean:
@@ -115,65 +116,70 @@ clean:
 	$(RM) -rf proxy_local proxy_remote
 	$(RM) -rf nftpServer nftpClient
 
+.PHONY: distclean
+distclean: clean
+
 .PHONY: remake
 remake: clean proxy
 
 clictcp: $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
-	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CXX) -o $@ $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
+	$(CC) -o $@ $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
 srvctcp: $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
-	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CXX) -o $@ $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
+	$(CC) -o $@ $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS) 
 
 # Rule to make the libUtil library
 $(BINDIR)/libUtil.a: $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o $(BINDIR)/fifo.o 
-	$(ECHO) "[\033[01;32mCC\033[22;37m] building  $@"
+	$(ECHO) "building  $@"
 	$(MKDIR) -p $(dir $@)
 	$(AR) $(ARFLAGS) $@ $(BINDIR)/util.o $(BINDIR)/md5.o $(BINDIR)/qbuffer.o $(BINDIR)/thr_pool.o $(BINDIR)/fifo.o  
 
 demoServer: $(BINDIR)/demoServer.o .buildmode Makefile
-	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
+	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
 	$(CC) -o $@ $< $(LDFLAGS) 
 
 demoClient: $(BINDIR)/demoClient.o .buildmode Makefile
-	$(ECHO) "[\033[01;33mCC\033[22;37m] linking $@"
+	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
 	$(CC) -o $@ $< $(LDFLAGS) -lreadline
 
 proxy_local: $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
-	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CXX) -o $@ $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS) -lrt
+	$(CC) -o $@ $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS) -lrt
 
 proxy_remote: $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
-	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CXX) -o $@ $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
+	$(CC) -o $@ $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
 nftpServer: $(BINDIR)/nftpServer.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
-	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CXX) -o $@ $(BINDIR)/nftpServer.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
+	$(CC) -o $@ $(BINDIR)/nftpServer.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a $(LDFLAGS)
 
 nftpClient: $(BINDIR)/nftpClient.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
-	$(ECHO) "[\033[01;33mCXX\033[22;37m] linking $@"
+	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CXX) -o $@ $(BINDIR)/nftpClient.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS) -lrt
+	$(CC) -o $@ $(BINDIR)/nftpClient.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS) -lrt
 
-all: proxy
-
-demo: demoClient demoServer
-
+.PHONY: proxy
 proxy: proxy_local proxy_remote
 
+.PHONY: nftp
 nftp: nftpServer nftpClient
 
-
-
+.PHONY: install
+install: all
+	install -d $(DESTDIR)/usr/bin
+	install proxy_local proxy_remote nftpServer nftpClient $(DESTDIR)/usr/bin 
+	install -d $(DESTDIR)/etc/ctcp/
+	install -c -m 644 config/proxy_local.conf config/proxy_remote.conf $(DESTDIR)/etc/ctcp/
 # Uncomment to debug the Makefile
 #OLD_SHELL := $(SHELL)
 #SHELL = $(warning [$@ ($^) ($?)]) $(OLD_SHELL)
