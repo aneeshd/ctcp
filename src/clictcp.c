@@ -156,7 +156,7 @@ main(int argc, char** argv){
 
 
 clictcp_sock*
-connect_ctcp(char *host, char *port, char *lease_file){
+connect_ctcp(char *host, char *port, char *lease_file, struct child_local_cfg* cfg){
     int optlen,rlth;
     struct addrinfo *result;
     int k; // for loop counter
@@ -166,7 +166,7 @@ connect_ctcp(char *host, char *port, char *lease_file){
 
 
     // Create the ctcp socket
-    clictcp_sock* csk = create_clictcp_sock();
+    clictcp_sock* csk = create_clictcp_sock(cfg);
 
     dhcp_lease leases[MAX_SUBSTREAMS];
     if (lease_file != NULL){
@@ -1308,7 +1308,7 @@ delete_table(int table_number, int mark_number){
 }
 
 clictcp_sock* 
-create_clictcp_sock(void){
+create_clictcp_sock(struct child_local_cfg* cfg){
   int k;
 
   clictcp_sock* sk = malloc(sizeof(clictcp_sock));
@@ -1349,6 +1349,7 @@ create_clictcp_sock(void){
   sk->last_seqno = 0;
   sk->start_time = 0;
 
+  strcpy(sk->logdir, cfg->logdir); // copy settings passed from config file
   return sk;
 }
 
@@ -1531,7 +1532,7 @@ close_clictcp(clictcp_sock* csk){
 
   // remove the status file
   char file_name[32];
-  sprintf(file_name,"logs/pids/%u",getpid());
+  sprintf(file_name,"%s/%u",csk->logdir,getpid());
 
   if (remove(file_name) == -1){
     perror("Could not remove the status file");
@@ -1619,12 +1620,12 @@ send_over(clictcp_sock* csk, int substream, const void* buf, size_t buf_len){
 void
 open_status_log(clictcp_sock* csk, char* port){
 
-  if(!mkdir("logs/pids", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("An error occurred while making the logs directory");
+  if(!mkdir(csk->logdir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+    perror("Warning making the logs directory");
   }
 
   char buff[128];
-  sprintf(buff,"logs/pids/%u",getpid());
+  sprintf(buff,"%s/%u",csk->logdir,getpid());
 
   csk->status_log_fd = open(buff, O_RDWR | O_CREAT | O_TRUNC);
 

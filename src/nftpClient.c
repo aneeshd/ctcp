@@ -40,6 +40,7 @@ main(int argc, char** argv){
     char *lease_file = NULL;
     char *port = PORT;
     char *host = HOST;
+    struct child_local_cfg cfg = {.logdir="/var/log/ctcp"};
 
     int c;
     while((c = getopt(argc, argv, "h:p:f:")) != -1) {
@@ -55,7 +56,7 @@ main(int argc, char** argv){
         }
     }
 
-    clictcp_sock* csk = connect_ctcp(host, port, lease_file);
+    clictcp_sock* csk = connect_ctcp(host, port, lease_file, &cfg);
 
     if (csk == NULL){
       printf("Could not create CTCP socket\n");

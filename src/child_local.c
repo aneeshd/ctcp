@@ -54,7 +54,7 @@ clictcp_sock*   csk;
  *                to the SOCKS server is accepted.
  *                Returns: error code (ERR_NONE if all went well).
  **********************************************************************/
-int handle_con()
+int handle_con(struct child_local_cfg* cfg)
 {
   char             buf[256];
   int              res;
@@ -66,7 +66,7 @@ int handle_con()
   ** SOCKS connection negotiation
   */
   start_timer(neg_timeo);
-  res = negotiate(&ad_cl_local);
+  res = negotiate(&ad_cl_local, cfg);
 
   /*
   ** Setup SOCKS reply
@@ -181,7 +181,7 @@ int handle_con()
  *               holds the address information required for
  *               SOCKS reply.
  *********************************************************************/
-int negotiate( struct sockaddr *ad_cl_local )
+int negotiate( struct sockaddr *ad_cl_local, struct child_local_cfg* cfg)
 {
   int            i;
   char          buf[256];
@@ -294,7 +294,7 @@ int negotiate( struct sockaddr *ad_cl_local )
   */
   switch( cmd ) {
   case SC_CONNECT:
-    res = connect_client();
+    res = connect_client(cfg);
     break;
   case SC_BIND:
     memset(ad_target.sa_data+2,0,4);
@@ -324,7 +324,7 @@ int negotiate( struct sockaddr *ad_cl_local )
  *                    holding valid data.
  *                    Returns: error code (ERR_NONE for success).
  *********************************************************************/
-int connect_client()
+int connect_client(struct child_local_cfg* cfg)
 {
   int                       adam;
   struct t_proxy_connection *pcon;
@@ -347,7 +347,7 @@ int connect_client()
     host_addr = inet_ntoa(host_ip);
     //    printf("Sending CTCP request to %s port %s\n", host_addr, ctcp_port);
 
-    csk = connect_ctcp(host_addr, ctcp_port, lease_file);
+    csk = connect_ctcp(host_addr, ctcp_port, lease_file, cfg);
 
     if (csk == NULL){
       printf("CTCP negotiation failed \n");

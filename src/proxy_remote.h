@@ -29,7 +29,7 @@
 #define PROG_NAME             "proxy_remote"
 #define PROG_DATE             "2011"
 
-#define CFG_VARS_CNT          19
+#define CFG_VARS_CNT          22
 #define MAX_FILTER_EXCEPTS    256
 
 #define FP_ALLOW              1

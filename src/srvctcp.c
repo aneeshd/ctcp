@@ -113,13 +113,17 @@ main (int argc, char** argv){
 
 
 srvctcp_sock*
-open_srvctcp(char *port, char *cong_control){ 
+open_srvctcp(char *port, struct child_remote_cfg *cfg){ 
   int numbytes, rv;  
   struct addrinfo *result; //This is where the info about the server is stored
   struct addrinfo hints, *servinfo;
   srvctcp_sock* sk =  create_srvctcp_sock();
  
-  strcpy(sk->cong_control, cong_control);
+  // extract config info passed to us from conf file.
+  strcpy(sk->cong_control, cfg->cong_control);
+  strcpy(sk->logdir, cfg->logdir);
+  sk->ctcp_probe = cfg->ctcp_probe;
+  sk->debug = cfg->debug;
  
   // signal(SIGINT, ctrlc);
 
@@ -803,7 +807,7 @@ close_srvctcp(srvctcp_sock* sk){
   }
 
   char file_name[32];
-  sprintf(file_name, "logs/pids/%u", getpid());
+  sprintf(file_name, "%s/%u", sk->logdir, getpid());
 
   if (remove(file_name) == -1){
     perror(file_name);
@@ -1545,6 +1549,9 @@ readConfig(char* configfile, srvctcp_sock* sk){
 void
 ctcp_probe(srvctcp_sock* sk, int pin) {
    Substream_Path *subpath = sk->active_paths[pin];
+
+   if (!sk->ctcp_probe) return; // logging disabled
+
    if (!sk->db) {
      sk->db = fopen("/tmp/ctcp-probe", "a"); // probably shouldn't be a hard-wired filename
      if(!sk->db) perror("An error ocurred while opening the /tmp/ctcp-probe log file");
@@ -1872,32 +1879,32 @@ void
 
   //---------- Remake Log and Fig Directories ----------------//
 
-  if(!mkdir("logs", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("An error occurred while making the logs directory");
+  if(!mkdir(sk->logdir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+    perror("Warning while making the logs directory");
   }
 
-  if(!mkdir("figs", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("An error occurred while making the figs directory");
+  if(!mkdir("/var/log/ctcp/figs", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+    perror("Warning while making the figs directory");
   }
 
   char* dir_name = malloc(20);
 
-  sprintf(dir_name, "figs/%d-%02d-%02d",
+  sprintf(dir_name, "/var/log/ctcp/figs/%d-%02d-%02d",
           ptm->tm_year + 1900,
           ptm->tm_mon + 1,
           ptm->tm_mday);
 
   if(!mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("An error occurred while making the fig date directory");
+    perror("Warning while making the fig date directory");
   }
 
-  sprintf(dir_name, "logs/%d-%02d-%02d",
+  sprintf(dir_name, "%s/%d-%02d-%02d", sk->logdir,
           ptm->tm_year + 1900,
           ptm->tm_mon + 1,
           ptm->tm_mday);
 
   if(!mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("An error occurred while making the log date directory");
+    perror("Warning while making the log date directory");
   }
 
   //------------------------------------------------//
@@ -2102,12 +2109,12 @@ init_stream(srvctcp_sock* sk, Substream_Path *subpath){
 void
 open_status_log(srvctcp_sock* sk, char* port){
 
-  if(!mkdir("logs/pids", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("An error occurred while making the logs directory");
+  if(!mkdir(sk->logdir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
+    perror("Warning while making the logs directory");
   }
 
   char buff[128];
-  sprintf(buff,"logs/pids/%u",getpid());
+  sprintf(buff,"%s/%u",sk->logdir,getpid());
 
   sk->status_log_fd = open(buff, O_RDWR | O_CREAT | O_TRUNC);
 

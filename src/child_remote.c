@@ -47,7 +47,7 @@ srvctcp_sock*   ctcp_sk;
  *                to the SOCKS server is accepted.
  *                Returns: error code (ERR_NONE if all went well).
  **********************************************************************/
-int handle_con(int ctcp_port, char* cong_control)
+int handle_con(int ctcp_port, struct child_remote_cfg *cfg)
 {
   char             buf[256];
   int              res;
@@ -60,7 +60,7 @@ int handle_con(int ctcp_port, char* cong_control)
   */
 
   sprintf(buf, "%d", ctcp_port);
-  ctcp_sk = open_srvctcp(buf, cong_control);
+  ctcp_sk = open_srvctcp(buf, cfg);
 
   if (ctcp_sk == NULL){
     sprintf(buf,"Failed to create the CTCP socket - port %d\n", ctcp_port);

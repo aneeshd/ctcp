@@ -29,7 +29,7 @@
 #define PROG_NAME             "proxy_local"
 #define PROG_DATE             "2011"
 
-#define CFG_VARS_CNT          18
+#define CFG_VARS_CNT          19
 #define MAX_FILTER_EXCEPTS    256
 
 #define FP_ALLOW              1

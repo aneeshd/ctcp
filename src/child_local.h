@@ -27,9 +27,14 @@ extern struct sockaddr ad_client;
 extern int             sk_target;
 extern struct sockaddr ad_target;
 
-int  handle_con();
-int  negotiate( struct sockaddr *ad_cl_local );
-int  connect_client();
+//---- config parameters - will be read from conf file by proxy_local and passed to child_local
+typedef struct child_local_cfg {
+char logdir[256];
+} child_local_cfg;
+
+int  handle_con(struct child_local_cfg* cfg);
+int  negotiate( struct sockaddr *ad_cl_local, struct child_local_cfg* cfg );
+int  connect_client(struct child_local_cfg* cfg);
 int  bind_client();
 int  handle_traffic();
 void *handle_ctcp_traffic();

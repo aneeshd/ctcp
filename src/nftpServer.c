@@ -42,6 +42,7 @@ main (int argc, char** argv){
   FILE *snd_file; // The file to be sent
   char *port = PORT;  // This is the port that the server is listening to
   int i, c;
+  struct child_remote_cfg cfg = {.ctcp_probe=0, .cong_control="aimd", .logdir="/var/log/ctcp"};
 
   srandom(getpid());
 
@@ -72,7 +73,7 @@ main (int argc, char** argv){
 
   ////////// open ctcp server //////////////
 
-  srvctcp_sock* sk = open_srvctcp(port,"aimd");
+  srvctcp_sock* sk = open_srvctcp(port,&cfg);
 
   if (sk == NULL){
     printf("Could not create CTCP socket\n");

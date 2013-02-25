@@ -4,6 +4,7 @@
 #include "util.h"
 #include "fifo.h"
 #include <sys/poll.h>
+#include "child_local.h"
 
 typedef struct{
   char* interface;
@@ -53,6 +54,7 @@ typedef struct{
   status_t status;
   ctcp_err_t error;
   int status_log_fd;
+  char logdir[256]; // passed from config file
   
   //---------------- STATISTICS & ACCOUTING ------------------//
   uint32_t pkts;
@@ -102,14 +104,14 @@ void make_new_table(dhcp_lease* lease, int table_number, int mark_number);
 void delete_table(int table_number, int mark_number);
 
 void *handle_connection(void* arg);
-clictcp_sock* create_clictcp_sock(void);
+clictcp_sock* create_clictcp_sock(struct child_local_cfg* cfg);
 void remove_substream(clictcp_sock* csk, int pin);
 
 int  poll_flag(clictcp_sock *csk, flag_t* flag, int timeout);
 int  send_flag(clictcp_sock *csk, int path_id, flag_t flag);
 
 void close_clictcp(clictcp_sock* csk);
-clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file);
+clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file, struct child_local_cfg* cfg);
 uint32_t  read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count);
 
 int send_over(clictcp_sock* csk, int substream, const void* buf, size_t buf_len);

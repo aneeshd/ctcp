@@ -5,6 +5,7 @@
 #include "util.h"
 #include "thr_pool.h"
 #include "qbuffer.h"
+#include "child_remote.h"
 
 // ------------ Connection parameters ---------------//
 #define BUFFSIZE    3000
@@ -116,8 +117,10 @@ typedef struct{
   double start_time, total_time;
   double idle_total; // The total time the server has spent waiting for the acks
 
+  int ctcp_probe; // enable ctcp-probe logging ? 
   status_t status;
   ctcp_err_t error;
+  char logdir[256]; // passed from config file
   int status_log_fd;
 
   FILE *db;     /* debug trace file */
@@ -159,7 +162,7 @@ void free_coded_pkt(void* a);
 int sockaddr_cmp(struct sockaddr_storage* addr1, struct sockaddr_storage* addr2);
 
 srvctcp_sock* create_srvctcp_sock(void);
-srvctcp_sock* open_srvctcp(char *port, char *cong_control);
+srvctcp_sock* open_srvctcp(char *port, struct child_remote_cfg* cfg);
 int listen_srvctcp(srvctcp_sock* sk);
 void close_srvctcp(srvctcp_sock* sk);
 size_t send_ctcp(srvctcp_sock* sk, const void *usr_buf, size_t usr_buf_len);
