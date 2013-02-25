@@ -1,0 +1,15 @@
+Source: ctcp
+Section: non-free/net 
+Priority: optional
+Maintainer: Doug Leith <doug@leith.ie>
+Build-Depends: debhelper (>= 7.0.50~)
+Standards-Version: 3.9.1 
+Homepage:  
+
+Package: ctcp
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Coded TCP (CTCP) 
+ Provides reliable transport mechanism that uses error correction codes
+ to mask the adverse effects of packet loss.
+

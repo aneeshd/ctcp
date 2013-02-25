@@ -1,0 +1,61 @@
+.TH CTCP 1 "February 25, 2013"
+.SH NAME 
+CTCP \- Coded TCP
+.SH DESCRIPTION
+Provides reliable transport mechanism that uses error correction codes to mask the adverse effects of packet loss.
+.SH OVERVIEW
+You can run CTCP in the "proxy" mode or "file transfer" mode. The proxy mode is more involved in terms system configuration, but allows SOCKS-enabled software tunnel their traffic over CTCP. The file transfer mode provides a simple file transfer client and server that perform a single file transfer session per execution and print some statistics. This mode does not need any configuration except for the command line arguments.
+.SH SYSTEM CONFIGURATION
+.SH Proxy Mode:
+.TP
+The system operates as a chained SOCKSv5 proxy, i.e., proxy_local works as a SOCKS proxy server running on a local machine connected to proxy_remote that runs another upstream SOCKS server running on another machine, which in turn establishes connections with content servers.
+.TP
+Client APP  <-----> proxy_local <------> proxy_remote  <-----> Server
+.TP
+The client application connects with proxy_local on localhost, proxy_local forwards traffic to proxy_remote and proxy_remote then forwards this to the appropriate content server.  Reverse traffic from server to client follows the same process using a Coded TCP transport over the path between proxy_remote and proxy_local. 
+.SH File Transfer Mode:
+.TP
+No extra configuration is required.
+.SH OPERATION
+.SH Proxy Mode:
+.TP
+On application server use /etc/ctcp/proxy_remote.conf to specify the address/port that proxy_remote should listen on - the default is 0.0.0.0:1080
+.TP
+Start proxy_remote on the server using:
+.TP
+$ sudo proxy_remote start
+.TP
+On client machine use /etc/ctcp/proxy_local.conf to specify the local address/port that proxy_local should listen on - the default is 0.0.0.0:1080 - and also to specify with address/port proxy_remote is listening on on the application server.  For example, if the IP address of the remote server running proxy_remote is 192.168.1.1, in /etc/ctcp/proxy_local.conf set UP_PROXY_ADDR = 192.168.1.1.  Similarly, if proxy_remote is listening on port 1080, in  /etc/ctcp/proxy_local.conf set UP_PROXY_PORT = 1080. 
+.TP
+Start proxy_local on localhost using:
+.TP
+$ sudo proxy_local start
+.TP
+Set the Client app (e.g. a web browser) to point to proxy_local by changing the proxy settings to SOCKS v5 proxy, with address 127.0.0.1 (if proxy_local on the same machine as browser) and port 1080. 
+.TP
+The open the Client App (e.g. browser) and start operating the app. The traffic should now go through a CTCP tunnel.
+.TP
+In order to stop the proxy applications use the following:
+.TP
+$ sudo proxy_remote shutdown
+.TP
+$ sudo proxy_local  shutdown
+.SH File Transfer Mode:
+.TP
+First, on the server machine, run nftpServer as follows
+.TP
+$ nftpServer -f file -p port
+.TP
+where file is the name of local file to be sent over CTCP tunnel, and port is the listening port. The default port is 8777.
+.TP
+Second, on the client machine, run nftpClient as follows
+.TP
+$ nftpClient -h server_address -p server_port
+.TP
+where server-address is the IP address of the machine running nftpServer, and server_port is the port specified when running nftpServer. The default address is 127.0.0.1 and default port is 8777.
+.TP
+You should see some logs printing on the server side, and after the session is complete, some logs on the client side.
+.SH SEE ALSO
+.BR proxy_remote (1),
+.BR proxy_local (1)
+.br

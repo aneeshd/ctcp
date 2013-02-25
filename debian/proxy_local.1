@@ -1,0 +1,40 @@
+.TH PROXY_LOCAL 1 "February 25, 2013"
+.SH NAME 
+proxy_local \- client-side component of coded tcp proxy 
+.SH SYNOPSIS
+.B proxy_local 
+.RI [ options ] " action" ...
+.SH DESCRIPTION
+Binds to local port and address and listens for incoming SOCKS connections.  These are forwarded to proxy_remote via a Coded TCP transport.  See 
+.B man ctcp(1) 
+for further details of how to configure proxy_local and proxy_remote to work together.
+.SH ACTIONS
+.TP
+.B start
+Start daemon
+.TP
+.B shutdown
+Stop daemon
+.SH OPTIONS
+.TP
+.B \-h,\-\-help
+Display help screen and exit
+.TP
+.B \-v,\-\-version
+Show version of program.
+.TP
+.B \-c file, \-\-config file
+Use configuration file 'file'.  Default is /etc/ctcp/proxy_local.conf
+.TP
+.B \-f,\-\-forceload
+Force starting of daemon even if PID file exists
+.SH FILES
+.TP
+.B /etc/ctcp/proxy_local.conf
+The system-wide configuration file.
+.TP
+.B /var/run/proxy_local.pid
+Process ID lock file to avoid multiple copies of running simultaneously.
+.SH SEE ALSO
+.B proxy_remote(1),
+.B ctcp(1)
