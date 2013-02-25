@@ -1559,11 +1559,11 @@ ctcp_probe(srvctcp_sock* sk, int pin) {
 
    if (sk->db) {
         fprintf(sk->db,"%f dest %s:%u  %d %#x %#x %u %u %u %u %u %u %u %u %f %f\n",
-           getTime(), sk->clientip, sk->clientport,
-           PAYLOAD_SIZE, subpath->snd_nxt, subpath->snd_una,
-           subpath->snd_cwnd, subpath->snd_ssthresh, MAX_CWND,
+           getTime(), sk->clientip, (int) sk->clientport,
+           (int) PAYLOAD_SIZE, (int) subpath->snd_nxt, (int) subpath->snd_una,
+           (int) subpath->snd_cwnd, (int) subpath->snd_ssthresh, (int) MAX_CWND,
            (int) (subpath->srtt*1000), (int) (subpath->basertt*1000), (int) (subpath->rtt*1000), (int) (subpath->minrtt*1000),
-           subpath->total_loss, subpath->rate*PAYLOAD_SIZE*8e-6, subpath->goodput*PAYLOAD_SIZE*8e-6);
+           (int) subpath->total_loss, subpath->rate*PAYLOAD_SIZE*8e-6, subpath->goodput*PAYLOAD_SIZE*8e-6);
         fflush(sk->db);
    }
 }

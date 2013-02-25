@@ -49,7 +49,7 @@ ctrlc(clictcp_sock *csk){
   /* don't include first pkt in data/pkt rate */
   printf("\n\n******* Priniting Statistics for Connection ********\n");
   printf("**Packets** %d pkts  %d acks  %d bytes\n**THRU** %f KBs %f Mbs %f secs \n",
-         csk->pkts,csk->acks,PAYLOAD_SIZE*csk->pkts,1.e-3*PAYLOAD_SIZE*(csk->pkts)/csk->end_time,
+         (int) csk->pkts,(int) csk->acks,(int) PAYLOAD_SIZE*csk->pkts, 1.e-3*PAYLOAD_SIZE*(csk->pkts)/csk->end_time,
          8.e-6*PAYLOAD_SIZE*(csk->pkts)/csk->end_time,csk->end_time);
 
   //printf("PAYLOAD_SIZE %d\n",PAYLOAD_SIZE);
