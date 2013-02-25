@@ -18,7 +18,9 @@
 #include <time.h>
 #include "srvctcp.h"
 
-volatile sig_atomic_t io_condv_ptr = 0;
+//volatile sig_atomic_t io_condv_ptr = 0;
+volatile pthread_cond_t* io_condv_ptr = 0;
+
 
 
 /*
@@ -941,7 +943,7 @@ send_flag(srvctcp_sock* sk, int path_id, flag_t flag ){
 void
 IO_handler(void){
   //  pthread_mutex_lock(   &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex) );
-  pthread_cond_signal((pthread_cond_t*)io_condv_ptr);
+  pthread_cond_signal((pthread_cond_t*) io_condv_ptr);
   //  pthread_mutex_unlock( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex) );
 }
 
@@ -973,7 +975,11 @@ send_segs(srvctcp_sock* sk, int pin){
 
     pthread_mutex_lock(   &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex) );
 
-    io_condv_ptr =  (sig_atomic_t) &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_ready_condv);
+    // previously used sig_atomic_t type in next line but this creates a type conflict on 64 bit machines.  
+    // now using fact that pointer assignments are atomic 
+    //  - see http://www.gnu.org/software/libc/manual/html_node/Atomic-Types.html.
+    // DL
+    io_condv_ptr =  (pthread_cond_t*) &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_ready_condv);
 
     pthread_cond_signal(  &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv));
 
