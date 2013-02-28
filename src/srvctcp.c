@@ -2227,3 +2227,23 @@ log_srv_status(srvctcp_sock* sk){
 
 }
 
+void
+log_pkt(srvctcp_sock* sk, int pkt, int pkt_size) {
+    
+    if (!sk->ctcp_probe) return; // logging disabled
+    
+    if (!sk->pkt_log) {
+        sk->pkt_log = fopen("/tmp/ctcp-pkt_log", "a"); // probably shouldn't be a hard-wired filename
+        if(!sk->pkt_log) perror("An error ocurred while opening the /tmp/ctcp-pkt_log log file");
+    }
+    
+    if (sk->pkt_log) {
+        fprintf(sk->pkt_log,"%u,%f,%s:%u,%u\n",
+                pkt, getTime(), sk->clientip, (int) sk->clientport,
+                pkt_size);
+        fflush(sk->pkt_log);
+    }
+    return;
+}
+
+

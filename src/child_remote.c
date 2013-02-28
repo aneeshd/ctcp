@@ -424,7 +424,7 @@ int handle_traffic(int ctcp_port)
   int           bown = -1;
   struct pollfd pfd[2];
   int           res;
-    
+  int           pkt_no = 1;
     
   /*
   ** Allocate memory for buffer
@@ -498,6 +498,8 @@ int handle_traffic(int ctcp_port)
         }
         bptr += res;
       }else {  //if received TCP packets from target, forward to proxy_local over CTCP
+          log_pkt(ctcp_sk,pkt_no,btop-bptr);
+          pkt_no++;
         while(bptr < btop){
           res = send_ctcp(ctcp_sk, buf + bptr, btop - bptr);
           if(res < 0) {

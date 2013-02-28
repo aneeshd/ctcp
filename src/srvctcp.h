@@ -124,6 +124,7 @@ typedef struct{
   int status_log_fd;
 
   FILE *db;     /* debug trace file */
+  FILE *pkt_log // packet trace file (captures information from all packets sent from the target)
 
 } srvctcp_sock;
 
@@ -172,7 +173,7 @@ void *server_worker(void *arg);
 void open_status_log(srvctcp_sock* sk, char* port);
 void  log_srv_status(srvctcp_sock* sk);
 
-
+void log_pkt(srvctcp_sock* sk, int pkt, int pkt_size);
 
 #endif // ATOUCLI_H_
 
