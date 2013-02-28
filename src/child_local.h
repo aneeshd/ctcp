@@ -30,6 +30,8 @@ extern struct sockaddr ad_target;
 //---- config parameters - will be read from conf file by proxy_local and passed to child_local
 typedef struct child_local_cfg {
 char logdir[256];
+    int debug;
+    int ctcp_probe;
 } child_local_cfg;
 
 int  handle_con(struct child_local_cfg* cfg);

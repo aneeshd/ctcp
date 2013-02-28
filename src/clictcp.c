@@ -1350,6 +1350,9 @@ create_clictcp_sock(struct child_local_cfg* cfg){
   sk->start_time = 0;
 
   strcpy(sk->logdir, cfg->logdir); // copy settings passed from config file
+  sk->ctcp_probe = cfg->ctcp_probe;
+  sk->debug = cfg->debug;
+    
   return sk;
 }
 
@@ -1734,4 +1737,38 @@ log_cli_status(clictcp_sock* csk){
 
   return;
 
+}
+
+void ctcp_probe(clictcp_sock* csk, int pin)
+{
+    if (!csk->ctcp_probe) return; // logging disabled
+    
+    if (!csk->db) {
+        csk->db = fopen("/tmp/ctcp-probe","a");  //probably shouldn't be a hard-wired filename
+        if (!csk->db) perror("An error occred while opening the /tmp/ctcp-probe log file");
+    }
+    
+    if (csk->db) {
+        fprintf(csk->db,"%f\n",
+                getTime());
+        fflush(csk->db);
+    }
+    return;
+}
+
+void log_pkt(clictcp_sock* csk, int pkt, int pkt_size)
+{
+    if (!csk->ctcp_probe) return; // logging disabled
+    
+    if (!csk->pkt_log) {
+        csk->pkt_log = fopen("/tmp/ctcp-pkt_log","a");  //probably shouldn't be a hard-wired filename
+        if (!csk->pkt_log) perror("An error occred while opening the /tmp/ctcp-pkt_log log file");
+    }
+    
+    if (csk->pkt_log) {
+        fprintf(csk->pkt_log,"%u,%f,%u\n",
+                pkt,getTime(),pkt_size);
+        fflush(csk->pkt_log);
+    }
+    return;
 }

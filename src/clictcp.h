@@ -70,6 +70,11 @@ typedef struct{
   int last_seqno;
   double start_time;
   double end_time;
+    
+  int ctcp_probe;  //enable ctcp-probe logging
+    
+  FILE *db;  //debug trace file
+  FILE *pkt_log  //packet trace file (captures info from all packets sent from target)
 } clictcp_sock; 
 
 /*
@@ -115,6 +120,9 @@ clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file, struct chil
 uint32_t  read_ctcp(clictcp_sock* csk, void *usr_buf, size_t count);
 
 int send_over(clictcp_sock* csk, int substream, const void* buf, size_t buf_len);
+
+void ctcp_probe(clictcp_sock* csk, int pin);
+void log_pkt(clictcp_sock* csk, int pkt, int pkt_size);
 
 #endif // ATOUSRV_H_
 
