@@ -32,6 +32,7 @@
 #include "child_remote.h"
 #include "proxy_remote.h"
 #include "up_proxy.h"
+#include "util.h"
 
 
 
@@ -51,7 +52,8 @@ int filter_policy      = FP_ALLOW;
 int filter_except_cnt  = 0;
 uint32_t filter_excepts[MAX_FILTER_EXCEPTS];
 int filter_except_masks[MAX_FILTER_EXCEPTS];
-struct child_remote_cfg childcfg = {.ctcp_probe=0, .debug=2, .cong_control="aimd", .logdir="/var/log/ctcp"};
+struct child_remote_cfg childcfg = {.ctcp_probe=0, .debug=2, .cong_control="aimd", .logdir="/var/log/ctcp", .block_size=BLOCK_SIZE, .num_blocks=NUM_BLOCKS,
+    .max_coding_wnd=MAX_CODING_WND};
 char            sz_cfgfile[256] = "/etc/ctcp/"PROG_NAME".conf";
 int             con_cnt         = 0;
 int             child           = 0;
@@ -425,7 +427,8 @@ int load_config()
 	"MAX_CONNECTIONS", "FILTER_POLICY", "FILTER_EXCEPTION",
 	"UP_PROXY_TYPE", "UP_PROXY_ADDR","UP_PROXY_PORT",
 	"UP_PROXY_USER", "UP_PROXY_PASSWD", "BIND_ADDR", "CONGESTION_CONTROL",
-        "CTCP_PROBE", "STATUS_DIR", "DEBUG" 
+    "CTCP_PROBE", "STATUS_DIR", "DEBUG","BLOCK_SIZE","NUM_BLOCKS",
+    "MAX_CODING_WND"
     };
     void *var_ptr[CFG_VARS_CNT] = {
 	&socks_port, sz_logfile, sz_pidfile,
@@ -434,7 +437,8 @@ int load_config()
 	&max_con_cnt, NULL, NULL,
 	NULL, proxy_name, &proxy_port,
 	proxy_usr, proxy_pwd, ad_socks.sa_data+2, childcfg.cong_control, 
-        &childcfg.ctcp_probe, childcfg.logdir, &childcfg.debug 
+    &childcfg.ctcp_probe, childcfg.logdir, &childcfg.debug,
+    &childcfg.block_size, &childcfg.num_blocks, &childcfg.max_coding_wnd
     };
     char var_type[CFG_VARS_CNT] = {
 	'n','s','s',
@@ -442,7 +446,9 @@ int load_config()
 	'n','n','n',
 	'n','s','s',
 	's','s','n',
-	's','s','a','s','n','s','n'
+	's','s','a','s',
+    'n','s','n',
+    'n','n','n'
     };
 
     //up_proxy = proxy_new(PROXY_SOCKS5,0x0101A8C0,1080,0,NULL,NULL);

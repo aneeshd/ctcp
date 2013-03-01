@@ -29,10 +29,13 @@ extern struct sockaddr ad_target;
 
 //---- config parameters - will be read from conf file by proxy_remote and passed to child_remote
 typedef struct child_remote_cfg {
-int ctcp_probe;
-int debug;
-char cong_control[32];
-char logdir[256];
+    int ctcp_probe;
+    int debug;
+    char cong_control[32];
+    char logdir[256];
+    int block_size;
+    int num_blocks;
+    int max_coding_wnd;
 } child_remote_cfg;
 
 int  handle_con(int ctcp_port, struct child_remote_cfg* cfg);
