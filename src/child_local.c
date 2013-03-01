@@ -594,7 +594,8 @@ void
   int           bptr = 0;
   int           bown = -1;
   int           res;
-  struct pollfd pfd;  
+  struct pollfd pfd;
+  int pkt_no = 1;
 
 
   pfd.fd = sk_client;
@@ -635,7 +636,9 @@ void
         pthread_exit(NULL);
         //return NULL;
       }
-
+        log_pkt(csk,pkt_no,btop-bptr);
+        pkt_no++;
+        
 	    while( (res=write(sk_client, buf+bptr, btop-bptr)) < 0 && errno==EINTR );        
 	    if( res<0 ) {
         res = ERR_SKFATAL;
