@@ -74,7 +74,7 @@ typedef struct{
   int ctcp_probe;  //enable ctcp-probe logging
     
   FILE *db;  //debug trace file
-  FILE *pkt_log  //packet trace file (captures info from all packets sent from target)
+  FILE *pkt_log;  //packet trace file (captures info from all packets sent from target)
 } clictcp_sock; 
 
 /*
