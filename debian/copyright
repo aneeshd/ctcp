@@ -7,17 +7,6 @@ Upstream Author(s):
      Ali ParandehGheibi (parandeh@mit.edu)
      MinJi Kim (minjikim@mit.edu)
      Leonardo Urbina (lurbina@mit.edu)
+     Jason Cloud (jcloud@mit.edu)
+     Doug Leith (doug.leith@nuim.ie)
 
-Copyright:
-
-    <Copyright (C) 2013 CodeOn>
-
-License:
-
-    This package is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
-
-The Debian packaging is:
-
-    Copyright (C) 2013 Doug Leith <doug@leith.ie>
