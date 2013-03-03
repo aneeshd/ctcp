@@ -90,7 +90,6 @@ typedef struct{
 
 typedef struct{ 
   pthread_mutex_t block_mutex;
-  pthread_rwlock_t block_rwlock;
   pthread_cond_t  block_free_condv;
   pthread_cond_t  block_ready_condv;
   uint32_t len; // Number of bare packets inside the block
