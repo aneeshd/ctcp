@@ -544,12 +544,12 @@ void
             }
             
             if(csk->pathstate[curr_substream] == ESTABLISHED){
-              bldack(csk, skb, match, curr_substream);            
+              bldack(csk, skb, curr_substream);            
             }else if(csk->pathstate[curr_substream] == SYN_ACK_RECV ||
                      csk->pathstate[curr_substream] == SYN_SENT){
               csk->pathstate[curr_substream] = ESTABLISHED;
               log_cli_status(csk);
-              bldack(csk, skb, match, curr_substream);            
+              bldack(csk, skb, curr_substream);            
             }else{
               //printf("State %d: Received a data packet\n", csk->pathstate[curr_substream]);
             }
@@ -660,7 +660,7 @@ err_sys(char *s, clictcp_sock *csk){
 }
 
 void
-bldack(clictcp_sock* csk, Skb* skb, bool match, int curr_substream){
+bldack(clictcp_sock* csk, Skb* skb, int curr_substream){
   socklen_t srvlen;
   double elimination_timer = getTime();
   Data_Pckt* msg = &(skb->msgbuf.msg);
