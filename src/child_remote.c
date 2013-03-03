@@ -130,7 +130,7 @@ int handle_con(int ctcp_port, struct child_remote_cfg *cfg)
   ** Handle the actual data traffic between the client
   ** and its target.
   */
-  res = handle_traffic(ctcp_port);
+  res = handle_traffic();
   sprintf(buf,"Connection closed (%s)",sz_error[res]);
   logstr(buf,&ad_client);
   
