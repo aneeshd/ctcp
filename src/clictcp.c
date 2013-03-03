@@ -1630,7 +1630,7 @@ open_status_log(clictcp_sock* csk, char* port){
   char buff[128];
   sprintf(buff,"%s/%u",csk->logdir,getpid());
 
-  csk->status_log_fd = open(buff, O_RDWR | O_CREAT | O_TRUNC);
+  csk->status_log_fd = open(buff, O_RDWR | O_CREAT | O_TRUNC,  0644);
 
   if (csk->status_log_fd == -1){
     perror("Could not open status file");
