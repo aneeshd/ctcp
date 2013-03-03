@@ -416,7 +416,7 @@ int bind_client()
  *                    and 'ad_target' to hold valid data.
  *                    Returns: error code (ERR_NONE if successful).
  **********************************************************************/
-int handle_traffic(int ctcp_port)
+int handle_traffic()
 {
   uchar         *buf;
   int           btop = 0;

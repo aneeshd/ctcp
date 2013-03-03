@@ -42,6 +42,6 @@ int  handle_con(int ctcp_port, struct child_remote_cfg* cfg);
 int  negotiate( struct sockaddr *ad_cl_local, int ctcp_port);
 int  connect_client();
 int  bind_client();
-int  handle_traffic(int ctcp_port);
+int  handle_traffic();
 
 #endif /* CHILD_REMOTE_H */
