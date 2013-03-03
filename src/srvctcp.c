@@ -1072,7 +1072,12 @@ send_segs(srvctcp_sock* sk, int pin){
       sk->dof_remain[blockno%NUM_BLOCKS] += job->dof_request; // Update the internal dof counter
       job->coding_wnd = MAX_CODING_WND;
 
-      addJob(&(sk->workers), &coding_job, job, &free, HIGH);
+      if (blockno == sk->curr_block)
+         addJob(&(sk->workers), &coding_job, job, &free, HIGH);
+      else 
+         // Changed to use LOW priority here i.e service jobs in the
+         // same order (block number order) that they are submitted.  DL
+         addJob(&(sk->workers), &coding_job, job, &free, LOW);
     }
 
     while (CurrWin>=1 && sk->dof_remain[blockno%NUM_BLOCKS]>0) {
