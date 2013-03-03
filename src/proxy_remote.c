@@ -36,8 +36,7 @@
 
 
 
-
-int  socks_port        = 1080;
+uint16_t  socks_port   = 1080;
 char sz_logfile[256]   = "/var/log/"PROG_NAME".log";
 char sz_pidfile[256]   = "/var/run/"PROG_NAME".pid";
 int  buf_size          = 64*1024;
@@ -76,7 +75,7 @@ int main( int argc, char **argv )
     FILE             *f;
     int              allow;
     uint32_t         adam;
-
+    uint16_t 	     port;
     int             ctcp_port = START_PORT;
     
     /*
@@ -199,7 +198,8 @@ int main( int argc, char **argv )
     ** Start listening for client connections
     */
     ad_socks.sa_family         = AF_INET;
-    *(ushort*)ad_socks.sa_data = htons(socks_port);
+    port  = htons(socks_port);
+    memcpy(ad_socks.sa_data,&port,2);
     res = open_serv_sock(&sk_socks,&ad_socks);
     if( res != ERR_NONE ) {
 	printf("ERROR\n\t%s\n",sz_error[res]);
@@ -216,8 +216,7 @@ int main( int argc, char **argv )
     
     strcpy(s,"Listening on ");
     addr_to_ip(&ad_socks,s+strlen(s));
-    sprintf( s+strlen(s), ":%u", 
-	     ntohs(((struct sockaddr_in*)&ad_socks)->sin_port) );
+    sprintf( s+strlen(s), ":%u", (int) socks_port);
     logstr(s,NULL);
 
     if( up_proxy ) {
@@ -292,7 +291,7 @@ int main( int argc, char **argv )
        */
       allow = (filter_policy == FP_ALLOW);
       for( i=0; i<filter_except_cnt; i++ ) {
-        memcpy(&adam,ad_client.sa_data+2,4);
+        memcpy(&adam, &(((struct sockaddr_in*) &ad_client)->sin_addr),4);
         adam ^= filter_excepts[i];
         adam &= htonl(0xFFFFFFFF << (32-filter_except_masks[i]));
         if( !adam ) {

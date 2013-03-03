@@ -39,7 +39,7 @@
 #define MAX_PORT              9999
 
 
-extern int  socks_port;
+extern uint16_t  socks_port;
 extern char sz_logfile[256];
 extern char sz_pidfile[256];
 extern int  buf_size;
