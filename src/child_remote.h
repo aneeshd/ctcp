@@ -36,6 +36,7 @@ typedef struct child_remote_cfg {
     int block_size;
     int num_blocks;
     int max_coding_wnd;
+    double SLR_scaling;
 } child_remote_cfg;
 
 int  handle_con(int ctcp_port, struct child_remote_cfg* cfg);

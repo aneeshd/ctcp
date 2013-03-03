@@ -104,6 +104,7 @@ typedef struct{
 
   //----------------- configurable variables -----------------//
   int debug;
+  double SLR_scaling;              /* multiplies the estimated loss rate when caclulating coding rate */
   int maxidle;                     /* max idle before abort */
   int rcvrwin;                     /* rcvr window in mss-segments */    // TODO actual use rcvrwin!
   int increment;                   /* cc increment */
