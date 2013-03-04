@@ -125,7 +125,7 @@ typedef struct{
   int status_log_fd;
 
   FILE *db;     /* debug trace file */
-  FILE *pkt_log // packet trace file (captures information from all packets sent from the target)
+  FILE *pkt_log; // packet trace file (captures information from all packets sent from the target)
 
 } srvctcp_sock;
 
