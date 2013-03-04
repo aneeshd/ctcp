@@ -2000,7 +2000,7 @@ open_status_log(srvctcp_sock* sk, char* port){
   char buff[128];
   sprintf(buff,"%s/%u",sk->logdir,getpid());
 
-  sk->status_log_fd = open(buff, O_RDWR | O_CREAT | O_TRUNC);
+  sk->status_log_fd = open(buff, O_RDWR | O_CREAT | O_TRUNC, 0644);
 
   if (sk->status_log_fd == -1){
     perror("Could not open status file");
