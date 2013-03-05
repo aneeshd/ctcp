@@ -84,13 +84,17 @@ typedef struct{
   uint16_t clientport;                      // Client port.
   char cong_control[32];
 
-  int dof_req_latest;                       /* Latest information about dofs of the current block */
-  uint32_t curr_block; // Current block number
-  Block_t blocks[NUM_BLOCKS];
+  int dof_req_latest;                       /* Latest information about dofs of the current block */    
   uint32_t maxblockno; // use highest blockno possible, set when we reach the end of the file
+  uint32_t curr_block; // Current block number  
+  Block_t blocks[NUM_BLOCKS];
 
   // ------------ Multithreading related variables ---------------//
   pthread_t daemon_thread;
+  // Lock for accessing curr_block,dof_req_latest,maxblockno
+  // IMPORTANT: To avoid deadlocks, if need to take a lock on sk->curr_block_mutex and also on sk->blocks[].block_mutex, 
+  // then always do this in the order sk->curr_block_mutex then sk->blocks[].block_mutex.
+  pthread_mutex_t curr_block_mutex; 
   
   qbuffer_t coded_q[NUM_BLOCKS];
   thr_pool_t workers;
