@@ -91,7 +91,7 @@ typedef struct{
 typedef struct{ 
   pthread_mutex_t block_mutex;
   pthread_cond_t  block_free_condv;
-  pthread_cond_t  block_ready_condv;
+  //pthread_cond_t  block_ready_condv;
   uint32_t len; // Number of bare packets inside the block
   char* content[BLOCK_SIZE]; // Array of pointers that point to the marshalled data of the bare packets
   Skb* skb[BLOCK_SIZE]; // for memory management

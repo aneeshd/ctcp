@@ -20,7 +20,7 @@
 
 // Threading:
 // - open_srvctcp(), create_srvctcp_sock(), listen_srvctcp() all execute in single-threaded context.
-// - close_srvctpc() executes in a limited multi-threaded context with coding_job(),server_worker(), but with 
+// - close_srvctcp() executes in a limited multi-threaded context with coding_job(),server_worker(), but with 
 //   send_ctcp() finished.
 // - send_ctcp() executes in a multi-threaded context.  It is called by handle_traffic() (in child_remote.c) and so 
 //   shares the same thread.
@@ -33,7 +33,7 @@
 // (2) sk->blocks[].block_mutex.
 
 
-// TO DO - provide locking protection for sk->status.
+// TO DO - provide mutex protection for sk->status
 
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
@@ -277,21 +277,21 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       if (i == sk->curr_block){  
          sk->dof_req_latest += job->dof_request;  // have already taken a lock on curr_block_mutex
       }
+      // Clear lock
+      pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
     } else if (sk->maxblockno < sk->curr_block+NUM_BLOCKS) {
+      // Clear lock
+      pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
       sk->maxblockno++;  // have already taken a lock on curr_block_mutex
     }  else {
       // We have sk->maxblockno == sk->curr_block+NUM_BLOCKS and so must wait for
       // at least one block to be freed (in handle_ack() by acks from receiver saying that is has arrived safely)
       // before we can receive more data from client.
-      pthread_mutex_unlock(&(sk->curr_block_mutex)); // release curr_block_mutex lock as might be here a while !
+      
+      // Release locks as might be here a while !
+      pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
+      
       if (sk->debug>3) printf("Waiting on block free %d/%d/%d ...", sk->curr_block, sk->maxblockno, i);
-
-      // Risk of deadlock with next line since block_free_condv signal is in handle_ack()
-      // but thread running handle_ack() might be blocked waiting for block_ready_condv
-      // signal which is sent below in send_segs().
-
-      // pthread_cond_wait( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv),
-      //                   &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
 
       // We could just bail out here without waiting, but
       // then loop that calls us here in send_ctcp() will immediately return
@@ -300,36 +300,32 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       double endtime = getTime()+0.1; // wait for at most 100ms
       timeout.tv_sec = endtime; timeout.tv_nsec = (endtime-timeout.tv_sec)*1e9;
       int res = pthread_cond_timedwait( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_free_condv),
-                         &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex), &timeout); 
+                         &(sk->curr_block_mutex), &timeout); 
+      // Note: We released curr_block_mutex during timedwait, so sk->curr_block, sk->maxblockno might now have changed.
       if (res == ETIMEDOUT) {
-         // Timed out, so lets bail.  Need to clear lock ...
-         pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
-         // .. and we signal send_segs() not to wait (it might be waiting for new packets from
+         // Timed out, so lets bail.  
+         // .. and we will signal send_segs() not to wait (it might be waiting for new packets from
          // us here in send_ctcp()).   This is not perfect - if it was waiting, send_segs() will now proceed
          // and transmit packets from later blocks, if there are any.  If there are none to send, this runs the
          // risk of disrupting ack clocking.  Also, we are hoping that once send_segs() completes, there will be
          // some more acks received so that handle_acks() is called and eventually we free up at least one block
          // and so break the deadlock here in send_ctcp().  If acks completely stall, then we will be
          // stuck in a loop here.
-         pthread_cond_signal( &(sk->blocks[i%NUM_BLOCKS].block_ready_condv));
          if (sk->debug>3) printf("timed out\n");
-         return usr_buf_len - bytes_left;
+         break;
       } else
-         // Retake curr_block_mutex lock.  In meantime handle_ack() might have updated sk->maxblockno
+         // In meantime handle_ack() might have updated sk->maxblockno
          // but only if all blocks have been acked by receiver and so have no packets to send, in which case 
          // we are ok to proceed here with the new sk->maxblockno.
-         pthread_mutex_lock(&(sk->curr_block_mutex)); 
          if (sk->debug>3) printf("done\n");
     }
-
-    // Clear lock
-    pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
-    // Signal send_segs() to continue, if blocked waiting for new data
-    pthread_cond_signal( &(sk->blocks[i%NUM_BLOCKS].block_ready_condv));
 
     //printf("Total bytes_read %d bytes_left %d maxblockno %d currblock %d\n", usr_buf_len - bytes_left, bytes_left,  sk->maxblockno, sk->curr_block);
   }
   pthread_mutex_unlock(&(sk->curr_block_mutex));
+  // Signal send_segs() to continue, if blocked waiting for new data
+  pthread_cond_signal( &(sk->block_ready_condv));
+
   return usr_buf_len - bytes_left;
 }
 
@@ -364,10 +360,12 @@ void
 
   sk->start_time = getTime();
   
-  // Need to take lock on sk->dof_req_latest as might be updated by send_ctcp()
+  // Take lock on sk->dof_req_latest as might be updated by send_ctcp()
   // executing in different thread
   pthread_mutex_lock(&(sk->curr_block_mutex));
+  pthread_mutex_lock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
   sk->dof_req_latest = sk->blocks[sk->curr_block%NUM_BLOCKS].len ;
+  pthread_mutex_unlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
   pthread_mutex_unlock(&(sk->curr_block_mutex));
 
   while(sk->status != CLOSED){
@@ -670,7 +668,7 @@ close_srvctcp(srvctcp_sock* sk){
     // Signal the send_ctcp() thread to exit.  Only needed if close_srvctcp() called while handle_con()/send_ctcp() 
     // still running, which can't happen ?
     // Should be no need to take lock on sk->maxblockno here as handle_ack() finished by now ?  DL
-    pthread_cond_signal(&(sk->blocks[(sk->maxblockno)%NUM_BLOCKS].block_ready_condv));
+    pthread_cond_signal(&(sk->block_ready_condv));
     pthread_join(sk->daemon_thread, NULL);
 
 
@@ -697,7 +695,7 @@ close_srvctcp(srvctcp_sock* sk){
         if (r > 0){  /* ready */
           // The recvfrom should be done to a separate buffer (not buff)
           if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, (struct sockaddr*)&cli_addr, &clilen)) <= 0){
-            perror("Error in receveing ACKs\n");
+            perror("Error in receiving ACKs\n");
             //sk->status = CLOSED;
             sk->error = CLOSE_ERR;
             tries++;
@@ -929,12 +927,9 @@ send_segs(srvctcp_sock* sk, int pin){
     //Done with current block.  Waiting to move onto next block.  DL
     if (sk->debug>3) printf("waiting on block ready %d ...", sk->curr_block);
 
-    if (sk->maxblockno == sk->curr_block + NUM_BLOCKS) {
-       if (sk->debug>3) printf("Risk of block_ready_condv deadlock...");
-    }
-    pthread_cond_wait( &(sk->blocks[sk->curr_block%NUM_BLOCKS].block_ready_condv),
-                            &(sk->curr_block_mutex));
+    pthread_cond_wait( &(sk->block_ready_condv), &(sk->curr_block_mutex));
     if (sk->debug>3) printf("done\n");
+    // Note: Released curr_block_mutex during wait, so sk->maxblockno, sk->dof_req_latest might have changed.
   }
 
   pthread_mutex_unlock( &(sk->curr_block_mutex) );
@@ -979,13 +974,14 @@ send_segs(srvctcp_sock* sk, int pin){
 
   //////////////////////////  START CHECKING EACH BLOCK   //////////////////////////
 
-  int blockno = sk->curr_block;
-  // Take a lock on curr_block_mutex so can work woth sk->maxblockno
+  // Take a lock on curr_block_mutex so can work with sk->maxblockno (which might be updated by send_ctcp())
   pthread_mutex_lock(  &(sk->curr_block_mutex) ); 
+  int blockno = sk->curr_block;
   int maxblockno = sk->maxblockno;
   pthread_mutex_unlock(  &(sk->curr_block_mutex) );
   // At this point have released lock and sk->maxblockno might be modified by send_ctcp(),
-  // but wil lonly increase and so safe to continue with following while-loop
+  // but will only increase and so safe to continue with following while-loop.
+  // No need to take lock on sk->curr_block as only updated in this thread.
   while ( (win > 0) && (blockno <= sk->curr_block + NUM_BLOCKS) && (!maxblockno || blockno <= maxblockno) ){
 
     mean_rate = 0;
@@ -1126,6 +1122,10 @@ send_segs(srvctcp_sock* sk, int pin){
 
     blockno++;
     
+    // update maxblockno
+    pthread_mutex_lock(  &(sk->curr_block_mutex) ); 
+    int maxblockno = sk->maxblockno;
+    pthread_mutex_unlock(  &(sk->curr_block_mutex) );
   } //////////////////////// END CHECKING BLOCKS ////////////////////
 }
 
@@ -1148,6 +1148,7 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
   // Get a coded packet from the queue
   // q_pop is blocking. If the queue is empty, we wait until the coded packets are created
   // We should decide in send_segs whether we need more coded packets in the queue
+  // Note: q_pop() is thread-safe.
   Skb* skb = (Skb*) q_pop(&(sk->coded_q[blockno%NUM_BLOCKS]));
   Msgbuf* msgbuf = &(skb->msgbuf);
   Data_Pckt* msg = &(msgbuf->msg);
@@ -1305,18 +1306,13 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
   }
   //------------- RTT calculations --------------------------//
 
-  // No need to take lock on sk->curr_block here as only
-  // updated within this thread (see below).
+  // Take lock on curr_block_mutex until while-loop done.  
+  // Simplest option, but maybe something smarter is also possible.
+  pthread_mutex_lock(  &(sk->curr_block_mutex) );
+  uint32_t curr_block_tmp = sk->curr_block; // record curr_block before we process ack
   while (ack->blockno > sk->curr_block){
-    // Moving on to a new block
 
-    log_srv_status(sk);
-
-    //printf("waiting on block mutex to free block %d ...", sk->curr_block);
-
-    // Take lock on curr_block_mutex here so that can update sk->curr_block below.
-    // NOTE: We take this lock *before* taking block_mutex lock to avoid potential for deadlocks. 
-    pthread_mutex_lock(  &(sk->curr_block_mutex) );
+    // Moving on to a new block  
 
     // Need to take a lock here as sk->blocks can be updated by send_ctcp(), coding_job() etc
     // which run in different threads.  
@@ -1341,6 +1337,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     pthread_mutex_unlock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex));
     pthread_cond_signal( &(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_free_condv));
     
+    // Already have lock on curr_block_mutex, so can update sk->curr_block
     sk->curr_block++;            // Update the current block identifier
 
     // Usually, sk->curr_block <= sk->maxblockno.  But,
@@ -1354,25 +1351,36 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // Already have lock on curr_block_mutex, so can update sk->maxblockno
     // without messing up send_tcp()
     sk->maxblockno = MAX(sk->curr_block, sk->maxblockno);
-
-    // Take a lock on block_mutex for next block to be processed
-    pthread_mutex_lock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
-    sk->dof_req_latest =  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec;     // reset the dof counter for the current block
-
-    if (sk->dof_req_latest < 0){
-      printf("ERROR: dof_req_latest %d curr_block %d curr block len %d ack-blockno %d ack-dof_rec %d\n\n", sk->dof_req_latest, sk->curr_block,  sk->blocks[sk->curr_block%NUM_BLOCKS].len, ack->blockno, ack->dof_rec);
-    }
-    pthread_mutex_unlock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex));
-    
-    // Can release curr_block_mutex here as sk->curr_block points to a valid block and have respected
-    // anti-deadlock ordering of nested curr_block_mutex and block_mutex locks.
-    pthread_mutex_unlock(  &(sk->curr_block_mutex) );
-
-    if (sk->debug > 2 && sk->curr_block%1==0){
-      printf("Now sending block %d/%d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms, RATE %f Mbps (%f/%f), win %d, SRTT_user %f \n",
-             sk->curr_block, sk->maxblockno, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000, 8.e-6*(subpath->rate*PAYLOAD_SIZE), 8.e-6*(subpath->snd_una*MSS)/(getTime() - sk->start_time), 8.e-6*subpath->goodput*PAYLOAD_SIZE/(getTime() - sk->start_time), subpath->snd_cwnd - (subpath->snd_nxt - subpath->snd_una), subpath->srtt_user*1000);
-    }     
+        
   }
+  // Update the requested dofs for the current block
+  pthread_mutex_lock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
+  if (curr_block_tmp == sk->curr_block) {
+    // ack doesn't advance block n so is subsequent ack for current block.  
+    // Use MIN here to take care of out of order acks
+    sk->dof_req_latest =  MIN(sk->dof_req_latest, sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec); 
+  } else {
+    // ack has advanced block no, so is first ack we have received for this block
+    sk->dof_req_latest =  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec;  
+  }
+  pthread_mutex_unlock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex));
+  
+  int dof_req_latest = sk->dof_req_latest;
+  
+  // And release lock on curr_block_mutex
+  pthread_mutex_unlock(  &(sk->curr_block_mutex) );
+  
+  // Move this outside lock on curr_block_mute as printf might take a while or run into problems
+  if (dof_req_latest < 0){ // do this outside of lock in case printf blocks or runs into problems
+    printf("ERROR: dof_req_latest %d curr_block %d curr block len %d ack-blockno %d ack-dof_rec %d\n\n", sk->dof_req_latest, sk->curr_block,  sk->blocks[sk->curr_block%NUM_BLOCKS].len, ack->blockno, ack->dof_rec);
+  }
+  if (sk->debug > 2 &&  sk->curr_block > curr_block_tmp){
+    printf("Now sending block %d/%d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms, RATE %f Mbps (%f/%f), win %d, SRTT_user %f \n",
+           sk->curr_block, sk->maxblockno, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000, 8.e-6*(subpath->rate*PAYLOAD_SIZE), 8.e-6*(subpath->snd_una*MSS)/(getTime() - sk->start_time), 8.e-6*subpath->goodput*PAYLOAD_SIZE/(getTime() - sk->start_time), subpath->snd_cwnd - (subpath->snd_nxt - subpath->snd_una), subpath->srtt_user*1000);
+  }     
+
+  // Update status file - also do this outside of lock as syscall to write to file might take a while or run into problems
+  log_srv_status(sk);
 
   if (ackno > subpath->snd_nxt || ack->blockno > sk->curr_block) {
     /* bad ack */
@@ -1431,19 +1439,6 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
       subpath->slr_longstd = (1-slr_longmem)*subpath->slr_longstd
         + slr_longmem*(fabs(subpath->slr - subpath->slr_long) - subpath->slr_longstd);
       subpath->snd_una = ackno;
-    }
-    // Updated the requested dofs for the current block
-    // The MIN is to avoid outdated information by out of order ACKs or ACKs on different paths
-
-    // No need for lock on sk->curr_block as only updated within this thread
-    if (ack->blockno == sk->curr_block){
-      // Take a double lock here, one for sk->dof_req_latest and one for
-      // sk->blocks[sk->curr_block%NUM_BLOCKS].len.
-      pthread_mutex_lock(  &(sk->curr_block_mutex) );
-      pthread_mutex_lock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex));
-      sk->dof_req_latest = MIN(sk->dof_req_latest,  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec);
-      pthread_mutex_unlock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex)); 
-      pthread_mutex_unlock(  &(sk->curr_block_mutex) );
     }
     advance_cwnd(sk, pin);
 
@@ -1633,10 +1628,10 @@ coding_job(void *a){
   // executing in a different thread.  DL
   pthread_mutex_lock(&(sk->curr_block_mutex));
   if( blockno < sk->curr_block){
+    pthread_mutex_unlock(&(sk->curr_block_mutex));
     if (sk->debug > 3){
       printf("Coding job request for old block - curr_block %d blockno %d dof_request %d \n\n", sk->curr_block,  blockno, dof_request);
     }
-    pthread_mutex_unlock(&(sk->curr_block_mutex));
     return NULL;
   }  
   pthread_mutex_unlock(&(sk->curr_block_mutex));
@@ -1647,11 +1642,12 @@ coding_job(void *a){
   // Need to take lock here as sk->blocks[blockno%NUM_BLOCKS].len might be updated by
   // send_ctcp() executing in a different thread.  DL
   pthread_mutex_lock(&(sk->blocks[blockno%NUM_BLOCKS].block_mutex));
+  
   uint8_t block_len = sk->blocks[blockno%NUM_BLOCKS].len;
   
   if (block_len  == 0){
-    printf("Error: Block %d not read yet\n", blockno);
     pthread_mutex_unlock(&(sk->blocks[blockno%NUM_BLOCKS].block_mutex));
+    printf("Error: Block %d not read yet\n", blockno);
     return NULL;
   } 
   
@@ -1681,6 +1677,7 @@ coding_job(void *a){
       msg->start_packet = row;
       msg->packet_coeff = 1;
 
+      // q_push is thread safe.
       q_push_back(&(sk->coded_q[blockno%NUM_BLOCKS]), sk->blocks[blockno%NUM_BLOCKS].skb[row]);
     }  // Done with forming the initial set of coded packets
     dof_request = MAX(0, dof_request - (block_len - start));  // This many more to go
@@ -1736,6 +1733,7 @@ coding_job(void *a){
            }
         }
       }
+      // q_push is thread safe
       q_push_back(&(sk->coded_q[blockno%NUM_BLOCKS]), skb);
 
     }  // Done with forming the remaining set of coded packets
@@ -1946,10 +1944,11 @@ create_srvctcp_sock(void){
   thrpool_init( &(sk->workers), THREADS );
   // Initialize the block mutexes and queue of coded packets and counters
   pthread_mutex_init( &(sk->curr_block_mutex), NULL );
+  pthread_cond_init( &(sk->block_ready_condv), NULL );
   for(i = 0; i < NUM_BLOCKS; i++){
     pthread_mutex_init( &(sk->blocks[i].block_mutex), NULL );
     pthread_cond_init( &(sk->blocks[i].block_free_condv), NULL );
-    pthread_cond_init( &(sk->blocks[i].block_ready_condv), NULL );
+    //pthread_cond_init( &(sk->blocks[i].block_ready_condv), NULL );
     q_init(&(sk->coded_q[i]), 2*BLOCK_SIZE);
   }
 

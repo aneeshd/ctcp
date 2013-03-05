@@ -95,6 +95,8 @@ typedef struct{
   // IMPORTANT: To avoid deadlocks, if need to take a lock on sk->curr_block_mutex and also on sk->blocks[].block_mutex, 
   // then always do this in the order sk->curr_block_mutex then sk->blocks[].block_mutex.
   pthread_mutex_t curr_block_mutex; 
+  // Signal for when new data has been received from client
+  pthread_cond_t block_ready_condv; 
   
   qbuffer_t coded_q[NUM_BLOCKS];
   thr_pool_t workers;
