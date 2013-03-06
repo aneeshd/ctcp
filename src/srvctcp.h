@@ -77,61 +77,53 @@ typedef struct{
 } Substream_Path;
 
 typedef struct{
-  Substream_Path** active_paths;            // 0-1 representing whether path alive
-  int num_active;                           // Connection identifier
-  socket_t sockfd;                          /* network file descriptor */
-  char clientip[INET6_ADDRSTRLEN];          // Client IP address for this connection
-  uint16_t clientport;                      // Client port.
-  char cong_control[32];
   
-  int dof_req_latest;                       /* Latest information about dofs of the current block */    
-  uint32_t maxblockno; // use highest blockno possible, set when we reach the end of the file
-  uint32_t curr_block; // Current block number  
-  Block_t blocks[NUM_BLOCKS];
-  
-  // ------------ Multithreading related variables ---------------//
-  pthread_t daemon_thread;
-  // Lock for accessing curr_block,dof_req_latest,maxblockno
+  // ------------ Variables shared r/w by threads
+  int dof_req_latest;           /* Latest information about dofs of the current block */    
+  uint32_t maxblockno;          // use highest blockno possible, set when we reach the end of the file
+  uint32_t curr_block;          // Current block number  
+  pthread_mutex_t curr_block_mutex; // Lock for accessing curr_block,dof_req_latest,maxblockno
   // IMPORTANT: To avoid deadlocks, if need to take a lock on sk->curr_block_mutex and also on sk->blocks[].block_mutex, 
   // then always do this in the order sk->curr_block_mutex then sk->blocks[].block_mutex.
-  pthread_mutex_t curr_block_mutex; 
-  // Signal for when new data has been received from client
-  pthread_cond_t block_ready_condv; 
+  Block_t blocks[NUM_BLOCKS];   // Each Block_t struct contains its own mutex lock that protects both blocks[] and dof_remain[]
+  int dof_remain[NUM_BLOCKS];   // Internal dof counter -the number of dofs left in the server
+  status_t status;              // Connection status - ACTIVE, CLOSED etc.  TO DO: Add mutex lock for this var 
+  ctcp_err_t error;             // TO DO: Add mutex lock for this var
+  qbuffer_t coded_q[NUM_BLOCKS]; //  Only accessed via own thread-safe methods q_push(), q_pop() etc
+  thr_pool_t workers;            //  Only accessed via own thread-safe methods addJob(),  thrpool_init(), thrpool_kill)
+  // Multi-threading stuff
+  pthread_cond_t block_ready_condv; // Signal for when new data has been received from client.  Only accessed via p_thread methods
+  pthread_t daemon_thread;          // Setup in listen_srvctcp(), used in close_srvctcp(). Only accessed via p_thread methods
   
-  qbuffer_t coded_q[NUM_BLOCKS];
-  thr_pool_t workers;
-  /*
-   Internal dof counter:
-   -the number of dofs left in the server
-   -does not necessarily coincide with the number of packets in coded_q)
-   -need to update this whenever a coding job is added/coded packets are popped
-   */
-  int dof_remain[NUM_BLOCKS];
-  
-  //----------------- configurable variables -----------------//
-  int debug;
-  double SLR_scaling;              /* multiplies the estimated loss rate when caclulating coding rate */
+  // ------------- Shared, but used read only within multi-threaded context. 
+  // All are setup in open_srvctcp() or create_srvctcp_sock() and then used read-only.
+  socket_t sockfd;                          /* Network file descriptor.   */
+  char clientip[INET6_ADDRSTRLEN];          // Client IP address for this connection.  
+  uint16_t clientport;                      // Client port. 
+  // Configuration variables.  
+  int debug;                       // Level of debug output.  
+  char cong_control[32];           // Specified cong control algorithm to use.  
+  double SLR_scaling;              /* multiplies the estimated loss rate when caclulating coding rate.  */
+  int ctcp_probe;                  // enable ctcp-probe logging ? 
+  char logdir[256];                // passed from config file
   int maxidle;                     /* max idle before abort */
   int rcvrwin;                     /* rcvr window in mss-segments */    // TODO actual use rcvrwin!
   int increment;                   /* cc increment */
   double multiplier;               /* cc backoff  &  fraction of rcvwind for initial ssthresh*/
   int ssincr;                      /* slow start increment */
   int initsegs;                    /* slowstart initial */
-  int valpha, vbeta;            /* vegas parameters (in terms of number of packets) */
-  
-  //------------------Statistics----------------------------------//
+  int valpha, vbeta;               /* vegas parameters (in terms of number of packets) */
+
+  // ------------- Variables used by a single thread within multi-threaded context
+  Substream_Path** active_paths;            // 0-1 representing whether path alive
+  int num_active;                           // Connection identifier      
+  // Statistics and logging 
   int ipkts,opkts,badacks,timeouts,enobufs, goodacks;
   double start_time, total_time;
-  double idle_total; // The total time the server has spent waiting for the acks
-  
-  int ctcp_probe; // enable ctcp-probe logging ? 
-  status_t status;
-  ctcp_err_t error;
-  char logdir[256]; // passed from config file
-  int status_log_fd;
-  
+  double idle_total; // The total time the server has spent waiting for the acks    
   FILE *db;     /* debug trace file */
   FILE *pkt_log; // packet trace file (captures information from all packets sent from the target)
+  int status_log_fd;
   
 } srvctcp_sock;
 
