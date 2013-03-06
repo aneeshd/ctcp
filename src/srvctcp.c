@@ -158,7 +158,7 @@ listen_srvctcp(srvctcp_sock* sk){
   socklen_t clilen = sizeof(cli_addr);
   int numbytes, rv;
   char* log_name = NULL; // Name of the log
-  Skb* skb=alloc_skb();
+  Skb* skb=alloc_skb(sk->debug);
   char* buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt* ack;
   log_srv_status(sk);
@@ -259,7 +259,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       printf("**ERROR** reading block %d, currblock %d\n", i, sk->curr_block);
     }
     
-    bytes_read = readBlock(&(sk->blocks[i%NUM_BLOCKS]), usr_buf+usr_buf_len-bytes_left, bytes_left);
+    bytes_read = readBlock(&(sk->blocks[i%NUM_BLOCKS]), usr_buf+usr_buf_len-bytes_left, bytes_left, sk->debug);
     bytes_left -= bytes_read;
     //printf("bytes_read %d bytes_left %d maxblockno %d blockno %d\n", bytes_read, bytes_left,  sk->maxblockno, i);
     
@@ -333,7 +333,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
 void 
 *server_worker(void *arg){
   srvctcp_sock* sk = (srvctcp_sock*) arg;
-  Skb* skb=alloc_skb();
+  Skb* skb=alloc_skb(0);
   char *buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt *ack;
   int numbytes, i, r;
@@ -636,7 +636,7 @@ close_srvctcp(srvctcp_sock* sk){
   int i, r, tries, success;
   struct sockaddr_storage cli_addr;
   socklen_t clilen = sizeof(cli_addr);
-  Skb* skb=alloc_skb();
+  Skb* skb=alloc_skb(sk->debug);
   char* buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt *ack = &(skb->msgbuf.ack);
   
@@ -1698,7 +1698,7 @@ coding_job(void *a){
     
     for (dof_ix = 0; dof_ix < dof_request; dof_ix++){
       
-      Skb* skb=alloc_skb(); 
+      Skb* skb=alloc_skb(sk->debug); 
       if (!skb) {printf("WARNING: Failed to get a coded skb\n"); continue;} 
       Data_Pckt *msg = &(skb->msgbuf.msg);
       msg->blockno      = blockno;
@@ -1752,14 +1752,14 @@ coding_job(void *a){
 
 //--------------------------------------------------------------------
 uint32_t
-readBlock(Block_t* blk, const void *buf, size_t buf_len){
+readBlock(Block_t* blk, const void *buf, size_t buf_len, int debug){
   
   // starting from buf, read up to buf_len bytes into block #blockno
   // If the block is already full, do nothing
   uint16_t bytes_read; 
   uint32_t bytes_left = buf_len; 
   while(blk->len < BLOCK_SIZE && bytes_left){
-    Skb* skb = alloc_skb(); 
+    Skb* skb = alloc_skb(debug); 
     if (!skb) {printf("WARNING: readBlock failed to get an skb\n"); break;} 
     blk->skb[blk->len]=skb;
     char* tmp = skb->msgbuf.msg.payload;

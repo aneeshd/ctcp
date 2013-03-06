@@ -156,7 +156,7 @@ int timeout(srvctcp_sock* sk, int pin);
 void send_segs(srvctcp_sock* sk, int pin);
 socket_t timedread(socket_t fd, double t);
 int handle_ack(srvctcp_sock* sk, Ack_Pckt* ack, int pin);
-uint32_t readBlock(Block_t* blk, const void *buf, size_t buf_len);
+uint32_t readBlock(Block_t* blk, const void *buf, size_t buf_len, int debug);
 void freeBlock(Block_t* blk);
 void send_one(srvctcp_sock* sk, unsigned int n, int pin);
 void advance_cwnd(srvctcp_sock* sk, int pin);

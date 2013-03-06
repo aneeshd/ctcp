@@ -111,7 +111,7 @@ typedef struct{
 
 double getTime(void);
 Data_Pckt* dataPacket(uint32_t seqno, uint32_t blockno, uint8_t num_packets);
-Skb* ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left);
+Skb* ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left, int debug);
 void htonpData(Data_Pckt *msg);
 void htonpAck(Ack_Pckt *msg);
 void ntohpData(Data_Pckt *msg);
@@ -122,6 +122,6 @@ uint8_t xFFlog(uint8_t x);
 uint8_t fastFFmult(uint8_t x, uint8_t logy);
 void seedfastrand(uint32_t seed);
 uint32_t fastrand();
-Skb* alloc_skb();
+Skb* alloc_skb(int debug);
 void free_skb(void* skb);
 #endif // UTIL_H_

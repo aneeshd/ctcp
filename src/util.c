@@ -83,8 +83,8 @@ getTime(void){
 }
 
 Skb*
-ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left){
-    Skb* skb = alloc_skb();
+ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left, int debug){
+    Skb* skb = alloc_skb(debug);
     Ack_Pckt* ack = (Ack_Pckt*) &(skb->msgbuf.ack);
     ack->flag     = NORMAL;
     ack->ackno    = ackno;
@@ -184,13 +184,13 @@ static Skb* first = NULL;
 static int num=0;
 pthread_mutex_t skb_pool_ = PTHREAD_MUTEX_INITIALIZER;
 
-Skb* alloc_skb() {
+Skb* alloc_skb(int debug) {
   Skb* freeskb;
   pthread_mutex_lock(&skb_pool_);
   if (first == NULL) {
     // allocate a new skb
     num++;
-    if (num > 5000) printf("WARNING: mem pool %u\n", num);
+    if (num > 5000 && debug>3) printf("WARNING: mem pool %u\n", num);
     freeskb = malloc(sizeof(Skb));
     if (!freeskb) return NULL; // malloc failed
   } else {

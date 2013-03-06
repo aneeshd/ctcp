@@ -401,7 +401,7 @@ void
     }else{
       srvlen = sizeof(csk->srv_addr); 
       do{
-        skb = alloc_skb();
+        skb = alloc_skb(csk->debug);
         Msgbuf* msgbuf = &(skb->msgbuf);
         iov.iov_base = msgbuf->buff;
         Data_Pckt* msg = &(msgbuf->msg);
@@ -807,7 +807,7 @@ bldack(clictcp_sock* csk, Skb* skb, int curr_substream){
 
     // Build the ack packet according to the new information
     Skb* ackskb = ackPacket(msg->seqno+1, csk->curr_block,
-                              csk->blocks[csk->curr_block%NUM_BLOCKS].dofs);
+                              csk->blocks[csk->curr_block%NUM_BLOCKS].dofs, csk->debug);
     Ack_Pckt* ack = &(ackskb->msgbuf.ack);
     while( (ack->dof_rec == csk->blocks[(ack->blockno)%NUM_BLOCKS].len) && 
            (ack->blockno < csk->curr_block + NUM_BLOCKS)  ){
@@ -1361,7 +1361,7 @@ int
 send_flag(clictcp_sock *csk, int path_id, flag_t flag){
 
   int numbytes;
-  Skb* ackskb = ackPacket(0,0,0);
+  Skb* ackskb = ackPacket(0,0,0,csk->debug);
   Ack_Pckt* msg = &(ackskb->msgbuf.ack);
   msg->tstamp = getTime();
   msg->flag = flag;
