@@ -71,7 +71,7 @@ typedef struct{
   double rate;
   double goodput;
   int losscnt;
-
+  
   srvpath_t pathstate;                     // connection states
   
 } Substream_Path;
@@ -83,12 +83,12 @@ typedef struct{
   char clientip[INET6_ADDRSTRLEN];          // Client IP address for this connection
   uint16_t clientport;                      // Client port.
   char cong_control[32];
-
+  
   int dof_req_latest;                       /* Latest information about dofs of the current block */    
   uint32_t maxblockno; // use highest blockno possible, set when we reach the end of the file
   uint32_t curr_block; // Current block number  
   Block_t blocks[NUM_BLOCKS];
-
+  
   // ------------ Multithreading related variables ---------------//
   pthread_t daemon_thread;
   // Lock for accessing curr_block,dof_req_latest,maxblockno
@@ -101,13 +101,13 @@ typedef struct{
   qbuffer_t coded_q[NUM_BLOCKS];
   thr_pool_t workers;
   /*
-    Internal dof counter:
-    -the number of dofs left in the server
-    -does not necessarily coincide with the number of packets in coded_q)
-    -need to update this whenever a coding job is added/coded packets are popped
-  */
+   Internal dof counter:
+   -the number of dofs left in the server
+   -does not necessarily coincide with the number of packets in coded_q)
+   -need to update this whenever a coding job is added/coded packets are popped
+   */
   int dof_remain[NUM_BLOCKS];
-
+  
   //----------------- configurable variables -----------------//
   int debug;
   double SLR_scaling;              /* multiplies the estimated loss rate when caclulating coding rate */
@@ -118,21 +118,21 @@ typedef struct{
   int ssincr;                      /* slow start increment */
   int initsegs;                    /* slowstart initial */
   int valpha, vbeta;            /* vegas parameters (in terms of number of packets) */
-
+  
   //------------------Statistics----------------------------------//
   int ipkts,opkts,badacks,timeouts,enobufs, goodacks;
   double start_time, total_time;
   double idle_total; // The total time the server has spent waiting for the acks
-
+  
   int ctcp_probe; // enable ctcp-probe logging ? 
   status_t status;
   ctcp_err_t error;
   char logdir[256]; // passed from config file
   int status_log_fd;
-
+  
   FILE *db;     /* debug trace file */
   FILE *pkt_log; // packet trace file (captures information from all packets sent from the target)
-
+  
 } srvctcp_sock;
 
 typedef struct{
