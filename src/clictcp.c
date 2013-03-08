@@ -279,7 +279,8 @@ connect_ctcp(char *host, char *port, char *lease_file, struct child_local_cfg* c
             log_cli_status(csk);
           }
         }
-        rv++;
+        //rv++;
+        rv = 1; // don't backoff timeout as losing SYN can cause long delay in connection startup 
       }
       flag = SYN_ACK;
     }while( (path_ix = poll_flag(csk, &flag, (2<<(rv-1))*POLL_ACK_TO)) < 0 && rv < POLL_MAX_TRIES );
