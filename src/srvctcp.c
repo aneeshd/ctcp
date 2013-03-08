@@ -33,8 +33,6 @@
 // (2) sk->blocks[].block_mutex.
 
 
-// TO DO - provide mutex protection for sk->status
-
 /*
  * Handler for when the user sends the signal SIGINT by pressing Ctrl-C
  */
@@ -45,6 +43,42 @@ ctrlc(srvctcp_sock* sk){
   return;
 }
 
+// Helpers for thread-safe access to sk->status and sk->error
+void
+set_status(srvctcp_sock* sk, status_t status) {
+  pthread_mutex_lock(&(sk->status_mutex));
+  sk->status = status;
+  pthread_mutex_unlock(&(sk->status_mutex));
+}
+
+status_t
+get_status(srvctcp_sock* sk) {
+  status_t status;
+  pthread_mutex_lock(&(sk->status_mutex));
+  status = sk->status;
+  pthread_mutex_unlock(&(sk->status_mutex));
+  return status;
+}
+
+void
+set_error(srvctcp_sock* sk, ctcp_err_t error) {
+  pthread_mutex_lock(&(sk->error_mutex));
+  sk->error = error;
+  pthread_mutex_unlock(&(sk->error_mutex));
+}
+
+/* Not used just now.
+ ctcp_err_t
+get_error(srvctcp_sock* sk) {
+  ctcp_err_t error;
+  pthread_mutex_lock(&(sk->error_mutex));
+  error = sk->error;
+  pthread_mutex_unlock(&(sk->error_mutex));
+  return error;
+}
+*/
+
+// Opens ctcp socket 
 srvctcp_sock*
 open_srvctcp(char *port, struct child_remote_cfg *cfg){ 
   int numbytes, rv;  
@@ -243,9 +277,9 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
   
   while (bytes_left > 0){
     
-    if (sk->status != ACTIVE){ // Should really take a lock on sk->status before reading it.  DL
+    if (get_status(sk) != ACTIVE){ // Should really take a lock on sk->status before reading it.  DL
       pthread_mutex_unlock(&(sk->curr_block_mutex));
-      sk->error = CLIHUP;
+      set_error(sk,CLIHUP);
       return -1;      
     }
     
@@ -368,7 +402,7 @@ void
   pthread_mutex_unlock(&(sk->blocks[sk->curr_block%NUM_BLOCKS].block_mutex));
   pthread_mutex_unlock(&(sk->curr_block_mutex));
   
-  while(sk->status != CLOSED){
+  while(get_status(sk) != CLOSED){
     double rto_min = 0.1; // this value is in seconds. DL
     for (i=0; i < sk->num_active; i++){
       if (sk->active_paths[i]->rto < rto_min) rto_min = sk->active_paths[i]->rto;
@@ -500,7 +534,7 @@ void
             
             // printf("Sending FIN_ACK path %d\n", path_index);
             sk->active_paths[path_index]->pathstate = FIN_RECV;
-            sk->status = SK_CLOSING;
+            set_status(sk, SK_CLOSING);
             log_srv_status(sk);
             
             int fin_read_rv;
@@ -528,7 +562,7 @@ void
                 if ( (fin_read_rv = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, (struct sockaddr*)&cli_addr, &clilen)) <= 0){
                   perror("Error in receiving ACKs\n");
                   //sk->status = CLOSED;
-                  sk->error = CLOSE_ERR;
+                  set_error(sk,CLOSE_ERR);
                   tries++;
                 }else{
                   unmarshallAck(&(skb->msgbuf));
@@ -539,9 +573,9 @@ void
                     for(i= 0; i<sk->num_active; i++){
                       sk->active_paths[i]->pathstate = CLOSING;
                     }
-                    sk->status = CLOSED;
+                    set_status(sk,CLOSED);
                     log_srv_status(sk);
-                    sk->error = NONE;
+                    set_error(sk,NONE);
                   } else if (ack->flag == FIN){
                     tries++;
                   }
@@ -552,17 +586,17 @@ void
                 // time out on timedread
                 tries++;
                 rto_max = 2*rto_max;
-                sk->error = CLOSE_ERR;
+                set_error(sk,CLOSE_ERR);
               } else { // r < 0
                 perror("timedread");	      
               }
               
-            }while( sk->status != CLOSED && tries < CONTROL_MAX_RETRIES);
+            }while( get_status(sk) != CLOSED && tries < CONTROL_MAX_RETRIES);
             
             for(i= 0; i<sk->num_active; i++){
               sk->active_paths[i]->pathstate = CLOSING;
             }
-            sk->status = CLOSED;
+            set_status(sk,CLOSED);
             log_srv_status(sk);
             //	    printf("SRVCTCP SHOULD CLOSE BY NOW %u\n", getpid());
           }  // end if not CLOSING & not FIN_ACK_RECV
@@ -578,7 +612,7 @@ void
     
     // Done with processing the received packet. 
     
-    if (sk->status != CLOSED){
+    if (get_status(sk) != CLOSED){
       // Check all the other paths, and see if any of them timed-out.
       for (i = 0; i < sk->num_active; i++){
         path_index = (path_index+i)%(sk->num_active);
@@ -613,8 +647,8 @@ void
     }
     
     if(sk->num_active==0){
-      sk->status = CLOSED;
-      sk->error = NONE;
+      set_status(sk,CLOSED);
+      set_error(sk,NONE);
       log_srv_status(sk);
     }
   }  /* while more pkts */
@@ -652,7 +686,7 @@ close_srvctcp(srvctcp_sock* sk){
     pthread_mutex_lock(&(sk->curr_block_mutex));
     i = sk->curr_block;
     if( sk->dof_req_latest != 0){
-      while (i <= sk->maxblockno && sk->status == ACTIVE){
+      while (i <= sk->maxblockno && get_status(sk) == ACTIVE){
         //  printf("Waiting on block %d to get free\n", i);
         if (sk->dof_req_latest != 0 && i >= sk->curr_block)
           pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->curr_block_mutex));
@@ -663,7 +697,7 @@ close_srvctcp(srvctcp_sock* sk){
     pthread_mutex_unlock(&(sk->curr_block_mutex));
     
     //   printf("RETURNED FROM WAITING ON BLOCKS currBlock %d, maxblock %d pid %u\n", sk->curr_block, sk->maxblockno, getpid());  
-    sk->status = CLOSED;
+    set_status(sk, CLOSED);
     log_srv_status(sk);
     // Signal the send_ctcp() thread to exit.  Only needed if close_srvctcp() called while handle_con()/send_ctcp() 
     // still running, which can't happen ?
@@ -697,7 +731,7 @@ close_srvctcp(srvctcp_sock* sk){
           if ( (r = recvfrom(sk->sockfd, buff, ACK_SIZE, 0, (struct sockaddr*)&cli_addr, &clilen)) <= 0){
             perror("Error in receiving ACKs\n");
             //sk->status = CLOSED;
-            sk->error = CLOSE_ERR;
+            set_error(sk,CLOSE_ERR);
             tries++;
           }else{
             unmarshallAck(&(skb->msgbuf));
@@ -725,7 +759,7 @@ close_srvctcp(srvctcp_sock* sk){
                 
               }
               
-              sk->error = NONE;       
+              set_error(sk,NONE);       
               
             }else if (ack->flag == FIN_ACK){
               
@@ -741,17 +775,17 @@ close_srvctcp(srvctcp_sock* sk){
                 sk->active_paths[i]->pathstate = CLOSING;
               }	
               log_srv_status(sk);
-              sk->error = NONE;       
+              set_error(sk,NONE);       
               
             }else{
               // printf("got Non-FIN_ACK\n");
-              sk->error = CLOSE_ERR;
+              set_error(sk,CLOSE_ERR);
             }
           }
         }else { /* r <=0 */
           //err_sys(sk, "close");
           // printf("r<=0 in close_srvctcp\n");
-          sk->error = CLOSE_ERR;
+          set_error(sk,CLOSE_ERR);
           tries++;
           rto_max = 2*rto_max;
         }
@@ -913,7 +947,7 @@ send_flag(srvctcp_sock* sk, int path_id, flag_t flag ){
 void
 send_segs(srvctcp_sock* sk, int pin){
   
-  if (sk->status == CLOSED){
+  if (get_status(sk) == CLOSED){
     return;
   }
   
@@ -934,7 +968,7 @@ send_segs(srvctcp_sock* sk, int pin){
   
   pthread_mutex_unlock( &(sk->curr_block_mutex) );
   
-  if (sk->status == CLOSED){
+  if (get_status(sk) == CLOSED){
     return;
   }
   
@@ -1944,6 +1978,8 @@ create_srvctcp_sock(void){
   thrpool_init( &(sk->workers), THREADS );
   // Initialize the block mutexes and queue of coded packets and counters
   pthread_mutex_init( &(sk->curr_block_mutex), NULL );
+  pthread_mutex_init( &(sk->status_mutex), NULL );
+  pthread_mutex_init( &(sk->error_mutex), NULL );
   pthread_cond_init( &(sk->block_ready_condv), NULL );
   for(i = 0; i < NUM_BLOCKS; i++){
     pthread_mutex_init( &(sk->blocks[i].block_mutex), NULL );
@@ -1952,7 +1988,7 @@ create_srvctcp_sock(void){
     q_init(&(sk->coded_q[i]), 2*BLOCK_SIZE);
   }
   
-  sk->status = ACTIVE;
+  sk->status = ACTIVE;  // executing as single thread here, no need to take a lock
   sk->error = NONE;
   
   //----------------- configurable variables -----------------//
@@ -2121,7 +2157,7 @@ log_srv_status(srvctcp_sock* sk){
   
   // We have reached the beginning of the new line
   
-  len = sprintf(buff, "srv_status: %s\t", sk_status_msg[sk->status]);
+  len = sprintf(buff, "srv_status: %s\t", sk_status_msg[get_status(sk)]);
   write(sk->status_log_fd, buff, len);
   
   int i;

@@ -87,8 +87,10 @@ typedef struct{
   // then always do this in the order sk->curr_block_mutex then sk->blocks[].block_mutex.
   Block_t blocks[NUM_BLOCKS];   // Each Block_t struct contains its own mutex lock that protects both blocks[] and dof_remain[]
   int dof_remain[NUM_BLOCKS];   // Internal dof counter -the number of dofs left in the server
-  status_t status;              // Connection status - ACTIVE, CLOSED etc.  TO DO: Add mutex lock for this var 
-  ctcp_err_t error;             // TO DO: Add mutex lock for this var
+  status_t status;              // Connection status - ACTIVE, CLOSED etc.  
+  pthread_mutex_t status_mutex; // Lock for accessing status
+  ctcp_err_t error;             
+  pthread_mutex_t error_mutex;   //  Lock for accessing error
   qbuffer_t coded_q[NUM_BLOCKS]; //  Only accessed via own thread-safe methods q_push(), q_pop() etc
   thr_pool_t workers;            //  Only accessed via own thread-safe methods addJob(),  thrpool_init(), thrpool_kill)
   // Multi-threading stuff
