@@ -21,7 +21,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <signal.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>

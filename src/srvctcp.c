@@ -69,14 +69,14 @@ set_error(srvctcp_sock* sk, ctcp_err_t error) {
 
 /* Not used just now.
  ctcp_err_t
-get_error(srvctcp_sock* sk) {
-  ctcp_err_t error;
-  pthread_mutex_lock(&(sk->error_mutex));
-  error = sk->error;
-  pthread_mutex_unlock(&(sk->error_mutex));
-  return error;
-}
-*/
+ get_error(srvctcp_sock* sk) {
+ ctcp_err_t error;
+ pthread_mutex_lock(&(sk->error_mutex));
+ error = sk->error;
+ pthread_mutex_unlock(&(sk->error_mutex));
+ return error;
+ }
+ */
 
 // Opens ctcp socket 
 srvctcp_sock*
@@ -97,7 +97,7 @@ open_srvctcp(char *port, struct child_remote_cfg *cfg){
   
   // Setup the hints struct
   memset(&hints, 0, sizeof hints);
-  hints.ai_family   = AF_UNSPEC;
+  hints.ai_family   = AF_INET; // try to get an IPV4 address
   hints.ai_socktype = SOCK_DGRAM;
   hints.ai_flags    = AI_PASSIVE;
   
@@ -165,6 +165,14 @@ open_srvctcp(char *port, struct child_remote_cfg *cfg){
  returns -1 error
  */
 
+char* get_addr4(struct sockaddr_in* sa, char* s, int len) {
+  /*
+   +   Extract IPv4
+   +   */
+  inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr),s,len);
+  return s;
+}
+
 char* get_addr(struct sockaddr_storage* sa, char* s, int len) {
   /*
    Extract IPv4 or IPv6 address as string
@@ -174,6 +182,13 @@ char* get_addr(struct sockaddr_storage* sa, char* s, int len) {
   else 
     inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr),s,len);
   return s;
+}
+
+uint16_t get_port4(struct sockaddr_in* sa) {
+  /*
+   Extract IPv4 port number
+   */
+  return ntohs( (((struct sockaddr_in*)sa)->sin_port) );
 }
 
 uint16_t get_port(struct sockaddr_storage* sa) {
@@ -188,7 +203,7 @@ uint16_t get_port(struct sockaddr_storage* sa) {
 
 int
 listen_srvctcp(srvctcp_sock* sk){
-  struct sockaddr_storage cli_addr;
+  struct sockaddr_in cli_addr;
   socklen_t clilen = sizeof(cli_addr);
   int numbytes, rv;
   char* log_name = NULL; // Name of the log
@@ -211,8 +226,8 @@ listen_srvctcp(srvctcp_sock* sk){
      inet_ntoa(((struct sockaddr_in*) &cli_addr)->sin_addr), 
      ((struct sockaddr_in*)&cli_addr)->sin_port);
      */
-    sk->clientport = get_port(&cli_addr);
-    get_addr(&cli_addr,sk->clientip,INET6_ADDRSTRLEN);
+    sk->clientport = get_port4(&cli_addr);
+    get_addr4(&cli_addr,sk->clientip,INET_ADDRSTRLEN);
     printf("Request for a new session: Client address %s Client port %d\n", sk->clientip, sk->clientport);
     
     if (sk->debug > 6) openLog(sk, log_name);
@@ -371,7 +386,7 @@ void
   char *buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt *ack;
   int numbytes, i, r;
-  struct sockaddr_storage cli_addr;
+  struct sockaddr_in cli_addr;
   socklen_t clilen = sizeof cli_addr;
   double idle_timer;
   int path_index=0;              // Connection identifier
@@ -447,7 +462,7 @@ void
       
       
       for(path_index=0; path_index < sk->num_active; path_index++){
-        if (sockaddr_cmp(&cli_addr, &(sk->active_paths[path_index]->cli_addr))==0){
+        if (sockaddr_cmp4(&cli_addr, &(sk->active_paths[path_index]->cli_addr))==0){
           break;
         }
       }
@@ -474,8 +489,8 @@ void
             
             sk->num_active++;
             
-            char s[INET6_ADDRSTRLEN];
-            printf("Request for a new path: Client address %s Client port %d\n",get_addr(&cli_addr,s,INET6_ADDRSTRLEN), get_port(&cli_addr)); 
+            char s[INET_ADDRSTRLEN];
+            printf("Request for a new path: Client address %s Client port %d\n",get_addr4(&cli_addr,s,INET_ADDRSTRLEN), get_port4(&cli_addr)); 
             
             continue;        // Go back to the beginning of the while loop
           }
@@ -668,7 +683,7 @@ void
 void
 close_srvctcp(srvctcp_sock* sk){
   int i, r, tries, success;
-  struct sockaddr_storage cli_addr;
+  struct sockaddr_in cli_addr;
   socklen_t clilen = sizeof(cli_addr);
   Skb* skb=alloc_skb(sk->debug);
   char* buff = (char*) &(skb->msgbuf.buff);
@@ -868,12 +883,12 @@ timeout(srvctcp_sock* sk, int pin){
   }
   
   if (sk->debug > 1){
-    char s[INET6_ADDRSTRLEN];
+    char s[INET_ADDRSTRLEN];
     fprintf(stderr,
             "timerxmit %6.2f \t on %s:%d \t blockno %d blocklen %d pkt %d  snd_nxt %d  snd_cwnd %d srtt %f \n",
             getTime()-sk->start_time,
-            get_addr(&subpath->cli_addr,s,INET6_ADDRSTRLEN),
-            get_port(&subpath->cli_addr),
+            get_addr4(&subpath->cli_addr,s,INET_ADDRSTRLEN),
+            get_port4(&subpath->cli_addr),
             sk->curr_block,
             sk->blocks[sk->curr_block%NUM_BLOCKS].len,
             subpath->snd_una,
@@ -1205,7 +1220,7 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
            subpath->snd_nxt,
            msg->start_packet,
            (int)subpath->snd_cwnd,
-           get_port(&subpath->cli_addr) );
+           get_port4(&subpath->cli_addr) );
   }
   
   // Marshall msg into buf
@@ -1223,7 +1238,7 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
              subpath->snd_nxt,
              msg->start_packet,
              (int)subpath->snd_cwnd,
-             get_port(&subpath->cli_addr) );
+             get_port4(&subpath->cli_addr) );
       err_sys(sk,"Error: sendto");
     }
   } while(errno == ENOBUFS && ++(sk->enobufs)); // use the while to increment enobufs if the condition is met
@@ -1252,11 +1267,11 @@ endSession(srvctcp_sock* sk){
          myname,host, sk->total_time);
   
   
-  int i; char s[INET6_ADDRSTRLEN];
+  int i; char s[INET_ADDRSTRLEN];
   for (i=0; i < sk->num_active; i++){
     printf("******* Priniting Statistics for path %d -- %s : %d ********\n",i,
-           get_addr(&sk->active_paths[i]->cli_addr, s, INET6_ADDRSTRLEN),
-           get_port(&sk->active_paths[i]->cli_addr) );
+           get_addr4(&sk->active_paths[i]->cli_addr, s, INET_ADDRSTRLEN),
+           get_port4(&sk->active_paths[i]->cli_addr) );
     printf("**THRU** %f Mbs\n",
            8.e-6*(sk->active_paths[i]->snd_una*PAYLOAD_SIZE)/sk->total_time);
     printf("**LOSS* %6.3f%% \n",
@@ -1425,7 +1440,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
                                ackno,
                                subpath->snd_nxt,
                                subpath->snd_una,
-                               get_port(&subpath->cli_addr) );
+                               get_port4(&subpath->cli_addr) );
     
     sk->badacks++;
     if(subpath->snd_una < ackno) subpath->snd_una = ackno;
@@ -1922,6 +1937,15 @@ unmarshallAck(Msgbuf* msgbuf){
 
 
 // Compare the IP address and Port of two sockaddr structs
+int
+sockaddr_cmp4(struct sockaddr_in* addr1, struct sockaddr_in* addr2){
+  //IPv4
+  
+  if (addr1->sin_family != addr2->sin_family)    return 1;   // No match
+  if (addr1->sin_port != addr2->sin_port) return 1;                // ports don't match
+  if (addr1->sin_addr.s_addr != addr2->sin_addr.s_addr) return 1;  // Addresses don't match
+  return 0; // We have a match
+}
 
 int
 sockaddr_cmp(struct sockaddr_storage* addr1, struct sockaddr_storage* addr2){

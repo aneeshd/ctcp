@@ -82,6 +82,16 @@ getTime(void){
     return(time.tv_sec+ time.tv_usec*1.e-6);
 }
 
+// portable clock_gettime
+int clock_gettime(int dummy, struct timespec* t) {
+    struct timeval now;
+    int rv = gettimeofday(&now, NULL);
+    if (rv) return rv;
+    t->tv_sec  = now.tv_sec;
+    t->tv_nsec = now.tv_usec * 1000;
+    return 0;
+}
+
 Skb*
 ackPacket(uint32_t ackno, uint32_t blockno, uint8_t dofs_left, int debug){
     Skb* skb = alloc_skb(debug);

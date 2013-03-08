@@ -387,7 +387,12 @@ void
     idle_timer = getTime();
 
     // value -1 blocks until something is ready to read
-    ready = ppoll(read_set, csk->substreams, NULL, &(sa.sa_mask));
+    // Replace ppoll() call with portable equivalent
+    //ready = ppoll(read_set, csk->substreams, NULL, &(sa.sa_mask));
+    sigset_t origmask;
+    sigprocmask(SIG_SETMASK, &(sa.sa_mask), &origmask);
+    ready = poll(read_set, csk->substreams, -1);
+    sigprocmask(SIG_SETMASK, &origmask, NULL);
 
     if(ready == -1){
       if (errno == EINTR && csk->status == CLOSED){

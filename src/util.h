@@ -124,4 +124,12 @@ void seedfastrand(uint32_t seed);
 uint32_t fastrand();
 Skb* alloc_skb(int debug);
 void free_skb(void* skb);
+
+#ifdef __MACH__
+#include <sys/time.h>
+#endif
+//portable clock_gettime 
+#define CLOCK_REALTIME  0 // dummy constant
+int clock_gettime(int dummy, struct timespec* t);
+
 #endif // UTIL_H_

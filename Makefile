@@ -50,8 +50,8 @@ OPT_CFLAGS		=	$(COMMON_CFLAGS) -DNDEBUG \
 OPT_CXXFLAGS		=	$(COMMON_CXXFLAGS) -DNDEBUG \
 				$(OPTIMIZATION_FLAGS) -fno-omit-frame-pointer
 
-COMMON_LDFLAGS		=	-g $(FPIC) -Wl,--eh-frame-hdr -lm -lpthread
-DBG_LDFLAGS		=	$(COMMON_LDFLAGS)
+COMMON_LDFLAGS		=	-g $(FPIC) -Wl -lm -lpthread
+DBG_LDFLAGS		=	$(COMMON_LDFLAGS) --eh-frame-hdr
 OPT_LDFLAGS		=	$(COMMON_LDFLAGS) -O3 -fno-omit-frame-pointer
 
 OPT	=	1
@@ -151,7 +151,7 @@ demoClient: $(BINDIR)/demoClient.o .buildmode Makefile
 proxy_local: $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CC) -o $@ $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS) -lrt
+	$(CC) -o $@ $(BINDIR)/proxy_local.o $(BINDIR)/child_local.o  $(BINDIR)/misc_local.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS) 
 
 proxy_remote: $(BINDIR)/proxy_remote.o $(BINDIR)/child_remote.o  $(BINDIR)/misc_remote.o $(BINDIR)/up_proxy.o $(BINDIR)/error.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(ECHO) "linking $@"
@@ -166,7 +166,7 @@ nftpServer: $(BINDIR)/nftpServer.o $(BINDIR)/srvctcp.o $(BINDIR)/libUtil.a .buil
 nftpClient: $(BINDIR)/nftpClient.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a .buildmode Makefile
 	$(ECHO) "linking $@"
 	$(MKDIR) -p $(dir $@)
-	$(CC) -o $@ $(BINDIR)/nftpClient.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS) -lrt
+	$(CC) -o $@ $(BINDIR)/nftpClient.o $(BINDIR)/clictcp.o $(BINDIR)/libUtil.a $(LDFLAGS) 
 
 .PHONY: proxy
 proxy: proxy_local proxy_remote

@@ -52,7 +52,7 @@ typedef struct{
   double slr;                               // Smoothed loss rate
   double slr_long;                          // slr with longer memory
   double slr_longstd;                       // Standard Deviation of slr_long
-  struct sockaddr_storage cli_addr;
+  struct sockaddr_in cli_addr;
   int total_loss;
   double minrtt;
   double maxrtt;
@@ -162,6 +162,7 @@ void openLog(srvctcp_sock* sk, char* log_name);
 void* coding_job(void *a);
 void free_coded_pkt(void* a);
 int sockaddr_cmp(struct sockaddr_storage* addr1, struct sockaddr_storage* addr2);
+int sockaddr_cmp4(struct sockaddr_in* addr1, struct sockaddr_in* addr2);
 
 srvctcp_sock* create_srvctcp_sock(void);
 srvctcp_sock* open_srvctcp(char *port, struct child_remote_cfg* cfg);
