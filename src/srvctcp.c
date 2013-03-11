@@ -251,7 +251,7 @@ listen_srvctcp(srvctcp_sock* sk){
     
     rv = pthread_create( &(sk->daemon_thread), NULL, server_worker, (void *) sk);
     
-    return 0;
+    return rv;
     
   } else{
     // TODO perhaps we should not exit immediately, if the first packet is not SYN?
@@ -732,6 +732,7 @@ close_srvctcp(srvctcp_sock* sk){
           timeout.tv_sec = endtime; timeout.tv_nsec = (endtime-timeout.tv_sec)*1e9;
           res = pthread_cond_timedwait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->curr_block_mutex),
                                             &timeout); 
+          if (res == ETIMEDOUT && sk->debug>2) printf("WARNING: timed out waiting for block %d to free.\n",i);  
           //pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->curr_block_mutex));
           // If we have timed out, we will have left the memory used by the block unfreed.  We could tidy up, but we're 
           // shortly going to terminate this process so we can be lazy.
