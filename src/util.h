@@ -132,4 +132,8 @@ void free_skb(void* skb);
 #define CLOCK_REALTIME  0 // dummy constant
 int clock_gettime(int dummy, struct timespec* t);
 
+#ifdef __MACH__
+int pthread_timedjoin_np(pthread_t td, void **res, struct timespec *ts);
+#endif
+
 #endif // UTIL_H_
