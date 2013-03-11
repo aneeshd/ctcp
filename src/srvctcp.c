@@ -359,7 +359,8 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
         // and so break the deadlock here in send_ctcp().  If acks completely stall, then we will be
         // stuck in a loop here.
         if (sk->debug>3) printf("timed out\n");
-        break;
+        pthread_cond_signal( &(sk->block_ready_condv));
+        return usr_buf_len - bytes_left;
       } else
         // In meantime handle_ack() might have updated sk->maxblockno
         // but only if all blocks have been acked by receiver and so have no packets to send, in which case 
@@ -369,9 +370,9 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
     
     //printf("Total bytes_read %d bytes_left %d maxblockno %d currblock %d\n", usr_buf_len - bytes_left, bytes_left,  sk->maxblockno, sk->curr_block);
   }
-  pthread_mutex_unlock(&(sk->curr_block_mutex));
   // Signal send_segs() to continue, if blocked waiting for new data
   pthread_cond_signal( &(sk->block_ready_condv));
+  pthread_mutex_unlock(&(sk->curr_block_mutex));
   
   return usr_buf_len - bytes_left;
 }
@@ -685,7 +686,7 @@ close_srvctcp(srvctcp_sock* sk){
   struct sockaddr_in cli_addr;
   socklen_t clilen = sizeof(cli_addr);
   Skb* skb=alloc_skb(sk->debug);
-  if (!skb) {printf("ERROR: Failed to get a skb in close_srvctcp()\n"); return;} 
+  if (!skb) {printf("ERROR: Failed to get a skb in close_srvctcp()\n"); return;}
   char* buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt *ack = &(skb->msgbuf.ack);
   
@@ -719,7 +720,6 @@ close_srvctcp(srvctcp_sock* sk){
     // Should be no need to take lock on sk->maxblockno here as handle_ack() finished by now ?  DL
     pthread_cond_signal(&(sk->block_ready_condv));
     pthread_join(sk->daemon_thread, NULL);
-    
     
     // Send FIN or FIN_ACK
     if(sk->active_paths[0]->pathstate != CLOSING){
@@ -1346,8 +1346,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     q_free(&(sk->coded_q[sk->curr_block%NUM_BLOCKS]), &free_skb);
     
     // Release lock on block_mutex and signal send_ctcp() that block freed.
-    pthread_mutex_unlock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex));
     pthread_cond_signal( &(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_free_condv));
+    pthread_mutex_unlock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex));
     
     // Already have lock on curr_block_mutex, so can update sk->curr_block
     sk->curr_block++;            // Update the current block identifier
@@ -1375,10 +1375,10 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // ack has advanced block no, so is first ack we have received for this block
     sk->dof_req_latest =  sk->blocks[sk->curr_block%NUM_BLOCKS].len - ack->dof_rec;  
   }
-  pthread_mutex_unlock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex));
   
   int dof_req_latest = sk->dof_req_latest;
-  
+  pthread_mutex_unlock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex));
+ 
   // And release lock on curr_block_mutex
   pthread_mutex_unlock(  &(sk->curr_block_mutex) );
   
