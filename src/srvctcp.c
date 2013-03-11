@@ -39,7 +39,6 @@
 void
 ctrlc(srvctcp_sock* sk){
   sk->total_time = getTime() - sk->start_time;
-  endSession(sk);
   return;
 }
 
@@ -208,6 +207,7 @@ listen_srvctcp(srvctcp_sock* sk){
   int numbytes, rv;
   char* log_name = NULL; // Name of the log
   Skb* skb=alloc_skb(sk->debug);
+  if (!skb) { printf("ERROR: Failed to get an skb in listen_srvctcp()\n"); return -1;}
   char* buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt* ack;
   log_srv_status(sk);
@@ -229,8 +229,6 @@ listen_srvctcp(srvctcp_sock* sk){
     sk->clientport = get_port4(&cli_addr);
     get_addr4(&cli_addr,sk->clientip,INET_ADDRSTRLEN);
     printf("Request for a new session: Client address %s Client port %d\n", sk->clientip, sk->clientport);
-    
-    if (sk->debug > 6) openLog(sk, log_name);
     
     Substream_Path *stream = malloc(sizeof(Substream_Path));
     init_stream(sk, stream);
@@ -383,6 +381,7 @@ void
 *server_worker(void *arg){
   srvctcp_sock* sk = (srvctcp_sock*) arg;
   Skb* skb=alloc_skb(0);
+  if (!skb) {printprintff("ERROR: Failed to get an skb in server_worker()\n"); return NULL;}
   char *buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt *ack;
   int numbytes, i, r;
@@ -686,6 +685,7 @@ close_srvctcp(srvctcp_sock* sk){
   struct sockaddr_in cli_addr;
   socklen_t clilen = sizeof(cli_addr);
   Skb* skb=alloc_skb(sk->debug);
+  if (!skb) {printf("ERROR: Failed to get a skb in close_srvctcp()\n"); return;} 
   char* buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt *ack = &(skb->msgbuf.ack);
   
@@ -1257,43 +1257,6 @@ send_one(srvctcp_sock* sk, uint32_t blockno, int pin){
   //printf("---------- Done Freeing the message\n-------------");
 }
 
-void
-endSession(srvctcp_sock* sk){
-  char myname[128];
-  char* host = "Host"; // TODO: extract this from the packet
-  
-  gethostname(myname,sizeof(myname));
-  printf("\n\n%s => %s for %f secs\n",
-         myname,host, sk->total_time);
-  
-  
-  int i; char s[INET_ADDRSTRLEN];
-  for (i=0; i < sk->num_active; i++){
-    printf("******* Priniting Statistics for path %d -- %s : %d ********\n",i,
-           get_addr4(&sk->active_paths[i]->cli_addr, s, INET_ADDRSTRLEN),
-           get_port4(&sk->active_paths[i]->cli_addr) );
-    printf("**THRU** %f Mbs\n",
-           8.e-6*(sk->active_paths[i]->snd_una*PAYLOAD_SIZE)/sk->total_time);
-    printf("**LOSS* %6.3f%% \n",
-           100.*sk->active_paths[i]->total_loss/sk->active_paths[i]->snd_una);
-    if (sk->ipkts) sk->active_paths[i]->avrgrtt /= sk->ipkts;
-    printf("**RTT** minrtt  %f maxrtt %f avrgrtt %f\n",
-           sk->active_paths[i]->minrtt, sk->active_paths[i]->maxrtt,sk->active_paths[i]->avrgrtt);
-    printf("**RTT** rto %f  srtt %f \n", sk->active_paths[i]->rto, sk->active_paths[i]->srtt);
-    printf("**VEGAS** max_delta %f vdecr %d v0 %d\n",
-           sk->active_paths[i]->max_delta, sk->active_paths[i]->vdecr, sk->active_paths[i]->v0);
-    printf("**CWND** snd_nxt %d snd_cwnd %d  snd_una %d ssthresh %d goodacks %d\n\n",
-           sk->active_paths[i]->snd_nxt, sk->active_paths[i]->snd_cwnd, sk->active_paths[i]->snd_una,
-           sk->active_paths[i]->snd_ssthresh, sk->goodacks);
-  }
-  
-  printf("Total time %f Total idle time %f, Total timeouts %d\n", sk->total_time, sk->idle_total, sk->timeouts);
-  printf("Total packets in: %d, out: %d, enobufs %d\n\n", sk->ipkts, sk->opkts, sk->enobufs);
-  
-  if(sk->db)       fclose(sk->db);
-  sk->db       = NULL;
-}
-
 /*
  Returns 1 if subpath sp ready to send more
  Returns 0 if subpath sp is not ready to send (bad ack or done)
@@ -1513,7 +1476,6 @@ timedread(socket_t sockfd, double t){
 void
 err_sys(srvctcp_sock* sk, char* s){
   perror(s);
-  endSession(sk);
   //  exit(1);
 }
 
@@ -1841,80 +1803,6 @@ freeBlock(Block_t* blk){
     free_skb(blk->skb[i]);
   }
   blk->len = 0;
-}
-
-void
-openLog(srvctcp_sock* sk, char* log_name){
-  
-  char* file;
-  time_t rawtime;
-  struct tm* ptm;
-  time(&rawtime);
-  ptm = localtime(&rawtime);
-  
-  
-  //---------- Remake Log and Fig Directories ----------------//
-  
-  if(!mkdir(sk->logdir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("Warning while making the logs directory");
-  }
-  
-  if(!mkdir("/var/log/ctcp/figs", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("Warning while making the figs directory");
-  }
-  
-  char* dir_name = malloc(20);
-  
-  sprintf(dir_name, "/var/log/ctcp/figs/%d-%02d-%02d",
-          ptm->tm_year + 1900,
-          ptm->tm_mon + 1,
-          ptm->tm_mday);
-  
-  if(!mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("Warning while making the fig date directory");
-  }
-  
-  sprintf(dir_name, "%s/%d-%02d-%02d", sk->logdir,
-          ptm->tm_year + 1900,
-          ptm->tm_mon + 1,
-          ptm->tm_mday);
-  
-  if(!mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)){
-    perror("Warning while making the log date directory");
-  }
-  
-  //------------------------------------------------//
-  
-  int auto_log = !log_name;
-  
-  if(auto_log)
-  {
-    file = malloc(15);
-    log_name = malloc(32);
-    
-    sprintf(file, "%02d:%02d.%02d.log",
-            ptm->tm_hour,
-            ptm->tm_min,
-            ptm->tm_sec);
-    
-    sprintf(log_name, "%s/%s",
-            dir_name,
-            file );
-    free(file);
-  }
-  
-  sk->db = fopen(log_name, "w+");
-  
-  if(!sk->db){
-    perror("An error ocurred while opening the log file");
-  }
-  
-  
-  if(auto_log)
-  {
-    free(dir_name);
-    free(log_name);
-  }
 }
 
 /*
