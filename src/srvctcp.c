@@ -360,6 +360,8 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
         // stuck in a loop here.
         if (sk->debug>3) printf("timed out\n");
         pthread_cond_signal( &(sk->block_ready_condv));
+        // timed_wait() should(?) have exited with a lock on sk->curr_block_mutex, so release it.
+        pthread_mutex_unlock(&(sk->curr_block_mutex));
         return usr_buf_len - bytes_left;
       } else
         // In meantime handle_ack() might have updated sk->maxblockno
@@ -1356,7 +1358,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     // Usually, sk->curr_block <= sk->maxblockno.  But,
     // sk->curr_block can overun sk->maxblockno is we have sent all the available
     // data and have no new data to send. If that happens, we advance
-    //sk->maxblockno to maintain sk->curr_block <= sk->maxblockno.   In this case the block
+    // sk->maxblockno to maintain sk->curr_block <= sk->maxblockno.   In this case the block
     // pointed to bu sk->curr_block will have no data and so will generate no acks,
     // so we will not advance sk->curr_block past this block (until some new data is
     // available, in which case we are back in the normal operating regime).
@@ -1389,6 +1391,8 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
     printf("ERROR: dof_req_latest %d curr_block %d curr block len %d ack-blockno %d ack-dof_rec %d\n\n", sk->dof_req_latest, sk->curr_block,  sk->blocks[sk->curr_block%NUM_BLOCKS].len, ack->blockno, ack->dof_rec);
   }
   if (sk->debug > 2 &&  sk->curr_block > curr_block_tmp){
+    // should read have a lock on sk->curr_block_mutex here, but its no bit deal if the values printed as a bit messed up
+    // and much worse if printf blocks while we hold a lock.
     printf("Now sending block %d/%d, cwnd %d, SLR %f%%, SRTT %f ms, MINRTT %f ms, BASERTT %f ms, RATE %f Mbps (%f/%f), win %d, SRTT_user %f \n",
            sk->curr_block, sk->maxblockno, subpath->snd_cwnd, 100*subpath->slr, subpath->srtt*1000, subpath->minrtt*1000, subpath->basertt*1000, 8.e-6*(subpath->rate*PAYLOAD_SIZE), 8.e-6*(subpath->snd_una*MSS)/(getTime() - sk->start_time), 8.e-6*subpath->goodput*PAYLOAD_SIZE/(getTime() - sk->start_time), subpath->snd_cwnd - (subpath->snd_nxt - subpath->snd_una), subpath->srtt_user*1000);
   }     
