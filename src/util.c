@@ -192,7 +192,7 @@ uint32_t fastrand() {  // Combined period = 2^81.95
 
 static Skb* first = NULL;
 static int num=0;
-pthread_mutex_t skb_pool_ = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t skb_pool_ = PTHREAD_MUTEX_INITIALIZER;
 
 Skb* alloc_skb(int debug) {
   Skb* freeskb;
