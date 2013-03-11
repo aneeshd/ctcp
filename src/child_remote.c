@@ -465,21 +465,21 @@ int handle_traffic()
 	    res = ERR_SKFATAL;
 	    break;
     }
-    if( !res ) {
-	    res = ERR_CONIDLE;
-	    break;
-    }
 
+    if( !res ) {
+       res = ERR_CONIDLE;
+       break;
+    }
+  
     /*
     ** If either one of the connections were closed, break with
     ** no error.
     */
     if( (pfd[0].revents & POLLHUP) || (pfd[1].revents & POLLHUP) ) {
-	    res = ERR_NONE;
+      res = ERR_NONE;
       break;
     }
 
-    
     /*
     ** If the buffer is not empty, poll() has returned telling us 
     ** that writting now will not block. Else, there is data to

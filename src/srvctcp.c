@@ -343,7 +343,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       }
       // Clear lock
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
-    } else if (sk->maxblockno < sk->curr_block+NUM_BLOCKS) {
+    } else if (sk->maxblockno < sk->curr_block+NUM_BLOCKS ) {
       // Clear lock
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
       sk->maxblockno++;  // have already taken a lock on curr_block_mutex
@@ -355,7 +355,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       // Release locks as might be here a while !
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
       
-      if (sk->debug>3) printf("Waiting on block free %d/%d/%d ...", sk->curr_block, sk->maxblockno, i);
+      if (sk->debug>3) printf("Waiting on block free %d/%d/%d ...i\n", sk->curr_block, sk->maxblockno, i);
       
       // We could just bail out here without waiting, but
       // then loop that calls us here in send_ctcp() will immediately return
@@ -697,7 +697,7 @@ void
 }
 
 /*
- closes srvctcp_sock
+ closes srvctcp_sock.  called by handle_traffic() when connection is in final stages of being closed.
  */
 void
 close_srvctcp(srvctcp_sock* sk){
@@ -707,6 +707,9 @@ close_srvctcp(srvctcp_sock* sk){
   Skb* skb=alloc_skb(sk->debug);
   char* buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt *ack = &(skb->msgbuf.ack);
+  struct timespec timeout;
+  double endtime;
+  int res;
   
   // Check whether send_segs have finished
   
@@ -721,29 +724,44 @@ close_srvctcp(srvctcp_sock* sk){
     i = sk->curr_block;
     if( sk->dof_req_latest != 0){
       while (i <= sk->maxblockno && get_status(sk) == ACTIVE){
-        //  printf("Waiting on block %d to get free\n", i);
-        if (sk->dof_req_latest != 0 && i >= sk->curr_block)
-          pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->curr_block_mutex));
+        printf("Waiting on block %d to get free\n", i);
+        if (sk->dof_req_latest != 0 && i >= sk->curr_block) {
+          // Wait for any acks to flush out blocks.  But let's not wait forever
+          // as we need to close the connection fairly promptly.
+          double endtime = getTime()+0.1; // wait for at most 100ms
+          timeout.tv_sec = endtime; timeout.tv_nsec = (endtime-timeout.tv_sec)*1e9;
+          res = pthread_cond_timedwait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->curr_block_mutex),
+                                            &timeout); 
+          //pthread_cond_wait( &(sk->blocks[i%NUM_BLOCKS].block_free_condv), &(sk->curr_block_mutex));
+          // If we have timed out, we will have left the memory used by the block unfreed.  We could tidy up, but we're 
+          // shortly going to terminate this process so we can be lazy.
+        }
         i++;
       }
-      // Now all blocks are freed, and we have received all the acks
+      // Now all blocks are freed (or abandoned), and we have tried to receive all the acks
     }
     pthread_mutex_unlock(&(sk->curr_block_mutex));
     
     //   printf("RETURNED FROM WAITING ON BLOCKS currBlock %d, maxblock %d pid %u\n", sk->curr_block, sk->maxblockno, getpid());  
     set_status(sk, CLOSED);
     log_srv_status(sk);
-    // Signal the send_ctcp() thread to exit.  Only needed if close_srvctcp() called while handle_con()/send_ctcp() 
+    // Signal the send_ctcp() thread to exit.  Only needed if close_srvctcp() called while send_ctcp() 
     // still running, which can't happen ?
     // Should be no need to take lock on sk->maxblockno here as handle_ack() finished by now ?  DL
     pthread_cond_signal(&(sk->block_ready_condv));
-    pthread_join(sk->daemon_thread, NULL);
- 
+    
+    
+    // Wait for server_worker() to finish.  But lets not wait forever.
+    double endtime = getTime()+1; // wait for at most 1s
+    timeout.tv_sec = endtime; timeout.tv_nsec = (endtime-timeout.tv_sec)*1e9;
+    res = pthread_timedjoin_np(sk->daemon_thread, NULL, &timeout);
+    //pthread_join(sk->daemon_thread, NULL);
+    
     if (!skb) {printf("ERROR: Failed to get a skb in close_srvctcp()\n"); return;}
    
     // Send FIN or FIN_ACK
     if(sk->active_paths[0]->pathstate != CLOSING){
-      // printf("Sending the FIN packet\n");
+      //printf("Sending the FIN packet\n");
       
       double rto_max = 0;
       for (i=0; i < sk->num_active; i++){
@@ -864,7 +882,7 @@ close_srvctcp(srvctcp_sock* sk){
   free(sk);
   free_skb(skb);
   
-  //  printf("Cleared the ctcp socket %u\n", getpid());
+  //printf("Cleared the ctcp socket %u\n", getpid());
   
   return;
 }
@@ -994,7 +1012,7 @@ send_segs(srvctcp_sock* sk, int pin){
   
   if (sk->dof_req_latest == 0){
     //Done with current block.  Waiting to move onto next block.  DL
-    if (sk->debug>3) printf("waiting on block ready %d ...", sk->curr_block);
+    if (sk->debug>3) printf("waiting on block ready %d ...\n", sk->curr_block);
     
     pthread_cond_wait( &(sk->block_ready_condv), &(sk->curr_block_mutex));
     if (sk->debug>3) printf("done\n");
