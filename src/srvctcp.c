@@ -282,6 +282,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
   uint32_t bytes_left = usr_buf_len;
   int block_len_tmp;
   int i;
+  int row;
   
   // Take a lock on curr_block_mutex to prevent updates to sk->curr_block, sk->maxblockno
   // by handle_ack() which executes in a different thread.  Need to hold this lock until
@@ -311,6 +312,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
     //printf("bytes_read %d bytes_left %d maxblockno %d blockno %d\n", bytes_read, bytes_left,  sk->maxblockno, i);
     
     if (bytes_read > 0) { // there was space in block i to add new data
+      /*
       coding_job_t* job = malloc(sizeof(coding_job_t));
       job->socket = sk;
       job->blockno = i;
@@ -320,9 +322,24 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       sk->dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
       //printf("send_ctcp adding job: blockno %d, dofrequested %d \n", i, job->dof_request);
       addJob(&(sk->workers), &coding_job, job, &free, LOW);
+      */
 
+      for (row = block_len_tmp; row < sk->blocks[i%NUM_BLOCKS].len; row++){        
+        // construct a data packet 
+        if (sk->blocks[i%NUM_BLOCKS].skb[row] == NULL) {printf("WARNING: Failed to get a normal skb\n");continue;}
+        Data_Pckt* msg    = &(sk->blocks[i%NUM_BLOCKS].skb[row]->msgbuf.msg);
+        msg->flag         = NORMAL;
+        msg->blockno      = i;
+        msg->num_packets  = 1;
+        msg->start_packet = row;
+        msg->packet_coeff = 1;        
+        // q_push is thread safe.
+        q_push_back(&(sk->coded_q[i%NUM_BLOCKS]), sk->blocks[i%NUM_BLOCKS].skb[row]);
+        sk->dof_remain[i%NUM_BLOCKS] = sk->blocks[i%NUM_BLOCKS].len;
+      } 
       if (i == sk->curr_block){  
-        sk->dof_req_latest += job->dof_request;  // have already taken a lock on curr_block_mutex
+        //sk->dof_req_latest += job->dof_request;  // have already taken a lock on curr_block_mutex
+        sk->dof_req_latest += sk->blocks[i%NUM_BLOCKS].len - block_len_tmp;
       }
       // Clear lock
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
@@ -1667,38 +1684,6 @@ coding_job(void *a){
     printf("Error: Block %d not read yet\n", blockno);
     return NULL;
   } 
-  
-  ////////////////////////////// UNCODED PACKETIZATION REQUEST ///////////////////////
-  
-  if (coding_wnd == 0){
-    
-    coding_wnd = 1;
-    
-    /*
-     if (dof_request < block_len){
-     printf("Error: the initially requested dofs are less than the block length - blockno %d dof_request %d block_len %d\n\n\n\n\n",  blockno, dof_request, block_len);
-     }
-     */
-    
-    // Generate random combination by picking rows based on order
-    int row;
-    int end = MIN((start + dof_request), block_len);
-    for (row = start; row < end; row++){
-      
-      // construct a data packet 
-      if (sk->blocks[blockno%NUM_BLOCKS].skb[row] == NULL) {printf("WARNING: Failed to get a normal skb\n");continue;}
-      Data_Pckt* msg    = &(sk->blocks[blockno%NUM_BLOCKS].skb[row]->msgbuf.msg);
-      msg->flag         = NORMAL;
-      msg->blockno      = blockno;
-      msg->num_packets  = 1;
-      msg->start_packet = row;
-      msg->packet_coeff = 1;
-      
-      // q_push is thread safe.
-      q_push_back(&(sk->coded_q[blockno%NUM_BLOCKS]), sk->blocks[blockno%NUM_BLOCKS].skb[row]);
-    }  // Done with forming the initial set of coded packets
-    dof_request = MAX(0, dof_request - (block_len - start));  // This many more to go
-  }
   
   ///////////////////// ACTUAL RANDOM LINEAR CODING ///////////////////
   
