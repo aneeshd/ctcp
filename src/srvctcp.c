@@ -686,7 +686,6 @@ close_srvctcp(srvctcp_sock* sk){
   struct sockaddr_in cli_addr;
   socklen_t clilen = sizeof(cli_addr);
   Skb* skb=alloc_skb(sk->debug);
-  if (!skb) {printf("ERROR: Failed to get a skb in close_srvctcp()\n"); return;}
   char* buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt *ack = &(skb->msgbuf.ack);
   
@@ -720,7 +719,9 @@ close_srvctcp(srvctcp_sock* sk){
     // Should be no need to take lock on sk->maxblockno here as handle_ack() finished by now ?  DL
     pthread_cond_signal(&(sk->block_ready_condv));
     pthread_join(sk->daemon_thread, NULL);
-    
+ 
+    if (!skb) {printf("ERROR: Failed to get a skb in close_srvctcp()\n"); return;}
+   
     // Send FIN or FIN_ACK
     if(sk->active_paths[0]->pathstate != CLOSING){
       // printf("Sending the FIN packet\n");
