@@ -217,8 +217,8 @@ Skb* alloc_skb(int debug) {
 void free_skb(void* a) {
 
   Skb* freeskb = (Skb*) a;
-  if (freeskb->used == FALSE) return; // already freed
   pthread_mutex_lock(&skb_pool_);
+  if (freeskb->used == FALSE) return; // already freed
   if (first == NULL) {
      first = freeskb;
      first->next=NULL;
