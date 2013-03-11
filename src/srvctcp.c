@@ -320,7 +320,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       sk->dof_remain[i%NUM_BLOCKS] += job->dof_request;  // Update the internal dof counter
       //printf("send_ctcp adding job: blockno %d, dofrequested %d \n", i, job->dof_request);
       addJob(&(sk->workers), &coding_job, job, &free, LOW);
-      
+
       if (i == sk->curr_block){  
         sk->dof_req_latest += job->dof_request;  // have already taken a lock on curr_block_mutex
       }
@@ -382,7 +382,7 @@ void
 *server_worker(void *arg){
   srvctcp_sock* sk = (srvctcp_sock*) arg;
   Skb* skb=alloc_skb(0);
-  if (!skb) {printprintff("ERROR: Failed to get an skb in server_worker()\n"); return NULL;}
+  if (!skb) {printf("ERROR: Failed to get an skb in server_worker()\n"); return NULL;}
   char *buff = (char*) &(skb->msgbuf.buff);
   Ack_Pckt *ack;
   int numbytes, i, r;
