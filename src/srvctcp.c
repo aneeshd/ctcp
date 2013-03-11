@@ -1378,6 +1378,7 @@ handle_ack(srvctcp_sock* sk, Ack_Pckt *ack, int pin){
   }
   
   int dof_req_latest = sk->dof_req_latest;
+  if (sk->dof_req_latest < 0) sk->dof_req_latest=0; // shouldn't happen
   pthread_mutex_unlock(&(sk->blocks[(sk->curr_block)%NUM_BLOCKS].block_mutex));
  
   // And release lock on curr_block_mutex
