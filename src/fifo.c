@@ -51,7 +51,7 @@ fifo_push(fifo_t* Q, const void *buf, size_t n){
   pthread_mutex_lock(&Q->q_mutex_);
 
   while(Q->size == Q->max_size && !(Q->released)){
-    printf("fifo_push: waiting on condv_push...\n");
+    //printf("fifo_push: waiting on condv_push...\n");
     pthread_cond_signal( &(Q->q_condv_pop_) );
     pthread_cond_wait( &(Q->q_condv_push_), &(Q->q_mutex_) );
   }
