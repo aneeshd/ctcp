@@ -44,5 +44,4 @@ int  bind_client();
 int  handle_traffic();
 void *handle_ctcp_traffic();
 
-
 #endif /* CHILD_LOCAL_H */

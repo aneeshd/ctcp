@@ -1,9 +1,5 @@
-ctcp (1.1) unstable; urgency=medium
+ctcp (1.0) unstable; urgency=medium
 
   * Initial Release.
-  * Many bug fixes - for thread safety, connection termination etc.  Plus
-    small performance improvements - faster retry of lost SYNs, NUM_BLOCKS 
-    increased to 100, extra config vars.  
-    Now compiles on Linux and MAC OS X 10.7.4.  11 Mar 2013.
 
- -- Doug Leith <doug@leith.ie>  Mon, 11 Mar 2013 22:00:00 +0000
+ -- Doug Leith <doug@leith.ie>  Fri, 01 Mar 2013 07:00:23 +0000

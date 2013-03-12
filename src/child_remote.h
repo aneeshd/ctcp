@@ -45,5 +45,4 @@ int  connect_client();
 int  bind_client();
 int  handle_traffic();
 
-
 #endif /* CHILD_REMOTE_H */
