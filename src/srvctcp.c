@@ -251,7 +251,7 @@ listen_srvctcp(srvctcp_sock* sk){
     
     rv = pthread_create( &(sk->daemon_thread), NULL, server_worker, (void *) sk);
     
-    return rv;
+    return 0;
     
   } else{
     // TODO perhaps we should not exit immediately, if the first packet is not SYN?
@@ -355,7 +355,7 @@ send_ctcp(srvctcp_sock *sk, const void *usr_buf, size_t usr_buf_len){
       // Release locks as might be here a while !
       pthread_mutex_unlock(&(sk->blocks[i%NUM_BLOCKS].block_mutex));
       
-      if (sk->debug>3) printf("Waiting on block free %d/%d/%d ...i\n", sk->curr_block, sk->maxblockno, i);
+      if (sk->debug>3) printf("Waiting on block free %d/%d/%d ...\n", sk->curr_block, sk->maxblockno, i);
       
       // We could just bail out here without waiting, but
       // then loop that calls us here in send_ctcp() will immediately return
