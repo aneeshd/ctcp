@@ -202,7 +202,10 @@ Skb* alloc_skb(int debug) {
     num++;
     if (num > 5000 && debug>3) printf("WARNING: mem pool %u\n", num);
     freeskb = malloc(sizeof(Skb));
-    if (!freeskb) return NULL; // malloc failed
+    if (!freeskb) {
+      pthread_mutex_unlock(&skb_pool_);
+      return NULL; // malloc failed
+    }
   } else {
     // otherwise, we can recycle
     freeskb=first;
@@ -218,7 +221,10 @@ void free_skb(void* a) {
 
   Skb* freeskb = (Skb*) a;
   pthread_mutex_lock(&skb_pool_);
-  if (freeskb->used == FALSE) return; // already freed
+  if (freeskb->used == FALSE) {
+    pthread_mutex_unlock(&skb_pool_);
+    return; // already freed
+  }
   if (first == NULL) {
      first = freeskb;
      first->next=NULL;
