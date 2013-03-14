@@ -1532,13 +1532,13 @@ open_status_log(clictcp_sock* csk, char* port){
   csk->status_log_fd = open(buff, O_RDWR | O_CREAT | O_TRUNC,  0644);
 
   if (csk->status_log_fd == -1){
-    perror("Could not open status file");
+    //perror("Could not open status file");
     return;
   }
 
   
   if (flock(csk->status_log_fd, LOCK_EX) == -1){
-    perror("Could not acquire the lock for status file");
+    //perror("Could not acquire the lock for status file");
     return;
   }
   
