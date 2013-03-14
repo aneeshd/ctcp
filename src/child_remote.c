@@ -119,7 +119,7 @@ int handle_con(int ctcp_port, struct child_remote_cfg *cfg)
   logstr(buf,&ad_client);
     
 
-  if(listen_srvctcp(ctcp_sk)){
+  if(listen_srvctcp(ctcp_sk)<0){
     printf("Failed to listen..\n");
     res = ERR_SRVCTCP;
     close_srvctcp(ctcp_sk);
