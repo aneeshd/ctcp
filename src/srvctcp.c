@@ -251,7 +251,7 @@ listen_srvctcp(srvctcp_sock* sk){
     
     rv = pthread_create( &(sk->daemon_thread), NULL, server_worker, (void *) sk);
     
-    return rv;
+    return 0;
     
   } else{
     // TODO perhaps we should not exit immediately, if the first packet is not SYN?
