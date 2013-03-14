@@ -25,7 +25,7 @@
 #define cmdln_arg_in(i,s1,s2) (!strcmp(argv[i],s1) || !strcmp(argv[i],s2))
 #define ACT_START             1
 #define ACT_SHUTDOWN          2
-#define PROG_VERSION          "1.0"
+#define PROG_VERSION          "1.1"
 #define PROG_NAME             "proxy_local"
 #define PROG_DATE             "2013"
 
