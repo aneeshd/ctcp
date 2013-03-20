@@ -425,6 +425,7 @@ int handle_traffic()
   struct pollfd pfd[2];
   int           res;
   int           pkt_no = 1;
+  double        pkt_time;
     
   /*
   ** Allocate memory for buffer
@@ -497,16 +498,19 @@ int handle_traffic()
           return res;
         }
         bptr += res;
-      }else {  //if received TCP packets from target, forward to proxy_local over CTCP
-          log_pkt(ctcp_sk,pkt_no,btop-bptr);
-          pkt_no++;
+      }else {  //if received TCP packets from target, forward to proxy_local over CTCP        
         while(bptr < btop){
+          pkt_time = getTime();
           res = send_ctcp(ctcp_sk, buf + bptr, btop - bptr);
           if(res < 0) {
             res = ERR_SKFATAL;
             free(buf);
             return res;
           }
+            
+          log_pkt(ctcp_sk,pkt_no,res,pkt_time);
+          pkt_no++;
+            
           bptr += res;
         }
       }
