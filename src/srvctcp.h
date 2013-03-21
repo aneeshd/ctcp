@@ -175,7 +175,7 @@ void *server_worker(void *arg);
 void open_status_log(srvctcp_sock* sk, char* port);
 void  log_srv_status(srvctcp_sock* sk);
 
-void log_pkt(srvctcp_sock* sk, int pkt, int pkt_size, double time);
+void log_pkt(srvctcp_sock* sk, int pkt, int pkt_size);
 
 #endif // ATOUCLI_H_
 

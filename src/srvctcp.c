@@ -2122,7 +2122,7 @@ log_srv_status(srvctcp_sock* sk){
 }
 
 void
-log_pkt(srvctcp_sock* sk, int pkt, int pkt_size, double time) {
+log_pkt(srvctcp_sock* sk, int pkt, int pkt_size) {
   
   if (!sk->ctcp_probe) return; // logging disabled
   
@@ -2133,7 +2133,7 @@ log_pkt(srvctcp_sock* sk, int pkt, int pkt_size, double time) {
   
   if (sk->pkt_log) {
     fprintf(sk->pkt_log,"%u,%f,%s:%u,%u\n",
-            pkt, time, sk->clientip, (int) sk->clientport,
+            pkt, getTime(), sk->clientip, (int) sk->clientport,
             pkt_size);
     fflush(sk->pkt_log);
   }
