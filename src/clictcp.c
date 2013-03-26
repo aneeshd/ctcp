@@ -160,11 +160,12 @@ connect_ctcp(char *host, char *port, char *lease_file, struct child_local_cfg* c
     // ------------  Send a SYN packet for any new connection ----------------
     int path_ix = -1;
     flag_t flag;
+    double msgtstamp;
     rv = 0;
     do{
       if (path_ix == -1){
         for (k = 0; k < csk->substreams; k++){
-          if(send_flag(csk, k, SYN) == -1){
+          if(send_flag(csk, k, SYN, getTime()) == -1){
             printf("Could not send SYN packet \n");
           }else{
             csk->pathstate[k] = SYN_SENT;
@@ -176,7 +177,7 @@ connect_ctcp(char *host, char *port, char *lease_file, struct child_local_cfg* c
         rv = 1; // don't backoff timeout as losing SYN can cause long delay in connection startup 
       }
       flag = SYN_ACK;
-    }while( (path_ix = poll_flag(csk, &flag, (2<<(rv-1))*POLL_ACK_TO)) < 0 && rv < POLL_MAX_TRIES );
+    }while( (path_ix = poll_flag(csk, &flag, (2<<(rv-1))*POLL_ACK_TO, &msgtstamp)) < 0 && rv < POLL_MAX_TRIES );
     // poll backing off the timeout value (above) by rv*POLL_ACK_TO
     
 
@@ -188,7 +189,7 @@ connect_ctcp(char *host, char *port, char *lease_file, struct child_local_cfg* c
       csk->pathstate[path_ix] = SYN_ACK_RECV;
       log_cli_status(csk);
       csk->lastrcvt[path_ix] = getTime();
-      if(send_flag(csk, path_ix, NORMAL) == 0){
+      if(send_flag(csk, path_ix, NORMAL, msgtstamp) == 0){
         csk->pathstate[path_ix] = ESTABLISHED;
         log_cli_status(csk);
         //printf("Sent ACK for the SYN ACK\n");
@@ -279,6 +280,7 @@ void
 
   do{
     idle_timer = getTime();
+    double msgtstamp = idle_timer;
 
     // value -1 blocks until something is ready to read
     // Replace ppoll() call with portable equivalent
@@ -358,7 +360,7 @@ void
             do{
               if (poll_rv == -1){
                 for(i=0; i<csk->substreams; i++){
-                  send_flag(csk, i, FIN_ACK);
+                  send_flag(csk, i, FIN_ACK,msg->tstamp);
                   csk->pathstate[i] = FIN_ACK_SENT;
                   log_cli_status(csk);
                 }
@@ -366,7 +368,8 @@ void
               }
 
               flag = FIN_ACK;
-              poll_rv = poll_flag(csk, &flag, POLL_ACK_TO*(2<<(tries-1)));
+              msgtstamp = msg->tstamp;
+              poll_rv = poll_flag(csk, &flag, POLL_ACK_TO*(2<<(tries-1)),&msgtstamp);
             }while ( poll_rv < 0  && tries < POLL_MAX_TRIES);          
 
             if(tries >= POLL_MAX_TRIES){
@@ -396,7 +399,7 @@ void
               csk->pathstate[curr_substream] = FIN_ACK_RECV;
               log_cli_status(csk);
               for(i = 0; i<csk->substreams; i++){
-                send_flag(csk, i, FIN_ACK);
+                send_flag(csk, i, FIN_ACK, msg->tstamp);
                 csk->pathstate[i] = CLOSING;
                 log_cli_status(csk);
                 //remove_substream(csk, i);
@@ -418,7 +421,7 @@ void
               //  csk->pathstate[curr_substream] = SYN_ACK_RECV;
               //  }
               
-              if (send_flag(csk, curr_substream, NORMAL) == 0){
+              if (send_flag(csk, curr_substream, NORMAL,msg->tstamp) == 0){
                 csk->pathstate[curr_substream] = ESTABLISHED;
                 log_cli_status(csk);
               }
@@ -461,22 +464,23 @@ void
 
       }while(ready>0);
     }
+      
     if (csk->status != CLOSED){
       for(k = 0; k<csk->substreams; k++){
         if(getTime() - csk->lastrcvt[k] > csk->idle_time[k]){     
           if(csk->pathstate[k] == ESTABLISHED){
             continue;
           }else if(csk->pathstate[k] == SYN_SENT){
-            send_flag(csk, k, SYN);
+            send_flag(csk, k, SYN,getTime());
           }else if(csk->pathstate[k] == SYN_ACK_RECV){
-            send_flag(csk, k, NORMAL);
+            send_flag(csk, k, NORMAL,msgtstamp);
           }else if(csk->pathstate[k] == FIN_SENT){
-            send_flag(csk, k, FIN);
+            send_flag(csk, k, FIN,getTime());
           }else if(csk->pathstate[k] == FIN_RECV ||
                    csk->pathstate[k] == FIN_ACK_SENT){
-            send_flag(csk, k, FIN_ACK);
+            send_flag(csk, k, FIN_ACK,msgtstamp);
           }else if(csk->pathstate[k] == FIN_ACK_RECV){
-            send_flag(csk, k, FIN_ACK);
+            send_flag(csk, k, FIN_ACK,msgtstamp);
             csk->pathstate[k] = CLOSING;
             log_cli_status(csk);
 
@@ -497,7 +501,7 @@ void
             //printf("\nMAX IDLE on path %d\n", k);
             if(csk->pathstate[k] == SYN_ACK_RECV ||
                csk->pathstate[k] == ESTABLISHED){
-              send_flag(csk, k, FIN);         // TODO change it to FIN_PATH so the server doesn't close
+              send_flag(csk, k, FIN,getTime());         // TODO change it to FIN_PATH so the server doesn't close
               csk->pathstate[k] = FIN_SENT;
               log_cli_status(csk);
             }else{
@@ -1257,12 +1261,12 @@ create_clictcp_sock(struct child_local_cfg* cfg){
 
 
 int
-send_flag(clictcp_sock *csk, int path_id, flag_t flag){
+send_flag(clictcp_sock *csk, int path_id, flag_t flag, double tstamp){
 
   int numbytes;
   Skb* ackskb = ackPacket(0,0,0,csk->debug);
   Ack_Pckt* msg = &(ackskb->msgbuf.ack);
-  msg->tstamp = getTime();
+  msg->tstamp = tstamp;
   msg->flag = flag;
 
   int size = marshallAck(&(ackskb->msgbuf));
@@ -1282,7 +1286,7 @@ send_flag(clictcp_sock *csk, int path_id, flag_t flag){
 
 
 int 
-poll_flag(clictcp_sock *csk, flag_t* flag, int timeout){
+poll_flag(clictcp_sock *csk, flag_t* flag, int timeout, double* tstamp){
   Msgbuf msgbuf;
   int k, ready, numbytes;
   int curr_substream = 0;
@@ -1333,6 +1337,7 @@ poll_flag(clictcp_sock *csk, flag_t* flag, int timeout){
         // Unmarshall the packet
         bool match = unmarshallData(&msgbuf, csk);
         if (msgbuf.msg.flag == *flag){
+          *tstamp = msgbuf.msg.tstamp;
           return curr_substream;
         }else{
           // printf("Expected flag ACK, received something else!\n");
@@ -1364,6 +1369,7 @@ close_clictcp(clictcp_sock* csk){
 
   int i;
   flag_t flag;
+  double msgtstamp = getTime();
   int tries = 0;
   int index = -1;
   if (sock_status_old != CLOSED){
@@ -1371,7 +1377,7 @@ close_clictcp(clictcp_sock* csk){
       if (index == -1){
         for (i =0; i<csk->substreams; i++){
           //printf("SENDING FIN %u\n", getpid());
-          if(send_flag(csk, i, FIN) == -1){
+          if(send_flag(csk, i, FIN,getTime()) == -1){
             printf("Could not send the FIN packet\n");
           }else{
             csk->pathstate[i] = FIN_SENT;
@@ -1383,7 +1389,7 @@ close_clictcp(clictcp_sock* csk){
         
         for (i =0; i<csk->substreams; i++){
           //printf("SENDING FIN ACK  %u\n", getpid());
-          if(send_flag(csk, i, FIN_ACK) == -1){
+          if(send_flag(csk, i, FIN_ACK,msgtstamp) == -1){
             printf("Could not send the FIN packet\n");
           }else{
             csk->pathstate[i] = CLOSING;
@@ -1393,7 +1399,7 @@ close_clictcp(clictcp_sock* csk){
       }
 
       flag = FIN_ACK;
-      index = poll_flag(csk, &flag, POLL_ACK_TO*(2<<(tries-1)));
+      index = poll_flag(csk, &flag, POLL_ACK_TO*(2<<(tries-1)),&msgtstamp);
     } while( index < 0 && tries < POLL_MAX_TRIES );
     // doing multiplicative backoff for poll_flag -- may need to do this in wireless
 
@@ -1406,7 +1412,7 @@ close_clictcp(clictcp_sock* csk){
       log_cli_status(csk);
       for(i = 0; i<csk->substreams; i++){
         // printf("SENDING FIN     ACK%u\n", getpid());
-        if (send_flag(csk, i, FIN_ACK)==0){
+        if (send_flag(csk, i, FIN_ACK, msgtstamp)==0){
           csk->pathstate[i] = CLOSING;
           log_cli_status(csk);
         }

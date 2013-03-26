@@ -112,8 +112,8 @@ void *handle_connection(void* arg);
 clictcp_sock* create_clictcp_sock(struct child_local_cfg* cfg);
 void remove_substream(clictcp_sock* csk, int pin);
 
-int  poll_flag(clictcp_sock *csk, flag_t* flag, int timeout);
-int  send_flag(clictcp_sock *csk, int path_id, flag_t flag);
+int  poll_flag(clictcp_sock *csk, flag_t* flag, int timeout, double* tstamp);
+int  send_flag(clictcp_sock *csk, int path_id, flag_t flag, double tstamp);
 
 void close_clictcp(clictcp_sock* csk);
 clictcp_sock* connect_ctcp(char *host, char *port, char *lease_file, struct child_local_cfg* cfg);
