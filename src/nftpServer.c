@@ -42,7 +42,7 @@ main (int argc, char** argv){
   FILE *snd_file; // The file to be sent
   char *port = PORT;  // This is the port that the server is listening to
   int i, c;
-  struct child_remote_cfg cfg = {.ctcp_probe=0, .cong_control="aimd", .logdir="/var/log/ctcp"};
+  struct child_remote_cfg cfg = {.ctcp_probe=0, .debug=1, .cong_control="aimd", .logdir="/var/log/ctcp"};
 
   srandom(getpid());
 
@@ -89,7 +89,7 @@ main (int argc, char** argv){
   // read from the file and send over ctcp socket
   printf("Starting to send %s over CTCP tunnel.\n", file_name);
 
-  size_t buf_size = 1000000;
+  size_t buf_size = 10000;
   size_t f_bytes_read, bytes_sent;
   char *file_buff = malloc(buf_size*sizeof(char));
   size_t total_bytes_sent =0;
