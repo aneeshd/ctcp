@@ -707,7 +707,7 @@ close_srvctcp(srvctcp_sock* sk){
     i = sk->curr_block;
     if( sk->dof_req_latest != 0){
       while (i <= sk->maxblockno && get_status(sk) == ACTIVE){
-        printf("Waiting on block %d to get free\n", i);
+        //printf("Waiting on block %d to get free\n", i);
         if (sk->dof_req_latest != 0 && i >= sk->curr_block) {
           // Wait for any acks to flush out blocks.  But let's not wait forever
           // as we need to close the connection fairly promptly.

@@ -105,9 +105,9 @@ main(int argc, char** argv){
         }
         
       gettimeofday(&time,NULL);
-      end_time = time.tv_sec+time.tv_usec*1e.-6;
+      end_time = time.tv_sec+time.tv_usec*1.e-6;
 
-      printf("%d Total bytes receieved\n", total_bytes);
+      printf("Total bytes receieved: %d\n", total_bytes);
       ctrlc(csk);
 
       printf("Total transfer time: %6.2f \n",end_time-start_time);

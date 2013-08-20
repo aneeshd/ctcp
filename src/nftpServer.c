@@ -119,7 +119,7 @@ main (int argc, char** argv){
        
   close_srvctcp(sk);
 
-  printf("Total bytes sent %d\n\n", (int) total_bytes_sent);
+  printf("\nTotal bytes sent: %d\n\n", (int) total_bytes_sent);
      
   fclose(snd_file);
 
