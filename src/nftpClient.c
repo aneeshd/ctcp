@@ -19,6 +19,8 @@
 #include <string.h>
 #include <signal.h>
 #include <errno.h>
+#include <sys/time.h>
+#include <math.h>
 #include "clictcp.h"
 
 #define PORT "8777"
@@ -42,7 +44,10 @@ main(int argc, char** argv){
     char *host = HOST;
     struct child_local_cfg cfg = {.logdir="/var/log/ctcp"};
 
+    timeval_t time,last_time;
+    double start_time,end_time;
     int c;
+    
     while((c = getopt(argc, argv, "h:p:f:")) != -1) {
         switch (c) {
         case 'h':
@@ -72,8 +77,11 @@ main(int argc, char** argv){
 
       char *f_buffer = malloc(f_buf_size);
 
-      printf("Calling read ctcp... \n");
+      printf("Downloading file... \n");
 
+      gettimeofday(&last_time,NULL);
+      start_time = last_time.tv_sec+last_time.tv_usec*1.e-6;
+        
       uint32_t total_bytes = 0;
       while(total_bytes < 500000000)  // limit the received file size to 500MB
         {  
@@ -81,21 +89,34 @@ main(int argc, char** argv){
           bytes_read = read_ctcp(csk, f_buffer, f_buf_size); 
         
           if (bytes_read == -1){
-            printf("read_ctcp is done!\n");
+            printf("\n\n");
             break;
           }
 
           fwrite(f_buffer, 1, bytes_read, rcv_file);
           total_bytes += bytes_read;
+            
+          gettimeofday(&time,NULL);
+          if (time.tv_sec > last_time.tv_sec+1) {
+              printf(".");
+              fflush(stdout);
+              last_time = time;
+          }
         }
+        
+      gettimeofday(&time,NULL);
+      end_time = time.tv_sec+time.tv_usec*1e.-6;
 
       printf("%d Total bytes receieved\n", total_bytes);
       ctrlc(csk);
 
+      printf("Total transfer time: %6.2f \n",end_time-start_time);
+      printf("Throughput: %6.2f Mbps\n\n",(double)total_bytes*8/1.e+6/(end_time-start_time));
+        
       close_clictcp(csk);
 
       fclose(rcv_file);
-      printf("Closed file successfully\n");
+      //printf("Closed file successfully\n");
 
     }
 

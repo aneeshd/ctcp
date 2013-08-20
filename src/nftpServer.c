@@ -23,7 +23,6 @@
 #include <math.h>
 #include <signal.h>
 #include <errno.h>
-#include <time.h>
 #include "srvctcp.h"
 
 #define PORT "8777"
@@ -44,6 +43,8 @@ main (int argc, char** argv){
   int i, c;
   struct child_remote_cfg cfg = {.ctcp_probe=0, .debug=1, .cong_control="aimd", .logdir="/var/log/ctcp"};
 
+  timeval_t last_time,time;
+    
   srandom(getpid());
 
   while((c = getopt(argc,argv, "p:f:")) != -1)
@@ -94,6 +95,8 @@ main (int argc, char** argv){
   char *file_buff = malloc(buf_size*sizeof(char));
   size_t total_bytes_sent =0;
   size_t total_bytes_read = 0;
+    
+  gettimeofday(&last_time,NULL);
        
   while(!feof(snd_file)){
     f_bytes_read = fread(file_buff, 1, buf_size, snd_file);
@@ -105,11 +108,18 @@ main (int argc, char** argv){
       bytes_sent += send_ctcp(sk, file_buff + bytes_sent, f_bytes_read - bytes_sent);
     }
     total_bytes_sent += bytes_sent;
+    
+    gettimeofday(&time,NULL);
+    if (time.tv_sec > last_time.tv_sec+1) {
+        printf(".");
+        fflush(stdout);
+        last_time = time;
+    }
   }
        
   close_srvctcp(sk);
 
-  printf("Total bytes sent %d\n", (int) total_bytes_sent);
+  printf("Total bytes sent %d\n\n", (int) total_bytes_sent);
      
   fclose(snd_file);
 
